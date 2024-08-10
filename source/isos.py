@@ -20,6 +20,7 @@
 
 import sys
 import os
+from os.path import expanduser
 import operator
 import subprocess
 import ansicolor
@@ -32,7 +33,7 @@ from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.formatted_text import HTML
 
 def get_input_session():
-    history_name = '~/.isos.history'
+    history_name = expanduser("~") + '/.isos.history'
     fhistory = None
     mode = 'w'
 
