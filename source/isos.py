@@ -139,6 +139,7 @@ def xsos_run(input_str, show_help=False):
         return True
 
     os.system("%s %s" % (input_str, env_vars["sos_home"]))
+    return True
 
 
 command_set = {
