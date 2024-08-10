@@ -99,7 +99,7 @@ def change_dir(input_str, show_help=False):
     words = input_str.split()
     try:
         if len(words) == 1:
-            path = env_var["sos_home"]
+            path = env_vars["sos_home"]
         else:
             path = words[1]
         os.chdir(path)
