@@ -62,6 +62,106 @@ def get_input_session():
     return input_session
 
 
+def show_usage(input_str, show_help=False):
+    words = input_str.split()
+    if len(words) > 1 and words[1] != "help":
+        if words[1] in command_set:
+            command_set[words[1]](input_str, True)
+            return True
+
+    print("Help")
+    print("-" * 30)
+    count = 0
+    for key in command_set:
+        print("%-10s " % (key), end="")
+        count = count + 1
+        if ((count % 4) == 0):
+            print("")
+
+    if ((count % 4) != 0):
+        print("")
+
+    return True
+
+
+def exit_app(input_str, show_help=False):
+    if show_help:
+        print("Exit the application")
+        return True
+
+    return False
+
+def change_dir(input_str, show_help=False):
+    if show_help:
+        print("Change directory in the app")
+        return True
+
+    words = input_str.split()
+    try:
+        os.chdir(words[1])
+    except:
+        print("cd: not a directory: %s" % (words[1]))
+
+    return True
+
+
+env_vars = {
+    "sos_home": os.getcwd(),
+}
+
+def set_env(input_str, show_help=False):
+    if show_help:
+        print("Setting variables")
+        print("=================")
+        for key in env_vars:
+            print("%-15s : %s " % (key, env_vars[key]))
+
+        return True
+
+    words = input_str.split()
+    if words[1] in env_vars:
+        if len(words) >= 3:
+            env_vars[words[1]] = words[2]
+        else:
+            del env_vars[words[1]]
+
+        return True
+
+    if len(words) >= 3:
+        env_vars[words[1]] = words[2]
+
+    return True
+
+
+def xsos_run(input_str, show_help=False):
+    if show_help:
+        print("Run xsos within the app")
+        return True
+
+    os.system("%s %s" % (input_str, env_vars["sos_home"]))
+
+
+command_set = {
+    "help" : show_usage,
+    "cd"   : change_dir,
+    "set"  : set_env,
+    "xsos" : xsos_run,
+    "exit" : exit_app,
+}
+
+def handle_input(input_str):
+    if len(input_str.strip()) == 0:
+        return True
+
+    words = input_str.split()
+    if words[0] in command_set:
+        return command_set[words[0]](input_str)
+
+    os.system(input_str)
+
+    return True
+
+
 def isos():
     op = OptionParser()
     op.add_option("-a", "--all", dest="all", default=0,
@@ -77,7 +177,8 @@ def isos():
     while True:
         input_str = input_session.prompt('> ',
                                         auto_suggest=AutoSuggestFromHistory())
-        if input_str == "exit":
+        cont = handle_input(input_str)
+        if not cont:
             return
 
 
