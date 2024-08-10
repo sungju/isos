@@ -1,6 +1,8 @@
 #!/bin/bash
 
-sh ./make_clean.sh
+if [ "$1" == "clean" ]; then
+	sh ./make_clean.sh
+fi
 
 python3 -m venv .
 MYOS="$OSTYPE"
