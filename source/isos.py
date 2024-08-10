@@ -102,6 +102,7 @@ def change_dir(input_str, show_help=False):
             path = env_vars["sos_home"]
         else:
             path = words[1]
+        path = os.path.abspath(path)
         os.chdir(path)
     except:
         print("cd: not a directory: %s" % (path))
@@ -181,6 +182,9 @@ def isos():
             help="Show general OS information")
 
     (o, args) = op.parse_args()
+
+    work_dir = os.environ.get("WORK_DIR", os.getcwd())
+    set_env("set sos_home %s dir" % (work_dir))
 
     input_session = get_input_session()
     while True:
