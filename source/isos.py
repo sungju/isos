@@ -110,7 +110,8 @@ env_vars = {
 }
 
 def set_env(input_str, show_help=False):
-    if show_help:
+    words = input_str.split()
+    if show_help or len(words) == 1:
         print("Setting variables")
         print("=================")
         for key in env_vars:
@@ -118,10 +119,13 @@ def set_env(input_str, show_help=False):
 
         return True
 
-    words = input_str.split()
     if words[1] in env_vars:
         if len(words) >= 3:
-            env_vars[words[1]] = words[2]
+            val = words[2]
+            if len(words) >= 4 and words[3] == "dir":
+                val = os.path.abspath(val)
+                change_dir("cd %s" % (val))
+            env_vars[words[1]] = val
         else:
             del env_vars[words[1]]
 
