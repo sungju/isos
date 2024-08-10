@@ -98,9 +98,13 @@ def change_dir(input_str, show_help=False):
 
     words = input_str.split()
     try:
-        os.chdir(words[1])
+        if len(words) == 1:
+            path = env_var["sos_home"]
+        else:
+            path = words[1]
+        os.chdir(path)
     except:
-        print("cd: not a directory: %s" % (words[1]))
+        print("cd: not a directory: %s" % (path))
 
     return True
 
