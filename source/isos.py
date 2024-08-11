@@ -20,7 +20,8 @@
 
 import sys
 import os
-from os.path import expanduser
+from os.path import expanduser, isfile, join
+from os import listdir
 import operator
 import subprocess
 import ansicolor
@@ -31,6 +32,7 @@ from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.completion import WordCompleter
 
 def get_input_session():
     history_name = expanduser("~") + '/.isos.history'
@@ -171,6 +173,11 @@ def handle_input(input_str):
 
     return True
 
+def get_file_list():
+    #files = [f for f in listdir(".") if isfile(f)]
+    files = [f for f in listdir(".")]
+    return files
+
 
 def isos():
     op = OptionParser()
@@ -188,7 +195,9 @@ def isos():
 
     input_session = get_input_session()
     while True:
+        file_completer = WordCompleter(get_file_list())
         input_str = input_session.prompt('> ',
+                                         completer=file_completer,
                                         auto_suggest=AutoSuggestFromHistory())
         cont = handle_input(input_str)
         if not cont:
