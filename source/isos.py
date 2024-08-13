@@ -150,7 +150,10 @@ def xsos_run(input_str, show_help=False):
         print("Run xsos within the app")
         return True
 
-    input_str = ("%s %s" % (input_str, env_vars["sos_home"]))
+    cmd_idx = input_str.find('xsos')
+    input_str = input_str[cmd_idx + 4:]
+
+    input_str = ("xsos %s %s" % (env_vars["sos_home"], input_str))
     run_shell_command(input_str)
     return True
 
