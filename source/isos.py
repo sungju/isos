@@ -129,6 +129,7 @@ def set_env(input_str, show_help=False):
             if len(words) >= 4 and words[3] == "dir":
                 val = os.path.abspath(val)
                 change_dir("cd %s" % (val))
+                val = os.getcwd()
             env_vars[words[1]] = val
         else:
             del env_vars[words[1]]
@@ -219,6 +220,17 @@ def get_file_list():
     return files
 
 
+def get_prompt_str():
+    if "sos_home" in env_vars:
+        home_path = env_vars["sos_home"]
+    else:
+        home_path = ""
+
+    cur_path = os.getcwd()
+
+    return "$HOME" + cur_path[len(home_path):] + "> "
+
+
 def isos():
     op = OptionParser()
     op.add_option("-a", "--all", dest="all", default=0,
@@ -236,7 +248,7 @@ def isos():
     input_session = get_input_session()
     while True:
         file_completer = WordCompleter(get_file_list())
-        input_str = input_session.prompt('> ',
+        input_str = input_session.prompt(get_prompt_str(),
                                          completer=file_completer,
                                          complete_style=CompleteStyle.READLINE_LIKE,
                                          complete_while_typing=True,
