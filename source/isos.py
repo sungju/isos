@@ -148,7 +148,7 @@ def xsos_run(input_str, show_help=False):
     cmd_idx = input_str.find('xsos')
     input_str = input_str[cmd_idx + 4:]
 
-    input_str = ("xsos %s %s" % (env_vars["sos_home"], input_str))
+    input_str = ("xsos %s %s" % (input_str, env_vars["sos_home"]))
     result = run_shell_command(input_str)
     return result
 
