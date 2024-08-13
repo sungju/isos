@@ -24,7 +24,7 @@ import re
 from os.path import expanduser, isfile, join
 from os import listdir
 import operator
-import subprocess
+from subprocess import Popen, PIPE, STDOUT
 import ansicolor
 from optparse import OptionParser
 
@@ -70,41 +70,31 @@ def show_usage(input_str, show_help=False):
     words = input_str.split()
     if len(words) > 1 and words[1] != "help":
         if words[1] in command_set:
-            command_set[words[1]](input_str, True)
-            return True
+            return command_set[words[1]](input_str, True)
 
-    print("Help")
-    print("-" * 30)
+    result_str = ("Help\n%s\n" % ("-" * 30))
     count = 0
     for key in command_set:
-        print("%-10s " % (key), end="")
+        result_str = result_str + ("%-10s " % (key))
         count = count + 1
         if ((count % 4) == 0):
-            print("")
+            result_str = result_str + "\n"
 
     if ((count % 4) != 0):
-        print("")
+        result_str = result_str + "\n"
 
-    return True
+    return result_str
 
 
 def exit_app(input_str, show_help=False):
     if show_help:
-        print("Exit the application")
-        return True
+        return "Exit the application"
 
-    return False
+    sys.exit(0)
 
 def change_dir(input_str, show_help=False):
     if show_help:
-        print("Change directory in the app")
-        return True
-
-    shell_cmd_part = ""
-    if "|" in input_str:
-        pipe_idx = input_str.find("|")
-        shell_cmd_part = input_str[pipe_idx + 1:]
-        input_str = input_str[:pipe_idx]
+        return "Change directory in the app"
 
     words = input_str.split()
     try:
@@ -115,12 +105,9 @@ def change_dir(input_str, show_help=False):
         path = os.path.abspath(path)
         os.chdir(path)
     except:
-        print("cd: not a directory: %s" % (path))
+        return ("cd: not a directory: %s" % (path))
 
-    if shell_cmd_part != "":
-        run_shell_command(shell_cmd_part)
-
-    return True
+    return ""
 
 
 env_vars = {
@@ -130,12 +117,11 @@ env_vars = {
 def set_env(input_str, show_help=False):
     words = input_str.split()
     if show_help or len(words) == 1:
-        print("Setting variables")
-        print("=================")
+        result_str = "Setting variables\n=================\n"
         for key in env_vars:
-            print("%-15s : %s " % (key, env_vars[key]))
+            result_str = result_str + ("%-15s : %s " % (key, env_vars[key]))
 
-        return True
+        return result_str
 
     if words[1] in env_vars:
         if len(words) >= 3:
@@ -147,42 +133,35 @@ def set_env(input_str, show_help=False):
         else:
             del env_vars[words[1]]
 
-        return True
+        return ""
 
     if len(words) >= 3:
         env_vars[words[1]] = words[2]
 
-    return True
+    return ""
 
 
 def xsos_run(input_str, show_help=False):
     if show_help:
-        print("Run xsos within the app")
-        return True
+        return "Run xsos within the app"
 
     cmd_idx = input_str.find('xsos')
     input_str = input_str[cmd_idx + 4:]
 
     input_str = ("xsos %s %s" % (env_vars["sos_home"], input_str))
-    run_shell_command(input_str)
-    return True
+    result = run_shell_command(input_str)
+    return result
 
 
-def run_shell_command(input_str):
-    p = subprocess.Popen(input_str, shell=True, stderr=subprocess.PIPE)
+def run_shell_command(input_str, pipe_input=""):
+    p = Popen(input_str, shell=True, stdout=PIPE, stdin=PIPE, stderr=STDOUT)
+    if len(pipe_input.strip()) != 0:
+        input_bytes = pipe_input.encode('utf-8')
+    else:
+        input_bytes = None
+    stdout_result = p.communicate(input=input_bytes)[0]
 
-    try:
-        while True:
-            out = p.stderr.read(1)
-            if out == '' and p.poll() != None:
-                break
-            if out != '':
-                sys.stdout.write(out)
-                sys.stdout.flush()
-    except:
-        pass
-
-    return True
+    return stdout_result.decode()
 
 
 command_set = {
@@ -195,15 +174,33 @@ command_set = {
 
 def handle_input(input_str):
     if len(input_str.strip()) == 0:
-        return True
+        return ""
 
-    words = re.split(' |\|', input_str)
+    orig_input_str = input_str
+    shell_part = ""
+
+    if "|" in input_str:
+        pipe_idx = input_str.find("|")
+        shell_part = input_str[pipe_idx + 1:]
+        input_str = input_str[:pipe_idx]
+
+    words = input_str.split()
+    result_str=""
     if words[0] in command_set:
-        return command_set[words[0]](input_str)
+        result_str = command_set[words[0]](input_str)
+        if len(shell_part) == 0:
+            if len(result_str) != 0:
+                print(result_str)
+            return
+        else:
+            input_str = shell_part
+    else:
+        input_str = orig_input_str
+        shell_part = ""
 
-    run_shell_command(input_str)
+    result_str = run_shell_command(input_str, result_str)
+    print(result_str, end="")
 
-    return True
 
 def get_file_list():
     #files = [f for f in listdir(".") if isfile(f)]
@@ -233,9 +230,7 @@ def isos():
                                          complete_style=CompleteStyle.READLINE_LIKE,
                                          complete_while_typing=True,
                                         auto_suggest=AutoSuggestFromHistory())
-        cont = handle_input(input_str)
-        if not cont:
-            return
+        handle_input(input_str)
 
 
 if ( __name__ == '__main__'):
