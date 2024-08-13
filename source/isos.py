@@ -100,6 +100,12 @@ def change_dir(input_str, show_help=False):
         print("Change directory in the app")
         return True
 
+    shell_cmd_part = ""
+    if "|" in input_str:
+        pipe_idx = input_str.find("|")
+        shell_cmd_part = input_str[pipe_idx + 1:]
+        input_str = input_str[:pipe_idx]
+
     words = input_str.split()
     try:
         if len(words) == 1:
@@ -110,6 +116,9 @@ def change_dir(input_str, show_help=False):
         os.chdir(path)
     except:
         print("cd: not a directory: %s" % (path))
+
+    if shell_cmd_part != "":
+        run_shell_command(shell_cmd_part)
 
     return True
 
@@ -188,7 +197,7 @@ def handle_input(input_str):
     if len(input_str.strip()) == 0:
         return True
 
-    words = re.split(' |><', input_str)
+    words = re.split(' |\|', input_str)
     if words[0] in command_set:
         return command_set[words[0]](input_str)
 
