@@ -20,6 +20,7 @@
 
 import sys
 import os
+import re
 from os.path import expanduser, isfile, join
 from os import listdir
 import operator
@@ -187,7 +188,7 @@ def handle_input(input_str):
     if len(input_str.strip()) == 0:
         return True
 
-    words = input_str.split()
+    words = re.split(' |><', input_str)
     if words[0] in command_set:
         return command_set[words[0]](input_str)
 
