@@ -154,14 +154,17 @@ def xsos_run(input_str, show_help=False):
 
 
 def run_shell_command(input_str, pipe_input=""):
-    p = Popen(input_str, shell=True, stdout=PIPE, stdin=PIPE, stderr=STDOUT)
     if len(pipe_input.strip()) != 0:
         input_bytes = pipe_input.encode('utf-8')
+        p = Popen(input_str, shell=True, stdout=PIPE, stdin=PIPE, stderr=STDOUT)
+        stdout_result = p.communicate(input=input_bytes)[0]
+        return stdout_result.decode()
     else:
-        input_bytes = None
-    stdout_result = p.communicate(input=input_bytes)[0]
+        p = Popen(input_str, shell=True, stdout=PIPE, stderr=STDOUT, text=True)
+        result_str, errors = p.communicate()
+        
+        return result_str
 
-    return stdout_result.decode()
 
 
 command_set = {
