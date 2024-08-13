@@ -150,16 +150,24 @@ def xsos_run(input_str, show_help=False):
         print("Run xsos within the app")
         return True
 
-    os.system("%s %s" % (input_str, env_vars["sos_home"]))
+    input_str = ("%s %s" % (input_str, env_vars["sos_home"]))
+    run_shell_command(input_str)
+    return True
+
+
+def run_shell_command(input_str):
     p = subprocess.Popen(input_str, shell=True, stderr=subprocess.PIPE)
 
-    while True:
-        out = p.stderr.read(1)
-        if out == '' and p.poll() != None:
-            break
-        if out != '':
-            sys.stdout.write(out)
-            sys.stdout.flush()
+    try:
+        while True:
+            out = p.stderr.read(1)
+            if out == '' and p.poll() != None:
+                break
+            if out != '':
+                sys.stdout.write(out)
+                sys.stdout.flush()
+    except:
+        pass
 
     return True
 
@@ -180,7 +188,7 @@ def handle_input(input_str):
     if words[0] in command_set:
         return command_set[words[0]](input_str)
 
-    os.system(input_str)
+    run_shell_command(input_str)
 
     return True
 
