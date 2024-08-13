@@ -33,6 +33,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.shortcuts import CompleteStyle
 
 def get_input_session():
     history_name = expanduser("~") + '/.isos.history'
@@ -150,6 +151,16 @@ def xsos_run(input_str, show_help=False):
         return True
 
     os.system("%s %s" % (input_str, env_vars["sos_home"]))
+    p = subprocess.Popen(input_str, shell=True, stderr=subprocess.PIPE)
+
+    while True:
+        out = p.stderr.read(1)
+        if out == '' and p.poll() != None:
+            break
+        if out != '':
+            sys.stdout.write(out)
+            sys.stdout.flush()
+
     return True
 
 
@@ -198,6 +209,8 @@ def isos():
         file_completer = WordCompleter(get_file_list())
         input_str = input_session.prompt('> ',
                                          completer=file_completer,
+                                         complete_style=CompleteStyle.READLINE_LIKE,
+                                         complete_while_typing=True,
                                         auto_suggest=AutoSuggestFromHistory())
         cont = handle_input(input_str)
         if not cont:
