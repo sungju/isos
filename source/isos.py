@@ -153,12 +153,15 @@ def xsos_run(input_str, show_help=False):
     return result
 
 
-def run_shell_command(input_str, pipe_input=""):
+def run_shell_command(input_str, pipe_input="", no_pipe=False):
     if len(pipe_input.strip()) != 0:
         input_bytes = pipe_input.encode('utf-8')
         p = Popen(input_str, shell=True, stdout=PIPE, stdin=PIPE, stderr=STDOUT)
         stdout_result = p.communicate(input=input_bytes)[0]
         return stdout_result.decode()
+    elif no_pipe == True:
+        os.system(input_str)
+        return ""
     else:
         p = Popen(input_str, shell=True, stdout=PIPE, stderr=STDOUT, text=True)
         result_str, errors = p.communicate()
@@ -198,6 +201,11 @@ def handle_input(input_str):
         else:
             input_str = shell_part
     else:
+        # single ls better to get full featured output
+        if words[0] == "ls" and shell_part == "":
+            run_shell_command(input_str + " --color -p", "", True)
+            return
+
         input_str = orig_input_str
         shell_part = ""
 
