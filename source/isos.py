@@ -206,6 +206,9 @@ def handle_input(input_str):
         if words[0] == "ls" and shell_part == "":
             run_shell_command(input_str + " --color -p", "", True)
             return
+        elif words[0] == "vi":
+            run_shell_command(input_str, "", True)
+            return
 
         input_str = orig_input_str
         shell_part = ""
