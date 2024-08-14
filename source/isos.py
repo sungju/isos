@@ -27,6 +27,7 @@ import operator
 from subprocess import Popen, PIPE, STDOUT
 import ansicolor
 from optparse import OptionParser
+import importlib
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
@@ -35,6 +36,82 @@ from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.shortcuts import CompleteStyle
+
+modules = []
+
+def load_commands():
+    global modules
+
+    try:
+        cmd_path_list = os.environ["ISOS_CMD_PATH"]
+    except:
+        cmd_path_list = '.'
+
+    path_list = cmd_path_list.split(':')
+    for path in path_list:
+        try:
+            source_path = path + "/cmds"
+            if os.path.exists(source_path):
+                load_commands_in_a_path(source_path)
+        except:
+            print("Couldn't find %s/cmds directory" % (path))
+
+
+def show_command_list():
+    global modules
+
+    count = len(modules)
+    if count == 0:
+        print("No command available")
+        return
+
+    print("-" * 75)
+    for module in modules:
+        print("[%s]" % (module.__name__), end='')
+        try:
+            print(": %s" % (module.description()))
+        except:
+            print(": No description available")
+
+    print("-" * 75)
+    print("There are %d commands available" % (count))
+    print("=" * 75)
+
+
+mod_command_set = { }
+
+def add_command_module(new_module):
+    global mod_command_set
+
+    try:
+        cmd_str, func = new_module.get_command_info()
+        if cmd_str in mod_command_set:
+            print("Replacing %s from %s" % (cmd_str, mod_command_set[cmd_str]))
+        mod_command_set[cmd_str] = func
+        modules.append(new_module)
+    except:
+        print("Failed to add command from %s" % (new_module))
+
+
+def load_commands_in_a_path(source_path):
+    global modules
+
+    pysearchre = re.compile('.py$', re.IGNORECASE)
+    cmdfiles = filter(pysearchre.search, os.listdir(source_path))
+    form_module = lambda fp: '.' + os.path.splitext(fp)[0]
+    cmds = map(form_module, cmdfiles)
+    importlib.import_module('cmds')
+    for cmd in cmds:
+        if not cmd.startswith(".__"):
+            try:
+                new_module = importlib.import_module(cmd, package="cmds")
+                if new_module.add_command() == True:
+                    add_command_module(new_module)
+            except Exception as e:
+                print("Error in adding command %s" % (cmd))
+                print(e)
+
+
 
 def get_input_session():
     history_name = expanduser("~") + '/.isos.history'
@@ -66,15 +143,17 @@ def get_input_session():
     return input_session
 
 
-def show_usage(input_str, show_help=False):
+def show_usage(input_str, env_vars, show_help=False):
     words = input_str.split()
     if len(words) > 1 and words[1] != "help":
         if words[1] in command_set:
-            return command_set[words[1]](input_str, True)
+            return command_set[words[1]](input_str, env_vars, True)
+        elif words[1] in mod_command_set:
+            return mod_command_set[words[1]](input_str, env_vars, True)
 
     result_str = ("Help\n%s\n" % ("-" * 30))
     count = 0
-    for key in command_set:
+    for key in command_set | mod_command_set:
         result_str = result_str + ("%-10s " % (key))
         count = count + 1
         if ((count % 4) == 0):
@@ -86,13 +165,13 @@ def show_usage(input_str, show_help=False):
     return result_str
 
 
-def exit_app(input_str, show_help=False):
+def exit_app(input_str, env_vars, show_help=False):
     if show_help:
         return "Exit the application"
 
     sys.exit(0)
 
-def change_dir(input_str, show_help=False):
+def change_dir(input_str, env_vars, show_help=False):
     if show_help:
         return "Change directory in the app"
 
@@ -114,12 +193,12 @@ env_vars = {
     "sos_home": os.getcwd(),
 }
 
-def set_env(input_str, show_help=False):
+def set_env(input_str, env_vars, show_help=False):
     words = input_str.split()
     if show_help or len(words) == 1:
-        result_str = "Setting variables\n=================\n"
+        result_str = "Setting variables\n================="
         for key in env_vars:
-            result_str = result_str + ("%-15s : %s " % (key, env_vars[key]))
+            result_str = result_str + ("\n%-15s : %s" % (key, env_vars[key]))
 
         return result_str
 
@@ -128,7 +207,7 @@ def set_env(input_str, show_help=False):
             val = words[2]
             if len(words) >= 4 and words[3] == "dir":
                 val = os.path.abspath(val)
-                change_dir("cd %s" % (val))
+                change_dir("cd %s" % (val), env_vars)
                 val = os.getcwd()
             env_vars[words[1]] = val
         else:
@@ -142,7 +221,7 @@ def set_env(input_str, show_help=False):
     return ""
 
 
-def xsos_run(input_str, show_help=False):
+def xsos_run(input_str, env_vars, show_help=False):
     if show_help:
         return "Run xsos within the app"
 
@@ -193,8 +272,9 @@ def handle_input(input_str):
 
     words = input_str.split()
     result_str=""
-    if words[0] in command_set:
-        result_str = command_set[words[0]](input_str)
+    cmd_list = command_set | mod_command_set
+    if words[0] in cmd_list:
+        result_str = cmd_list[words[0]](input_str, env_vars, False)
         if len(shell_part) == 0:
             if len(result_str) != 0:
                 print(result_str)
@@ -223,16 +303,23 @@ def get_file_list():
     return files
 
 
-def get_prompt_str():
-    hostname = "$HOME"
+def get_home_dir():
     if "sos_home" in env_vars:
         home_path = env_vars["sos_home"]
+    else:
+        home_path = ""
+
+    return home_path
+
+
+def get_prompt_str():
+    hostname = "$HOME"
+    home_path = get_home_dir()
+    if home_path != "":
         hostname_str = "%s/hostname" % home_path
         if os.path.exists(hostname_str):
             with open(hostname_str) as f:
                 hostname = f.read().strip()
-    else:
-        home_path = ""
 
     cur_path = os.getcwd()
 
@@ -250,8 +337,10 @@ def isos():
 
     (o, args) = op.parse_args()
 
+    load_commands()
+
     work_dir = os.environ.get("WORK_DIR", os.getcwd())
-    set_env("set sos_home %s dir" % (work_dir))
+    set_env("set sos_home %s dir" % (work_dir), env_vars)
 
     input_session = get_input_session()
     while True:
