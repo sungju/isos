@@ -49,9 +49,10 @@ def read_audit_log(audit_path):
         for line in lines:
             words = line.split()
             epoch = words[1][len("msg=audit("):-2]
-            localtime = time.ctime(float(epoch.split(':')[0])).replace(' ', '_')
+            localtime = time.ctime(float(epoch.split(':')[0]))
+            line = get_colored_line(line)
             line = line.replace(epoch, localtime)
-            result_str = result_str + get_colored_line(line)
+            result_str = result_str + line
 
     return result_str.strip()
 
