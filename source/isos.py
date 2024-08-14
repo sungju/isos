@@ -48,6 +48,7 @@ def load_commands():
     except:
         cmd_path_list = '.'
 
+    mod_command_set.clear()
     path_list = cmd_path_list.split(':')
     for path in path_list:
         try:
@@ -56,6 +57,34 @@ def load_commands():
                 load_commands_in_a_path(source_path)
         except:
             print("Couldn't find %s/cmds directory" % (path))
+
+
+def show_commands(input_str, env_var, show_help=False):
+    if show_help:
+        return "Show the pluggable command list"
+
+    result_str = ""
+    for comm in mod_command_set:
+        result_str = result_str + ("%s : %s()" % (comm, mod_command_set[comm].__name__)) + "\n"
+
+    return result_str
+
+
+def reload_commands(input_str, env_str, show_help=False):
+    global modules
+    if show_help:
+        return "Reloading commands"
+
+    for module in modules:
+        try:
+            print("Reloading [%s]" % (module.__name__), end='')
+            module = importlib.reload(module)
+            print("... DONE")
+        except:
+            print("... FAILED")
+
+    print("Reloading DONE")
+    return ""
 
 
 def show_command_list():
@@ -256,6 +285,8 @@ command_set = {
     "cd"   : change_dir,
     "set"  : set_env,
     "xsos" : xsos_run,
+    "reload" : reload_commands,
+    "list" : show_commands,
     "exit" : exit_app,
 }
 
