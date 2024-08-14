@@ -224,14 +224,19 @@ def get_file_list():
 
 
 def get_prompt_str():
+    hostname = "$HOME"
     if "sos_home" in env_vars:
         home_path = env_vars["sos_home"]
+        hostname_str = "%s/hostname" % home_path
+        if os.path.exists(hostname_str):
+            with open(hostname_str) as f:
+                hostname = f.read().strip()
     else:
         home_path = ""
 
     cur_path = os.getcwd()
 
-    return "$HOME" + cur_path[len(home_path):] + "> "
+    return hostname + cur_path[len(home_path):] + "> "
 
 
 def isos():
