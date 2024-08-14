@@ -28,6 +28,7 @@ from subprocess import Popen, PIPE, STDOUT
 import ansicolor
 from optparse import OptionParser
 import importlib
+import time
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
@@ -326,6 +327,17 @@ def get_prompt_str():
     return hostname + cur_path[len(home_path):] + "> "
 
 
+def set_time_zone(sos_home):
+    path = sos_home + "/sos_commands/systemd/timedatectl"
+    with open(path) as f:
+        lines = f.readlines()
+        for line in lines:
+            words = line.split(':')
+            if words[0].strip() == "Time zone":
+                os.environ['TZ'] = words[1].split()[0]
+                time.tzset()
+
+
 def isos():
     op = OptionParser()
     op.add_option("-a", "--all", dest="all", default=0,
@@ -341,6 +353,7 @@ def isos():
 
     work_dir = os.environ.get("WORK_DIR", os.getcwd())
     set_env("set sos_home %s dir" % (work_dir), env_vars)
+    set_time_zone(env_vars['sos_home'])
 
     input_session = get_input_session()
     while True:
