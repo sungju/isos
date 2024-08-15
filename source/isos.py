@@ -67,7 +67,7 @@ def show_commands(input_str, env_var, show_help=False):
     for comm in mod_command_set:
         result_str = result_str + ("%s : %s()" % (comm, mod_command_set[comm].__name__)) + "\n"
 
-    return result_str
+    return result_str.strip()
 
 
 def reload_commands(input_str, env_str, show_help=False):
@@ -114,10 +114,12 @@ def add_command_module(new_module):
     global mod_command_set
 
     try:
-        cmd_str, func = new_module.get_command_info()
-        if cmd_str in mod_command_set:
-            print("Replacing %s from %s" % (cmd_str, mod_command_set[cmd_str]))
-        mod_command_set[cmd_str] = func
+        cmd_set = new_module.get_command_info()
+        for cmd_str in cmd_set:
+            func = cmd_set[cmd_str]
+            if cmd_str in mod_command_set:
+                print("Replacing %s from %s" % (cmd_str, mod_command_set[cmd_str]))
+            mod_command_set[cmd_str] = func
         modules.append(new_module)
     except:
         print("Failed to add command from %s" % (new_module))

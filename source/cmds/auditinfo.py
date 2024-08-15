@@ -12,7 +12,7 @@ def add_command():
 
 
 def get_command_info():
-    return "audit", run_auditinfo
+    return { "audit": run_auditinfo }
 
 
 COLOR_ONE   = ansicolor.get_color(ansicolor.YELLOW)
