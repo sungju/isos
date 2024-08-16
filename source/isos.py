@@ -361,14 +361,18 @@ def get_prompt_str():
 
 
 def set_time_zone(sos_home):
-    path = sos_home + "/sos_commands/systemd/timedatectl"
-    with open(path) as f:
-        lines = f.readlines()
-        for line in lines:
-            words = line.split(':')
-            if words[0].strip() == "Time zone":
-                os.environ['TZ'] = words[1].split()[0]
-                time.tzset()
+    try:
+        path = sos_home + "/sos_commands/systemd/timedatectl"
+        with open(path) as f:
+            lines = f.readlines()
+            for line in lines:
+                words = line.split(':')
+                if words[0].strip() == "Time zone":
+                    os.environ['TZ'] = words[1].split()[0]
+                    time.tzset()
+        return
+    except:
+        pass
 
 
 def isos():
