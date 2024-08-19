@@ -128,12 +128,18 @@ def read_ps_basic(ps_path, no_pipe):
         for line in lines:
             line = get_colored_line(line)
             if line != "":
-                result_str = result_str + line + "\n"
+                if no_pipe:
+                    print(line)
+                else:
+                    result_str = result_str + line + "\n"
 
-        result_str = result_str + \
-                ("\n\tTotal VSZ = %s, Total RSS = %s\n" % \
+        total_str = ("\n\tTotal VSZ = %s, Total RSS = %s\n" % \
                 (get_size_str(total_vsz * 1024, True),
                     get_size_str(total_rss * 1024, True)))
+        if no_pipe:
+            print(total_str)
+        else:
+            result_str = result_str + total_str
 
     return result_str
 
