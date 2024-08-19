@@ -3,6 +3,16 @@ import time
 
 import ansicolor
 
+import signal
+
+stop_cmd = False
+
+def ctrl_c_handler(signum, frame):
+    global stop_cmd
+    stop_cmd = True
+
+signal.signal(signal.SIGINT, ctrl_c_handler)
+
 def description():
     return "Shows various logs"
 
@@ -77,12 +87,17 @@ def get_colored_line(line):
 
 
 def read_log_basic(log_path, no_pipe):
+    global stop_cmd
+
     set_color_table(no_pipe)
 
     result_str = ""
     with open(log_path) as f:
         lines = f.readlines()
         for line in lines:
+            if stop_cmd:
+                return result_str
+
             line = get_colored_line(line)
             if line != "":
                 if no_pipe:
@@ -94,8 +109,11 @@ def read_log_basic(log_path, no_pipe):
 
 
 def run_loginfo(input_str, env_vars, show_help=False, no_pipe=True):
+    global stop_cmd
+
     if show_help == True:
         return description()
 
+    stop_cmd = False
     result_str = read_log_basic(env_vars["sos_home"] + "/var/log/messages", no_pipe)
     return result_str

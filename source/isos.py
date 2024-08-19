@@ -38,6 +38,15 @@ from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.shortcuts import CompleteStyle
 
+from prompt_toolkit.key_binding import KeyBindings
+
+bindings = KeyBindings()
+@bindings.add('c-c')
+def _(event):
+    # No ctrl-c allowed
+    pass
+
+
 modules = []
 
 def load_commands():
@@ -399,6 +408,7 @@ def isos():
                                          completer=file_completer,
                                          complete_style=CompleteStyle.READLINE_LIKE,
                                          complete_while_typing=True,
+                                         key_bindings=bindings,
                                         auto_suggest=AutoSuggestFromHistory())
         handle_input(input_str)
 
