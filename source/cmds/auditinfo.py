@@ -57,7 +57,7 @@ def read_audit_log(audit_path):
     return result_str.strip()
 
 
-def run_auditinfo(input_str, env_vars, show_help=False):
+def run_auditinfo(input_str, env_vars, show_help=False, no_pipe=True):
     if show_help == True:
         return description()
 

@@ -59,7 +59,7 @@ def load_commands():
             print("Couldn't find %s/cmds directory" % (path))
 
 
-def show_commands(input_str, env_var, show_help=False):
+def show_commands(input_str, env_var, show_help=False, no_pipe=True):
     if show_help:
         return "Show the pluggable command list"
 
@@ -70,7 +70,7 @@ def show_commands(input_str, env_var, show_help=False):
     return result_str.strip()
 
 
-def reload_commands(input_str, env_str, show_help=False):
+def reload_commands(input_str, env_str, show_help=False, no_pipe=True):
     global modules
     if show_help:
         return "Reloading commands"
@@ -175,7 +175,7 @@ def get_input_session():
     return input_session
 
 
-def show_usage(input_str, env_vars, show_help=False):
+def show_usage(input_str, env_vars, show_help=False, no_pipe=True):
     words = input_str.split()
     if len(words) > 1 and words[1] != "help":
         if words[1] in command_set:
@@ -197,13 +197,13 @@ def show_usage(input_str, env_vars, show_help=False):
     return result_str
 
 
-def exit_app(input_str, env_vars, show_help=False):
+def exit_app(input_str, env_vars, show_help=False, no_pipe=True):
     if show_help:
         return "Exit the application"
 
     sys.exit(0)
 
-def change_dir(input_str, env_vars, show_help=False):
+def change_dir(input_str, env_vars, show_help=False, no_pipe=True):
     if show_help:
         return "Change directory in the app"
 
@@ -225,7 +225,7 @@ env_vars = {
     "sos_home": os.getcwd(),
 }
 
-def set_env(input_str, env_vars, show_help=False):
+def set_env(input_str, env_vars, show_help=False, no_pipe=True):
     words = input_str.split()
     if show_help or len(words) == 1:
         result_str = "Setting variables\n================="
@@ -253,7 +253,7 @@ def set_env(input_str, env_vars, show_help=False):
     return ""
 
 
-def xsos_run(input_str, env_vars, show_help=False):
+def xsos_run(input_str, env_vars, show_help=False, no_pipe=True):
     if show_help:
         return "Run xsos within the app"
 
@@ -308,7 +308,7 @@ def handle_input(input_str):
     result_str=""
     cmd_list = command_set | mod_command_set
     if words[0] in cmd_list:
-        result_str = cmd_list[words[0]](input_str, env_vars, False)
+        result_str = cmd_list[words[0]](input_str, env_vars, False, shell_part == "")
         if len(shell_part) == 0:
             if len(result_str) != 0:
                 print(result_str)

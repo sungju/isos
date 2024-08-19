@@ -25,15 +25,41 @@ COLOR_MAGENTA = ansicolor.get_color(ansicolor.MAGENTA)
 COLOR_GREEN = ansicolor.get_color(ansicolor.GREEN)
 COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
 
-column_color = {
-        1 : COLOR_ONE,
-        2 : COLOR_TWO,
-        3 : COLOR_TWO,
-        4 : COLOR_TWO,
-        5 : COLOR_FOUR,
-        6 : COLOR_THREE,
-        11: COLOR_FIVE,
-}
+column_color = { }
+
+def set_color_table(no_pipe):
+    global COLOR_ONE, COLOR_TWO, COLOR_THREE
+    global COLOR_FOUR, COLOR_FIVE
+    global COLOR_RED, COLOR_MAGENTA, COLOR_GREEN
+    global COLOR_RESET
+    global column_color
+
+    if no_pipe:
+        COLOR_ONE   = ansicolor.get_color(ansicolor.YELLOW)
+        COLOR_TWO   = ansicolor.get_color(ansicolor.GREEN)
+        COLOR_THREE = ansicolor.get_color(ansicolor.RED)
+        COLOR_FOUR  = ansicolor.get_color(ansicolor.CYAN)
+        COLOR_FIVE  = ansicolor.get_color(ansicolor.LIGHTCYAN)
+        COLOR_RED   = ansicolor.get_color(ansicolor.LIGHTRED)
+        COLOR_MAGENTA = ansicolor.get_color(ansicolor.MAGENTA)
+        COLOR_GREEN = ansicolor.get_color(ansicolor.GREEN)
+        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
+
+        column_color = {
+                1 : COLOR_ONE,
+                2 : COLOR_TWO,
+                3 : COLOR_TWO,
+                4 : COLOR_TWO,
+                5 : COLOR_FOUR,
+                6 : COLOR_THREE,
+                11: COLOR_FIVE,
+        }
+    else:
+        COLOR_ONE = COLOR_TWO = COLOR_THREE = ""
+        COLOR_FOUR = COLOR_FIVE = ""
+        COLOR_RED = COLOR_MAGENTA = COLOR_GREEN = COLOR_RESET = ""
+        column_color = {}
+
 
 total_vsz = 0
 total_rss = 0
@@ -89,12 +115,12 @@ def get_size_str(size, coloring = False):
     return size_str
 
 
-def read_ps_basic(ps_path):
+def read_ps_basic(ps_path, no_pipe):
     global total_vsz
     global total_rss
 
     total_vsz = total_rss = 0
-
+    set_color_table(no_pipe)
 
     result_str = ""
     with open(ps_path) as f:
@@ -112,9 +138,9 @@ def read_ps_basic(ps_path):
     return result_str
 
 
-def run_psinfo(input_str, env_vars, show_help=False):
+def run_psinfo(input_str, env_vars, show_help=False, no_pipe=True):
     if show_help == True:
         return description()
 
-    result_str = read_ps_basic(env_vars["sos_home"] + "/ps")
+    result_str = read_ps_basic(env_vars["sos_home"] + "/ps", no_pipe)
     return result_str
