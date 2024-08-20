@@ -118,7 +118,7 @@ def run_loginfo(input_str, env_vars, show_help=False, no_pipe=True):
         return description()
 
     usage = "Usage: log [options]"
-    op = OptionParser(add_help_option=False)
+    op = OptionParser(usage=usage, add_help_option=False)
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')
 
