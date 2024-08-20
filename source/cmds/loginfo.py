@@ -1,6 +1,7 @@
 import sys
 import time
 from optparse import OptionParser
+from io import StringIO
 
 import ansicolor
 
@@ -114,9 +115,6 @@ def read_log_basic(log_path, no_pipe):
 def run_loginfo(input_str, env_vars, show_help=False, no_pipe=True):
     global stop_cmd
 
-    if show_help == True:
-        return description()
-
     usage = "Usage: log [options]"
     op = OptionParser(usage=usage, add_help_option=False)
     op.add_option('-h', '--help', dest='help', action='store_true',
@@ -139,9 +137,17 @@ def run_loginfo(input_str, env_vars, show_help=False, no_pipe=True):
             help="Shows secure log")
 
     (o, args) = op.parse_args(input_str.split())
-    if o.help:
-        op.print_help()
-        return ""
+
+    if o.help or show_help == True:
+        if no_pipe == False:
+            output = StringIO.StringIO()
+            op.print_help(file=output)
+            contents = output.getvalue()
+            output.close()
+            return contents
+        else:
+            op.print_help()
+            return ""
 
     orig_handler = signal.signal(signal.SIGINT, ctrl_c_handler)
     stop_cmd = False

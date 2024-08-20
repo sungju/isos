@@ -293,6 +293,7 @@ def run_shell_command(input_str, pipe_input="", no_pipe=False):
 
 command_set = {
     "help" : show_usage,
+    "man" : show_usage,
     "cd"   : change_dir,
     "set"  : set_env,
     "xsos" : xsos_run,

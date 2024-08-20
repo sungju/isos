@@ -1,7 +1,18 @@
 import sys
 import time
+from optparse import OptionParser
+from io import StringIO
 
 import ansicolor
+
+import signal
+
+stop_cmd = False
+
+def ctrl_c_handler(signum, frame):
+    global stop_cmd
+    stop_cmd = True
+
 
 def description():
     return "Shows process related information"
@@ -145,8 +156,29 @@ def read_ps_basic(ps_path, no_pipe):
 
 
 def run_psinfo(input_str, env_vars, show_help=False, no_pipe=True):
-    if show_help == True:
-        return description()
+
+    usage = "Usage: ps [options]"
+    op = OptionParser(usage=usage, add_help_option=False)
+    op.add_option('-h', '--help', dest='help', action='store_true',
+                  help='show this help message and exit')
+
+    (o, args) = op.parse_args(input_str.split())
+
+    if o.help or show_help == True:
+        if no_pipe == False:
+            output = StringIO.StringIO()
+            op.print_help(file=output)
+            contents = output.getvalue()
+            output.close()
+            return contents
+        else:
+            op.print_help()
+            return ""
+
+    orig_handler = signal.signal(signal.SIGINT, ctrl_c_handler)
 
     result_str = read_ps_basic(env_vars["sos_home"] + "/ps", no_pipe)
+
+    signal.signal(signal.SIGINT, orig_handler)
+
     return result_str
