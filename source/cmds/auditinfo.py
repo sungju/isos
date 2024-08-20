@@ -1,5 +1,9 @@
 import sys
 import time
+from optparse import OptionParser
+import os
+from os import listdir
+from os.path import isfile, join
 
 import ansicolor
 
@@ -31,11 +35,13 @@ COLOR_FOUR  = ansicolor.get_color(ansicolor.CYAN)
 COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
 
 keyword_color = { }
+column_color = { }
 
 def set_color_table(no_pipe):
     global COLOR_ONE, COLOR_TWO, COLOR_THREE
     global COLOR_FOUR, COLOR_RESET
     global keyword_color
+    global column_color
 
     if no_pipe:
         COLOR_ONE   = ansicolor.get_color(ansicolor.YELLOW)
@@ -52,10 +58,18 @@ def set_color_table(no_pipe):
                 "key=" : COLOR_THREE,
                 "comm=" : COLOR_FOUR,
         }
+
+        column_color = {
+                1 : COLOR_ONE,
+                2 : COLOR_TWO,
+                3 : COLOR_THREE,
+                4 : COLOR_FOUR,
+        }
     else:
         COLOR_ONE = COLOR_TWO = COLOR_THREE = ""
         COLOR_FOUR = COLOR_RESET = ""
         keyword_color = {}
+        column_color = {}
 
 
 def get_colored_line(line):
@@ -72,22 +86,52 @@ def get_colored_line(line):
     return result_str.strip() + "\n"
 
 
-def read_audit_log(audit_path, no_pipe):
+def get_colored_line_per_column(line):
+    words = line.split()
+    result_str = ""
+    count = 1
+    for word in words:
+        colored_word = word
+        if count in column_color:
+            colored_word = column_color[count] + word + COLOR_RESET
+        line = line.replace(word, colored_word, 1)
+        mod_idx = line.find(colored_word) + len(colored_word)
+        result_str = result_str + line[:mod_idx]
+        line = line[mod_idx:]
+        count = count + 1
+
+    return result_str
+
+
+def read_audit_file(audit_path, no_pipe, is_log=True, show_path=False, sos_home=""):
     global stop_cmd
 
     set_color_table(no_pipe)
     result_str = ""
+    if show_path:
+        file_name = audit_path.replace(sos_home, "")
+        result_str = "=" * 10 + ("> %s <" % file_name) + "=" * 10
     try:
+        if no_pipe:
+            print(result_str)
+            result_str = ""
+        else:
+            result_str = result_str + "\n"
+
         with open(audit_path) as f:
             lines = f.readlines()
             for line in lines:
                 if stop_cmd:
                     break
-                words = line.split()
-                epoch = words[1][len("msg=audit("):-2]
-                localtime = time.ctime(float(epoch.split(':')[0]))
-                line = get_colored_line(line)
-                line = line.replace(epoch, localtime)
+                if is_log:
+                    words = line.split()
+                    epoch = words[1][len("msg=audit("):-2]
+                    localtime = time.ctime(float(epoch.split(':')[0]))
+                    line = get_colored_line(line)
+                    line = line.replace(epoch, localtime)
+                else:
+                    line = get_colored_line_per_column(line)
+
                 if no_pipe:
                     print(line.strip())
                 else:
@@ -96,6 +140,24 @@ def read_audit_log(audit_path, no_pipe):
         result_str = ""
 
     return result_str.strip()
+
+
+def get_files_in_path(mypath, extension):
+    if not mypath.endswith("/"):
+        mypath = mypath + "/"
+
+    onlyfiles = [mypath + f for f in listdir(mypath) if isfile(join(mypath, f)) and f.endswith(extension)]
+    return onlyfiles
+
+
+def get_audit_config_files(sos_home):
+    return get_files_in_path(sos_home + "/etc/audit/", ".conf") + \
+            get_files_in_path(sos_home + "/etc/audit/plugins.d/", ".conf")
+
+
+def get_audit_rules_files(sos_home):
+    return get_files_in_path(sos_home + "/etc/audit/", ".rules") + \
+            get_files_in_path(sos_home + "/etc/audit/rules.d/", ".rules")
 
 
 def run_auditinfo(input_str, env_vars, show_help=False, no_pipe=True):
@@ -107,6 +169,37 @@ def run_auditinfo(input_str, env_vars, show_help=False, no_pipe=True):
     stop_cmd = False
     orig_handler = signal.signal(signal.SIGINT, ctrl_c_handler)
 
-    result_str = read_audit_log(env_vars["sos_home"] + "/var/log/audit/audit.log", no_pipe)
+    usage = "Usage: audit [options]"
+    op = OptionParser(usage=usage, add_help_option=False)
+    op.add_option('-h', '--help', dest='help', action='store_true',
+                  help='show this help message and exit')
+
+    op.add_option("-c", "--config", dest="audit_config", default=0,
+            action="store_true",
+            help="Shows auditd configuration")
+    op.add_option("-r", "--rules", dest="audit_rules", default=0,
+            action="store_true",
+            help="Shows audit rules")
+
+    (o, args) = op.parse_args(input_str.split())
+    if o.help:
+        op.print_help()
+        return ""
+
+    sos_home = env_vars["sos_home"]
+    result_str = ""
+    if o.audit_config:
+        files = get_audit_config_files(sos_home)
+        for cfile in files:
+            result_str = result_str + read_audit_file(cfile, no_pipe, \
+                    False, True, sos_home)
+    elif o.audit_rules:
+        files = get_audit_rules_files(sos_home)
+        for rfile in files:
+            result_str = result_str + read_audit_file(rfile, no_pipe, \
+                    False, True, sos_home)
+        pass
+    else:
+        result_str = read_audit_file(sos_home + "/var/log/audit/audit.log", no_pipe)
     signal.signal(signal.SIGINT, orig_handler)
     return result_str
