@@ -126,7 +126,33 @@ def get_size_str(size, coloring = False):
     return size_str
 
 
-def read_ps_basic(ps_path, no_pipe):
+def sorted_by(lines, sort_by):
+    result_list = [lines[0]]
+    del lines[0]
+    sort_idx = 0
+    if sort_by == "cpu":
+        sort_idx = 2
+    elif sort_by == "vsz":
+        sort_idx = 4
+    elif sort_by == "rss":
+        sort_idx = 5
+
+    sorted_list = sorted(lines, key=lambda x: float(x.split()[sort_idx]), reverse=True)
+    return result_list + sorted_list
+
+
+def remove_empty_ps_line(lines):
+    result_list = []
+    for line in lines:
+        words = line.split()
+        if len(words) < 2 or words[1] == "-":
+            continue
+        result_list.append(line)
+
+    return result_list
+
+
+def read_ps_basic(ps_path, no_pipe, options):
     global total_vsz
     global total_rss
 
@@ -135,10 +161,21 @@ def read_ps_basic(ps_path, no_pipe):
 
     result_str = ""
     with open(ps_path) as f:
-        lines = f.readlines()
+        lines = remove_empty_ps_line(f.readlines())
+        if options.lines_to_print > 0:
+            print_count = options.lines_to_print + 1
+        else:
+            print_count = len(lines)
+
+        if options.sort_by != "":
+            lines = sorted_by(lines, options.sort_by)
+
         for line in lines:
+            if print_count == 0:
+                break
             line = get_colored_line(line)
             if line != "":
+                print_count = print_count - 1
                 if no_pipe:
                     print(line)
                 else:
@@ -162,6 +199,17 @@ def run_psinfo(input_str, env_vars, show_help=False, no_pipe=True):
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')
 
+    op.add_option('-l', '--lines', dest='lines_to_print', default=0,
+            action='store', type="int",
+            help="Shows only specified number of lines from the top")
+    op.add_option('-s', '--sort', dest='sort_by', default="",
+            action='store', type="string",
+            help="Sorts the output by one of the below options\n" + \
+                    "\tcpu : CPU usage\n" + \
+                    "\tvsz : Virtual memory usage\n" + \
+                    "\trss : RSS usage\n")
+
+
     (o, args) = op.parse_args(input_str.split())
 
     if o.help or show_help == True:
@@ -177,7 +225,7 @@ def run_psinfo(input_str, env_vars, show_help=False, no_pipe=True):
 
     orig_handler = signal.signal(signal.SIGINT, ctrl_c_handler)
 
-    result_str = read_ps_basic(env_vars["sos_home"] + "/ps", no_pipe)
+    result_str = read_ps_basic(env_vars["sos_home"] + "/ps", no_pipe, o)
 
     signal.signal(signal.SIGINT, orig_handler)
 
