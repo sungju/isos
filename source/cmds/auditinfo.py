@@ -137,6 +137,8 @@ def read_audit_file(audit_path, no_pipe, is_log=True, show_path=False, sos_home=
                     print(line.strip())
                 else:
                     result_str = result_str + line
+            if no_pipe:
+                print()
     except:
         result_str = ""
 
@@ -161,6 +163,10 @@ def get_audit_rules_files(sos_home):
             get_files_in_path(sos_home + "/etc/audit/rules.d/", ".rules")
 
 
+def get_audit_status_files(sos_home):
+    return get_files_in_path(sos_home + "/sos_commands/auditd", "")
+
+
 def run_auditinfo(input_str, env_vars, show_help=False, no_pipe=True):
     global stop_cmd
 
@@ -178,6 +184,9 @@ def run_auditinfo(input_str, env_vars, show_help=False, no_pipe=True):
     op.add_option("-r", "--rules", dest="audit_rules", default=0,
             action="store_true",
             help="Shows audit rules")
+    op.add_option("-s", "--status", dest="audit_status", default=0,
+            action="store_true",
+            help="Shows current audit status")
 
     (o, args) = op.parse_args(input_str.split())
 
@@ -204,7 +213,11 @@ def run_auditinfo(input_str, env_vars, show_help=False, no_pipe=True):
         for rfile in files:
             result_str = result_str + read_audit_file(rfile, no_pipe, \
                     False, True, sos_home)
-        pass
+    elif o.audit_status:
+        files = get_audit_status_files(sos_home)
+        for rfile in files:
+            result_str = result_str + read_audit_file(rfile, no_pipe, \
+                    False, True, sos_home)
     else:
         result_str = read_audit_file(sos_home + "/var/log/audit/audit.log", no_pipe)
     signal.signal(signal.SIGINT, orig_handler)
