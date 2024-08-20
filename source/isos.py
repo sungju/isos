@@ -186,7 +186,7 @@ def get_input_session():
 
 def show_usage(input_str, env_vars, show_help=False, no_pipe=True):
     words = input_str.split()
-    if len(words) > 1 and words[1] != "help":
+    if len(words) > 1 and words[1] != "help" and words[1] != "man":
         if words[1] in command_set:
             return command_set[words[1]](input_str, env_vars, True)
         elif words[1] in mod_command_set:
