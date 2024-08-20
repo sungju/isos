@@ -14,7 +14,6 @@ def ctrl_c_handler(signum, frame):
     global stop_cmd
     stop_cmd = True
 
-signal.signal(signal.SIGINT, ctrl_c_handler)
 
 def description():
     return "Shows cron related infomation"
@@ -157,6 +156,8 @@ def run_croninfo(input_str, env_vars, show_help=False, no_pipe=True):
 
     set_color_table(no_pipe)
     stop_cmd = False
+    orig_handler = signal.signal(signal.SIGINT, ctrl_c_handler)
+
     sos_home = env_vars["sos_home"]
     cronfile_list = get_cron_files(sos_home)
 
@@ -164,4 +165,5 @@ def run_croninfo(input_str, env_vars, show_help=False, no_pipe=True):
     for cfile in cronfile_list:
         result_str = result_str + read_cron_basic(cfile, no_pipe, True, sos_home)
 
+    signal.signal(signal.SIGINT, orig_handler)
     return result_str
