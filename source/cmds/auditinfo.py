@@ -71,6 +71,9 @@ def get_colored_line(line):
     result_str = ""
     words = line.split()
     for word in words:
+        if is_cmd_stopped():
+            return result_str
+
         for keyword in keyword_color:
             if word.startswith(keyword):
                 word = keyword_color[keyword] + word + COLOR_RESET

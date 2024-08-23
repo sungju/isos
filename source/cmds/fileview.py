@@ -5,15 +5,6 @@ from io import StringIO
 
 import ansicolor
 
-import signal
-
-stop_cmd = False
-
-def ctrl_c_handler(signum, frame):
-    global stop_cmd
-    stop_cmd = True
-
-
 def description():
     return "Shows file content"
 
@@ -99,6 +90,9 @@ def get_colored_line(line):
     count = 1
     result_str = ""
     for word in words:
+        if is_cmd_stopped():
+            return result_str
+
         colored_word = word
         if count in column_color:
             colored_word = column_color[count] + word + COLOR_RESET
@@ -121,6 +115,9 @@ def show_file_content(file_path, no_pipe, options):
             lines = f.readlines()
 
             for line in lines:
+                if is_cmd_stopped():
+                    return result_str
+
                 line = get_colored_line(line)
                 if no_pipe:
                     print(line)
@@ -132,8 +129,11 @@ def show_file_content(file_path, no_pipe, options):
     return result_str
 
 
-def run_fileview(input_str, env_vars, is_cmd_stopped,\
+is_cmd_stopped = None
+def run_fileview(input_str, env_vars, is_cmd_stopped_func,\
         show_help=False, no_pipe=True):
+    global is_cmd_stopped
+    is_cmd_stopped = is_cmd_stopped_func
 
     usage = "Usage: cat [options]"
     op = OptionParser(usage=usage, add_help_option=False)
@@ -153,11 +153,7 @@ def run_fileview(input_str, env_vars, is_cmd_stopped,\
             op.print_help()
             return ""
 
-    orig_handler = signal.signal(signal.SIGINT, ctrl_c_handler)
-
     words = input_str.split()
     result_str = show_file_content(words[1], no_pipe, o)
-
-    signal.signal(signal.SIGINT, orig_handler)
 
     return result_str

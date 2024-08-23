@@ -73,6 +73,9 @@ def get_colored_line(line):
     result_str = ""
     count = 1
     for word in words:
+        if is_cmd_stopped():
+            return result_str
+
         colored_word = word
         if count in column_color:
             colored_word = column_color[count] + word + COLOR_RESET
