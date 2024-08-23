@@ -8,14 +8,6 @@ from io import StringIO
 
 import ansicolor
 
-import signal
-
-stop_cmd = False
-
-def ctrl_c_handler(signum, frame):
-    global stop_cmd
-    stop_cmd = True
-
 
 def description():
     return "Checking audit related information"
@@ -105,8 +97,6 @@ def get_colored_line_per_column(line):
 
 
 def read_audit_file(audit_path, no_pipe, is_log=True, show_path=False, sos_home=""):
-    global stop_cmd
-
     set_color_table(no_pipe)
     result_str = ""
     if show_path:
@@ -122,7 +112,7 @@ def read_audit_file(audit_path, no_pipe, is_log=True, show_path=False, sos_home=
         with open(audit_path) as f:
             lines = f.readlines()
             for line in lines:
-                if stop_cmd:
+                if is_cmd_stopped():
                     break
                 if is_log:
                     words = line.split()
@@ -167,11 +157,12 @@ def get_audit_status_files(sos_home):
     return get_files_in_path(sos_home + "/sos_commands/auditd", "")
 
 
-def run_auditinfo(input_str, env_vars, show_help=False, no_pipe=True):
-    global stop_cmd
+is_cmd_stopped = None
 
-    stop_cmd = False
-    orig_handler = signal.signal(signal.SIGINT, ctrl_c_handler)
+def run_auditinfo(input_str, env_vars, is_cmd_stopped_func,\
+        show_help=False, no_pipe=True):
+    global is_cmd_stopped
+    is_cmd_stopped = is_cmd_stopped_func
 
     usage = "Usage: audit [options]"
     op = OptionParser(usage=usage, add_help_option=False)
@@ -220,5 +211,4 @@ def run_auditinfo(input_str, env_vars, show_help=False, no_pipe=True):
                     False, True, sos_home)
     else:
         result_str = read_audit_file(sos_home + "/var/log/audit/audit.log", no_pipe)
-    signal.signal(signal.SIGINT, orig_handler)
     return result_str

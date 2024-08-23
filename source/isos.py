@@ -29,6 +29,7 @@ import ansicolor
 from optparse import OptionParser
 import importlib
 import time
+import signal
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
@@ -69,7 +70,8 @@ def load_commands():
             print("Couldn't find %s/cmds directory" % (path))
 
 
-def show_commands(input_str, env_var, show_help=False, no_pipe=True):
+def show_commands(input_str, env_var, is_cmd_stopped=None, \
+        show_help=False, no_pipe=True):
     if show_help:
         return "Show the pluggable command list"
 
@@ -80,7 +82,8 @@ def show_commands(input_str, env_var, show_help=False, no_pipe=True):
     return result_str.strip()
 
 
-def reload_commands(input_str, env_str, show_help=False, no_pipe=True):
+def reload_commands(input_str, env_str, is_cmd_stopped=None,\
+        show_help=False, no_pipe=True):
     global modules
     if show_help:
         return "Reloading commands"
@@ -185,7 +188,8 @@ def get_input_session():
     return input_session
 
 
-def show_usage(input_str, env_vars, show_help=False, no_pipe=True):
+def show_usage(input_str, env_vars, is_cmd_stopped,\
+        show_help=False, no_pipe=True):
     words = input_str.split()
     if len(words) > 1 and words[1] != "help" and words[1] != "man":
         if words[1] in command_set:
@@ -207,13 +211,15 @@ def show_usage(input_str, env_vars, show_help=False, no_pipe=True):
     return result_str
 
 
-def exit_app(input_str, env_vars, show_help=False, no_pipe=True):
+def exit_app(input_str, env_vars, is_cmd_stopped = None,\
+        show_help=False, no_pipe=True):
     if show_help:
         return "Exit the application"
 
     sys.exit(0)
 
-def change_dir(input_str, env_vars, show_help=False, no_pipe=True):
+def change_dir(input_str, env_vars, is_cmd_stopped, \
+        show_help=False, no_pipe=True):
     if show_help:
         return "Change directory in the app"
 
@@ -235,7 +241,8 @@ env_vars = {
     "sos_home": os.getcwd(),
 }
 
-def set_env(input_str, env_vars, show_help=False, no_pipe=True):
+def set_env(input_str, env_vars, is_cmd_stopped,\
+        show_help=False, no_pipe=True):
     words = input_str.split()
     if show_help or len(words) == 1:
         result_str = "Setting variables\n================="
@@ -249,7 +256,7 @@ def set_env(input_str, env_vars, show_help=False, no_pipe=True):
             val = words[2]
             if len(words) >= 4 and words[3] == "dir":
                 val = os.path.abspath(val)
-                change_dir("cd %s" % (val), env_vars)
+                change_dir("cd %s" % (val), env_vars, is_cmd_stopped)
                 val = os.getcwd()
             env_vars[words[1]] = val
         else:
@@ -263,7 +270,8 @@ def set_env(input_str, env_vars, show_help=False, no_pipe=True):
     return ""
 
 
-def xsos_run(input_str, env_vars, show_help=False, no_pipe=True):
+def xsos_run(input_str, env_vars, is_cmd_stopped,\
+        show_help=False, no_pipe=True):
     if show_help:
         return "Run xsos within the app"
 
@@ -303,6 +311,33 @@ command_set = {
     "exit" : exit_app,
 }
 
+
+stop_cmd = False
+orig_handler = None
+
+def ctrl_c_handler(signum, frame):
+    global stop_cmd
+    stop_cmd = True
+
+
+def start_input_handling():
+    global stop_cmd
+    global orig_handler
+    stop_cmd = False
+    orig_handler = signal.signal(signal.SIGINT, ctrl_c_handler)
+
+
+def end_input_handling():
+    global stop_cmd
+    global orig_handler
+    signal.signal(signal.SIGINT, orig_handler)
+    stop_cmd = False
+
+
+def is_cmd_stopped():
+    return stop_cmd
+
+
 def handle_input(input_str):
     if len(input_str.strip()) == 0:
         return ""
@@ -319,7 +354,8 @@ def handle_input(input_str):
     result_str=""
     cmd_list = command_set | mod_command_set
     if words[0] in cmd_list:
-        result_str = cmd_list[words[0]](input_str, env_vars, False, shell_part == "")
+        result_str = cmd_list[words[0]](input_str, env_vars, is_cmd_stopped,\
+                False, shell_part == "")
         if len(shell_part) == 0:
             if len(result_str) != 0:
                 print(result_str)
@@ -337,12 +373,12 @@ def handle_input(input_str):
         elif isfile(words[0]) or isdir(words[0]):
             if isdir(words[0]):
                 result_str = change_dir("cd %s" % (words[0]), env_vars,\
-                        False, shell_part == "")
+                        is_cmd_stopped, False, shell_part == "")
             elif isfile(words[0]):
                 if "cat" in cmd_list:
                     cwd = os.path.abspath(os.getcwd())
                     result_str = cmd_list["cat"]("cat %s/%s" % (cwd, input_str),\
-                            env_vars, False, shell_part == "")
+                            env_vars, is_cmd_stopped, False, shell_part == "")
 
             if len(shell_part) == 0:
                 if len(result_str) != 0:
@@ -417,7 +453,7 @@ def isos():
     load_commands()
 
     work_dir = os.environ.get("WORK_DIR", os.getcwd())
-    set_env("set sos_home %s dir" % (work_dir), env_vars)
+    set_env("set sos_home %s dir" % (work_dir), env_vars, is_cmd_stopped)
     set_time_zone(env_vars['sos_home'])
 
     input_session = get_input_session()
@@ -429,7 +465,10 @@ def isos():
                                          complete_while_typing=True,
                                          key_bindings=bindings,
                                         auto_suggest=AutoSuggestFromHistory())
+
+        start_input_handling()
         handle_input(input_str)
+        end_input_handling()
 
 
 if ( __name__ == '__main__'):

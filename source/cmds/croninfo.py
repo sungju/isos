@@ -8,14 +8,6 @@ from io import StringIO
 
 import ansicolor
 
-import signal
-
-stop_cmd = False
-
-def ctrl_c_handler(signum, frame):
-    global stop_cmd
-    stop_cmd = True
-
 
 def description():
     return "Shows cron related infomation"
@@ -94,8 +86,6 @@ def get_colored_line(line):
 
 
 def read_cron_basic(log_path, no_pipe, show_path=False, sos_home=""):
-    global stop_cmd
-
 
     if show_path:
         file_name = log_path.replace(sos_home, "")
@@ -110,7 +100,7 @@ def read_cron_basic(log_path, no_pipe, show_path=False, sos_home=""):
         with open(log_path) as f:
             lines = f.readlines()
             for line in lines:
-                if stop_cmd:
+                if is_cmd_stopped():
                     return result_str
 
                 line = get_colored_line(line)
@@ -150,8 +140,12 @@ def get_cron_files(sos_home):
     return file_list
 
 
-def run_croninfo(input_str, env_vars, show_help=False, no_pipe=True):
-    global stop_cmd
+is_cmd_stopped = None
+
+def run_croninfo(input_str, env_vars, is_cmd_stopped_func,\
+        show_help=False, no_pipe=True):
+    global is_cmd_stopped
+    is_cmd_stopped = is_cmd_stopped_func
 
     usage = "Usage: cron [options]"
     op = OptionParser(usage=usage, add_help_option=False)
@@ -173,8 +167,6 @@ def run_croninfo(input_str, env_vars, show_help=False, no_pipe=True):
 
 
     set_color_table(no_pipe)
-    stop_cmd = False
-    orig_handler = signal.signal(signal.SIGINT, ctrl_c_handler)
 
     sos_home = env_vars["sos_home"]
     cronfile_list = get_cron_files(sos_home)
@@ -183,5 +175,4 @@ def run_croninfo(input_str, env_vars, show_help=False, no_pipe=True):
     for cfile in cronfile_list:
         result_str = result_str + read_cron_basic(cfile, no_pipe, True, sos_home)
 
-    signal.signal(signal.SIGINT, orig_handler)
     return result_str

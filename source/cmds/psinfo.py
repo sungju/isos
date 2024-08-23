@@ -5,14 +5,6 @@ from io import StringIO
 
 import ansicolor
 
-import signal
-
-stop_cmd = False
-
-def ctrl_c_handler(signum, frame):
-    global stop_cmd
-    stop_cmd = True
-
 
 def description():
     return "Shows process related information"
@@ -192,7 +184,11 @@ def read_ps_basic(ps_path, no_pipe, options):
     return result_str
 
 
-def run_psinfo(input_str, env_vars, show_help=False, no_pipe=True):
+is_cmd_stopped = None
+def run_psinfo(input_str, env_vars, is_cmd_stopped_func,\
+        show_help=False, no_pipe=True):
+    global is_cmd_stopped
+    is_cmd_stopped = is_cmd_stopped_func
 
     usage = "Usage: ps [options]"
     op = OptionParser(usage=usage, add_help_option=False)
@@ -223,10 +219,6 @@ def run_psinfo(input_str, env_vars, show_help=False, no_pipe=True):
             op.print_help()
             return ""
 
-    orig_handler = signal.signal(signal.SIGINT, ctrl_c_handler)
-
     result_str = read_ps_basic(env_vars["sos_home"] + "/ps", no_pipe, o)
-
-    signal.signal(signal.SIGINT, orig_handler)
 
     return result_str

@@ -130,7 +130,8 @@ def show_file_content(file_path, no_pipe, options):
     return result_str
 
 
-def run_fileview(input_str, env_vars, show_help=False, no_pipe=True):
+def run_fileview(input_str, env_vars, is_cmd_stopped,\
+        show_help=False, no_pipe=True):
 
     usage = "Usage: cat [options]"
     op = OptionParser(usage=usage, add_help_option=False)

@@ -5,14 +5,6 @@ from io import StringIO
 
 import ansicolor
 
-import signal
-
-stop_cmd = False
-
-def ctrl_c_handler(signum, frame):
-    global stop_cmd
-    stop_cmd = True
-
 
 def description():
     return "Shows various logs"
@@ -88,7 +80,6 @@ def get_colored_line(line):
 
 
 def read_log_basic(log_path, no_pipe):
-    global stop_cmd
 
     set_color_table(no_pipe)
 
@@ -97,7 +88,7 @@ def read_log_basic(log_path, no_pipe):
         with open(log_path) as f:
             lines = f.readlines()
             for line in lines:
-                if stop_cmd:
+                if is_cmd_stopped():
                     return result_str
 
                 line = get_colored_line(line)
@@ -112,8 +103,11 @@ def read_log_basic(log_path, no_pipe):
     return result_str
 
 
-def run_loginfo(input_str, env_vars, show_help=False, no_pipe=True):
-    global stop_cmd
+is_cmd_stopped = None
+def run_loginfo(input_str, env_vars, is_cmd_stopped_func,\
+        show_help=False, no_pipe=True):
+    global is_cmd_stopped
+    is_cmd_stopped = is_cmd_stopped_func
 
     usage = "Usage: log [options]"
     op = OptionParser(usage=usage, add_help_option=False)
@@ -149,9 +143,6 @@ def run_loginfo(input_str, env_vars, show_help=False, no_pipe=True):
             op.print_help()
             return ""
 
-    orig_handler = signal.signal(signal.SIGINT, ctrl_c_handler)
-    stop_cmd = False
-
     result_str = ""
     if o.cron_log:
         result_str = read_log_basic(env_vars["sos_home"] + "/var/log/cron", no_pipe)
@@ -166,6 +157,5 @@ def run_loginfo(input_str, env_vars, show_help=False, no_pipe=True):
     else:
         result_str = read_log_basic(env_vars["sos_home"] + "/var/log/messages", no_pipe)
 
-    signal.signal(signal.SIGINT, orig_handler)
 
     return result_str
