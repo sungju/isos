@@ -32,8 +32,8 @@ COLOR_3  = ansicolor.get_color(ansicolor.YELLOW)
 COLOR_4  = ansicolor.get_color(ansicolor.BLUE)
 COLOR_5  = ansicolor.get_color(ansicolor.MAGENTA)
 COLOR_6  = ansicolor.get_color(ansicolor.CYAN)
-COLOR_7  = ansicolor.get_color(ansicolor.LIGHTGRAY)
-COLOR_8  = ansicolor.get_color(ansicolor.DARKGRAY)
+COLOR_7  = ansicolor.get_color(ansicolor.YELLOW)
+COLOR_8  = ansicolor.get_color(ansicolor.BLUE)
 COLOR_9  = ansicolor.get_color(ansicolor.LIGHTRED)
 COLOR_10 = ansicolor.get_color(ansicolor.LIGHTGREEN)
 COLOR_11 = ansicolor.get_color(ansicolor.LIGHTYELLOW)
@@ -58,8 +58,8 @@ def set_color_table(no_pipe):
         COLOR_4  = ansicolor.get_color(ansicolor.BLUE)
         COLOR_5  = ansicolor.get_color(ansicolor.MAGENTA)
         COLOR_6  = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_7  = ansicolor.get_color(ansicolor.LIGHTGRAY)
-        COLOR_8  = ansicolor.get_color(ansicolor.DARKGRAY)
+        COLOR_7  = ansicolor.get_color(ansicolor.YELLOW)
+        COLOR_8  = ansicolor.get_color(ansicolor.BLUE)
         COLOR_9  = ansicolor.get_color(ansicolor.LIGHTRED)
         COLOR_10 = ansicolor.get_color(ansicolor.LIGHTGREEN)
         COLOR_11 = ansicolor.get_color(ansicolor.LIGHTYELLOW)
@@ -116,16 +116,18 @@ def show_file_content(file_path, no_pipe, options):
     set_color_table(no_pipe)
 
     result_str = ""
-    with open(file_path) as f:
-        lines = f.readlines()
+    try:
+        with open(file_path) as f:
+            lines = f.readlines()
 
-        for line in lines:
-            line = get_colored_line(line)
-            if line != "":
+            for line in lines:
+                line = get_colored_line(line)
                 if no_pipe:
                     print(line)
                 else:
                     result_str = result_str + line + "\n"
+    except:
+        result_str ="File '%s' cannot read" % (file_path)
 
     return result_str
 
