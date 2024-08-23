@@ -21,7 +21,7 @@
 import sys
 import os
 import re
-from os.path import expanduser, isfile, join
+from os.path import expanduser, isfile, isdir, join
 from os import listdir
 import operator
 from subprocess import Popen, PIPE, STDOUT
@@ -39,6 +39,7 @@ from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.shortcuts import CompleteStyle
 
 from prompt_toolkit.key_binding import KeyBindings
+
 
 bindings = KeyBindings()
 @bindings.add('c-c')
@@ -333,9 +334,26 @@ def handle_input(input_str):
         elif words[0] == "vi":
             run_shell_command(input_str, "", True)
             return
+        elif isfile(words[0]) or isdir(words[0]):
+            if isdir(words[0]):
+                result_str = change_dir("cd %s" % (words[0]), env_vars,\
+                        False, shell_part == "")
+            elif isfile(words[0]):
+                if "cat" in cmd_list:
+                    cwd = os.path.abspath(os.getcwd())
+                    result_str = cmd_list["cat"]("cat %s/%s" % (cwd, input_str),\
+                            env_vars, False, shell_part == "")
 
-        input_str = orig_input_str
-        shell_part = ""
+            if len(shell_part) == 0:
+                if len(result_str) != 0:
+                    print(result_str)
+                return
+            else:
+                input_str = shell_part
+        else:
+            input_str = orig_input_str
+            shell_part = ""
+
 
     result_str = run_shell_command(input_str, result_str)
     print(result_str, end="")
