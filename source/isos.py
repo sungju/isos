@@ -439,6 +439,25 @@ def set_time_zone(sos_home):
         pass
 
 
+def run_one_line(input_str):
+    start_input_handling()
+    handle_input(input_str)
+    end_input_handling()
+
+
+def check_startup_script():
+    try:
+        fname = expanduser("~") + "/.isosrc"
+        with open(fname) as f:
+            lines = f.readlines()
+            for line in lines:
+                line = line.strip()
+                if len(line) > 0 and line[0] != '#':
+                    run_one_line(line)
+    except:
+        pass
+
+
 def isos():
     op = OptionParser()
     op.add_option("-a", "--all", dest="all", default=0,
@@ -456,6 +475,8 @@ def isos():
     set_env("set sos_home %s dir" % (work_dir), env_vars, is_cmd_stopped)
     set_time_zone(env_vars['sos_home'])
 
+    check_startup_script()
+
     input_session = get_input_session()
     while True:
         file_completer = WordCompleter(get_file_list())
@@ -466,9 +487,7 @@ def isos():
                                          key_bindings=bindings,
                                         auto_suggest=AutoSuggestFromHistory())
 
-        start_input_handling()
-        handle_input(input_str)
-        end_input_handling()
+        run_one_line(input_str)
 
 
 if ( __name__ == '__main__'):
