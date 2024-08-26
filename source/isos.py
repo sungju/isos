@@ -192,10 +192,13 @@ def show_usage(input_str, env_vars, is_cmd_stopped,\
         show_help=False, no_pipe=True):
     words = input_str.split()
     if len(words) > 1 and words[1] != "help" and words[1] != "man":
+        target_idx = input_str.find(words[1])
         if words[1] in command_set:
-            return command_set[words[1]](input_str, env_vars, True)
+            input_str = input_str[target_idx:].replace(words[1], words[1] + " -h")
+            return command_set[words[1]](input_str, env_vars, False)
         elif words[1] in mod_command_set:
-            return mod_command_set[words[1]](input_str, env_vars, True)
+            input_str = input_str[target_idx:].replace(words[1], words[1] + " -h")
+            return mod_command_set[words[1]](input_str, env_vars, False)
 
     result_str = ("Help\n%s\n" % ("-" * 30))
     count = 0
