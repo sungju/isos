@@ -136,14 +136,21 @@ def show_mem_usage(options, lines, no_pipe):
     return show_sar_data(options, lines, no_pipe, match_headers, match_columns)
 
 
+def show_loadavg(options, lines, no_pipe):
+    match_headers = { "runq-sz", "plist-sz" }
+    match_columns = {}
+
+    return show_sar_data(options, lines, no_pipe, match_headers, match_columns)
+
+
 def show_sar_data(options, lines, no_pipe, match_headers, match_columns):
     result_str = ""
-    if len(lines) == 0:
+    tot_idx = len(lines)
+    if tot_idx == 0:
         return result_str
     
     result_str = get_pipe_aware_line(lines[0] + "\n", no_pipe)
     idx = 1
-    tot_idx = len(lines)
     while idx < tot_idx:
         idx, header_line = find_data_header(idx, lines, options, no_pipe, match_headers)
         result_str = result_str + header_line
@@ -226,6 +233,8 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-C', '--cpuno', dest='cpu_number', default="",
             action='store', type="string",
             help="Shows only specified CPU data")
+    op.add_option('-l', '--load', dest='loadavg', action='store_true',
+                  help='show load average')
     op.add_option('-m', '--mem', dest='mem_usage', action='store_true',
                   help='show memory usage')
 
@@ -252,8 +261,12 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
 
                 if o.cpu_usage:
                     result_str = result_str + show_cpu_usage(o, lines, no_pipe)
+
                 if o.mem_usage:
                     result_str = result_str + show_mem_usage(o, lines, no_pipe)
+
+                if o.loadavg:
+                    result_str = result_str + show_loadavg(o, lines, no_pipe)
         except Exception as e:
             print(e)
             result_str = result_str + get_pipe_aware_line("sar file '%s' cannot read" % (file_path), no_pipe)
