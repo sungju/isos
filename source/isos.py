@@ -444,7 +444,10 @@ def set_time_zone(sos_home):
 
 def run_one_line(input_str):
     start_input_handling()
-    handle_input(input_str)
+    try:
+        handle_input(input_str)
+    except Exception as e:
+        print(e)
     end_input_handling()
 
 
