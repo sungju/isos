@@ -118,7 +118,7 @@ def get_pipe_aware_line(line, no_pipe):
 
 
 def show_cpu_usage(options, lines, no_pipe):
-    match_headers = [ "CPU", "%usr" ] # start from 2nd column
+    match_headers = [ "CPU", "%usr" ] # start from header_start_idx
     if options.show_all:
         match_columns = []
     elif options.cpu_number != "":
@@ -132,6 +132,16 @@ def show_cpu_usage(options, lines, no_pipe):
 def show_mem_usage(options, lines, no_pipe):
     match_headers = [ "kbmemfree", "kbmemused" ]
     match_columns = []
+
+    return show_sar_data(options, lines, no_pipe, match_headers, match_columns)
+
+
+def show_net_usage(options, lines, no_pipe):
+    match_headers = [ "IFACE", "rxpck/s" ]
+    if options.netdev != "":
+        match_columns = [ options.netdev ]
+    else:
+        match_columns = []
 
     return show_sar_data(options, lines, no_pipe, match_headers, match_columns)
 
@@ -163,8 +173,11 @@ def show_sar_data(options, lines, no_pipe, match_headers, match_columns):
     return result_str + get_pipe_aware_line("\n", no_pipe)
 
 
+header_start_idx = 1
 def is_line_matching(words, match_words):
-    idx = 1
+    global header_start_idx
+
+    idx = header_start_idx
     for mword in match_words:
         if len(mword) != 0 and words[idx] != mword:
             return False
@@ -174,6 +187,8 @@ def is_line_matching(words, match_words):
 
 
 def find_data_header(idx, lines, options, no_pipe, match_headers):
+    global header_start_idx
+
     result_str = ""
     tot_idx = len(lines)
     len_headers = len(match_headers)
@@ -182,7 +197,7 @@ def find_data_header(idx, lines, options, no_pipe, match_headers):
         idx = idx + 1
         if len(words) == 0:
             continue
-        if len(words) <= len_headers:
+        if len(words) <= (len_headers + header_start_idx):
             continue
         if len_headers == 0 or is_line_matching(words, match_headers):
             result_str = result_str + get_pipe_aware_line("\n" + line + "\n", no_pipe)
@@ -218,6 +233,7 @@ is_cmd_stopped = None
 def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
         show_help=False, no_pipe=True):
     global is_cmd_stopped
+    global header_start_idx
     is_cmd_stopped = is_cmd_stopped_func
 
     usage = "Usage: sar [options] <sarfile>"
@@ -236,6 +252,11 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
                   help='show load average')
     op.add_option('-m', '--mem', dest='mem_usage', action='store_true',
                   help='show memory usage')
+    op.add_option('-n', '--net', dest='net_usage', action='store_true',
+                  help='show network usage')
+    op.add_option('-N', '--netdev', dest='netdev', default="",
+            action='store', type="string",
+            help="Shows only specified net device data")
 
     (o, args) = op.parse_args(input_str.split())
 
@@ -258,6 +279,19 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
             with open(file_path) as f:
                 lines = f.readlines()
 
+                # Adjust header search index due to different date/time format
+                # e.g.) "12:00:01 AM" or "00:00:01"
+                if len(lines) >= 3:
+                    words = lines[2].split()
+                    idx = 0
+                    tot_idx = len(words)
+                    while idx < tot_idx:
+                        if words[idx] == "CPU":
+                            break
+                        idx = idx + 1
+                    header_start_idx = idx
+
+
                 if o.cpu_usage:
                     result_str = result_str + show_cpu_usage(o, lines, no_pipe)
 
@@ -266,6 +300,9 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
 
                 if o.loadavg:
                     result_str = result_str + show_loadavg(o, lines, no_pipe)
+
+                if o.net_usage:
+                    result_str = result_str + show_net_usage(o, lines, no_pipe)
         except Exception as e:
             print(e)
             result_str = result_str + get_pipe_aware_line("sar file '%s' cannot read" % (file_path), no_pipe)
