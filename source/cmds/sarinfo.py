@@ -118,27 +118,27 @@ def get_pipe_aware_line(line, no_pipe):
 
 
 def show_cpu_usage(options, lines, no_pipe):
-    match_headers = { "CPU", "%usr" } # start from 2nd column
+    match_headers = [ "CPU", "%usr" ] # start from 2nd column
     if options.show_all:
-        match_columns = {}
+        match_columns = []
     elif options.cpu_number != "":
-        match_columns = { options.cpu_number }
+        match_columns = [ options.cpu_number ]
     else:
-        match_columns = { "all" }
+        match_columns = [ "all" ]
 
     return show_sar_data(options, lines, no_pipe, match_headers, match_columns)
 
 
 def show_mem_usage(options, lines, no_pipe):
-    match_headers = { "kbmemfree", "kbmemused" }
-    match_columns = {}
+    match_headers = [ "kbmemfree", "kbmemused" ]
+    match_columns = []
 
     return show_sar_data(options, lines, no_pipe, match_headers, match_columns)
 
 
 def show_loadavg(options, lines, no_pipe):
-    match_headers = { "runq-sz", "plist-sz" }
-    match_columns = {}
+    match_headers = [ "runq-sz", "plist-sz" ]
+    match_columns = []
 
     return show_sar_data(options, lines, no_pipe, match_headers, match_columns)
 
@@ -155,8 +155,8 @@ def show_sar_data(options, lines, no_pipe, match_headers, match_columns):
         idx, header_line = find_data_header(idx, lines, options, no_pipe, match_headers)
         result_str = result_str + header_line
 
-        idx, cpu_lines = get_matching_data(idx, lines, options, no_pipe, match_columns)
-        result_str = result_str + cpu_lines
+        idx, data_lines = get_matching_data(idx, lines, options, no_pipe, match_columns)
+        result_str = result_str + data_lines
         if is_cmd_stopped():
             return result_str
 
@@ -178,7 +178,6 @@ def find_data_header(idx, lines, options, no_pipe, match_headers):
     tot_idx = len(lines)
     len_headers = len(match_headers)
     for line in lines[idx:]:
-        # skip until find 'CPU'
         words = line.split()
         idx = idx + 1
         if len(words) == 0:
