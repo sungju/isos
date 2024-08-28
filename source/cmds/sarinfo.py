@@ -130,7 +130,7 @@ def show_cpu_usage(options, lines, no_pipe):
 
 
 def show_mem_usage(options, lines, no_pipe):
-    match_headers = [ "kbmemfree", "kbmemused" ]
+    match_headers = [ "kbmemfree" ]
     match_columns = []
 
     return show_sar_data(options, lines, no_pipe, match_headers, match_columns)
