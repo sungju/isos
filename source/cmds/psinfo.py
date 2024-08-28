@@ -67,10 +67,25 @@ def set_color_table(no_pipe):
 total_vsz = 0
 total_rss = 0
 
-def get_colored_line(line):
+def calc_total_mem(lines):
     global total_vsz
     global total_rss
 
+    total_vsz = total_rss = 0
+
+    for line in lines:
+        words = line.split()
+        if words[1] == "=":
+            continue
+
+        try:
+            total_vsz = total_vsz + int(words[4])
+            total_rss = total_rss + int(words[5])
+        except:
+            pass
+
+
+def get_colored_line(line):
     words = line.split()
     if words[1] == "-": # Don't need to help empty process
         return ""
@@ -85,14 +100,6 @@ def get_colored_line(line):
         mod_idx = line.find(colored_word) + len(colored_word)
         result_str = result_str + line[:mod_idx]
         line = line[mod_idx:]
-        try:
-            if count == 5: # VSZ
-                total_vsz = total_vsz + int(word)
-            elif count == 6: # RSS
-                total_rss = total_rss + int(word)
-        except:
-            pass
-
         count = count + 1
 
     return result_str
@@ -118,7 +125,7 @@ def get_size_str(size, coloring = False):
     return size_str
 
 
-def sorted_by(lines, sort_by):
+def sorted_by(lines, sort_by, reverse=True):
     result_list = [lines[0]]
     del lines[0]
     sort_idx = 0
@@ -129,7 +136,7 @@ def sorted_by(lines, sort_by):
     elif sort_by == "rss":
         sort_idx = 5
 
-    sorted_list = sorted(lines, key=lambda x: float(x.split()[sort_idx]), reverse=True)
+    sorted_list = sorted(lines, key=lambda x: float(x.split()[sort_idx]), reverse=reverse)
     return result_list + sorted_list
 
 
@@ -148,20 +155,22 @@ def read_ps_basic(ps_path, no_pipe, options):
     global total_vsz
     global total_rss
 
-    total_vsz = total_rss = 0
     set_color_table(no_pipe)
 
     result_str = ""
     with open(ps_path) as f:
         lines = remove_empty_ps_line(f.readlines())
+        total_lines = len(lines)
         if options.lines_to_print > 0:
             print_count = options.lines_to_print + 1
         else:
-            print_count = len(lines)
+            print_count = total_lines
 
         if options.sort_by != "":
-            lines = sorted_by(lines, options.sort_by)
+            lines = sorted_by(lines, options.sort_by,\
+                    print_count != total_lines)
 
+        calc_total_mem(lines)
         for line in lines:
             if print_count == 0:
                 break
@@ -172,6 +181,14 @@ def read_ps_basic(ps_path, no_pipe, options):
                     print(line)
                 else:
                     result_str = result_str + line + "\n"
+
+        if options.lines_to_print > 0 and \
+                (options.lines_to_print + 1) != total_lines:
+            line = "\n\t\t......"
+            if no_pipe:
+                print(line)
+            else:
+                result_str = result_str + line + "\n"
 
         total_str = ("\n\tTotal VSZ = %s, Total RSS = %s\n" % \
                 (get_size_str(total_vsz * 1024, True),
