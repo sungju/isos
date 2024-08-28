@@ -226,6 +226,8 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
                 perf_cmd_str = perf_cmd_str + " --no-children -s comm,dso"
             elif o.sortby == 2:
                 perf_cmd_str = perf_cmd_str + " -s overhead,overhead_us,overhead_sys,comm"
+            elif o.sortby == 3:
+                perf_cmd_str = perf_cmd_str + " -s overhead"
 
             result_str = result_str + run_perf_report(perf_cmd_str, no_pipe, o)
         except Exception as e:
