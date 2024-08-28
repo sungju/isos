@@ -184,15 +184,16 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')
 
-    op.add_option('-c', '--cpu', dest='cpu_util', action='store_true',
-                  help='sort with cpu utilisation')
-    op.add_option('-d', '--dso', dest='dso', action='store_true',
-                  help='sort with dso')
     op.add_option('-l', '--lines', dest='lines', default=0,
             action='store', type="int",
             help="Shows only specified lines from the top")
     op.add_option('-m', '--meta', dest='show_meta', action='store_true',
                   help='show cpu utilisation')
+    op.add_option('-s', '--sort', dest='sortby', default=0,
+            action='store', type="int",
+            help="Show data with different options")
+    op.add_option('-q', '--quiet', dest='quiet', action='store_true',
+                  help='Do not show any warnings or messages.')
 
     (o, args) = op.parse_args(input_str.split())
 
@@ -216,10 +217,15 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
                     (sos_home, file_path)
             if o.show_meta:
                 perf_cmd_str = perf_cmd_str + " --header"
-            if o.cpu_util:
-                perf_cmd_str = perf_cmd_str + " --sort overhead_sys,comm --show-cpu-utilization"
-            if o.dso:
+            if o.quiet:
+                perf_cmd_str = perf_cmd_str + " -q"
+
+            if o.sortby == 0:
+                perf_cmd_str = perf_cmd_str + " -s overhead_sys,comm --show-cpu-utilization"
+            elif o.sortby == 1:
                 perf_cmd_str = perf_cmd_str + " --no-children -s comm,dso"
+            elif o.sortby == 2:
+                perf_cmd_str = perf_cmd_str + " -s overhead,overhead_us,overhead_sys,comm"
 
             result_str = result_str + run_perf_report(perf_cmd_str, no_pipe, o)
         except Exception as e:
