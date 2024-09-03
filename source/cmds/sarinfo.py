@@ -129,11 +129,58 @@ def show_cpu_usage(options, lines, no_pipe):
     return show_sar_data(options, lines, no_pipe, match_headers, match_columns)
 
 
+def pbar(bchar, total, used, bar_len=60):
+    bar_count = int((float(used)/total)*bar_len)
+
+    return ('%s' % (bchar * bar_count))
+
+
+start_idx = 2
+def mem_graph_func(line, no_pipe, is_header):
+    global start_idx
+
+    result_str = ""
+    words = line.split()
+    if is_header:
+        if words[2] == "kbavail":
+            start_idx = 3
+        else:
+            start_idx = 2
+
+        result_str = ("\n%15s : %s\t%15s : %s\t%15s : %s\n" % (words[start_idx],  COLOR_1 + '#' * 5 + COLOR_RESET, \
+                                                        words[start_idx + 3], COLOR_3 + 'C' * 5 + COLOR_RESET, \
+                                                        words[start_idx + 10], COLOR_5 + 'S' * 5 + COLOR_RESET))
+        result_str = result_str + ('%s  %s\n' % (' '* 16, pbar('=', 100, 100)))
+        if no_pipe:
+            print(result_str)
+            result_str = ''
+    else:
+        sartime   = words[0]
+        kbfree    = int(words[1])
+        kbmemused = int(words[start_idx])
+        kbpercent = words[start_idx + 1]
+        kbcached  = int(words[start_idx + 3])
+        kbslab = int(words[start_idx + 10])
+        kbtotal   = kbfree + kbmemused
+        result_str = ('%s %s%% : %s%s%s' % (sartime, COLOR_8 + kbpercent, COLOR_1 + pbar('#', kbtotal, kbmemused - kbcached - kbslab), \
+                                                            COLOR_3 + pbar('C', kbtotal, kbcached), \
+                                                            COLOR_5 + pbar('S', kbtotal, kbslab) + COLOR_RESET))
+        if no_pipe:
+            print(result_str)
+            result_str = ''
+
+    return result_str
+
+
 def show_mem_usage(options, lines, no_pipe):
     match_headers = [ "kbmemfree" ]
     match_columns = []
+    if options.graph:
+        graph_func = mem_graph_func
+    else:
+        graph_func = None
 
-    return show_sar_data(options, lines, no_pipe, match_headers, match_columns)
+    return show_sar_data(options, lines, no_pipe, match_headers, match_columns, graph_func)
 
 
 def show_net_usage(options, lines, no_pipe):
@@ -153,7 +200,7 @@ def show_loadavg(options, lines, no_pipe):
     return show_sar_data(options, lines, no_pipe, match_headers, match_columns)
 
 
-def show_sar_data(options, lines, no_pipe, match_headers, match_columns):
+def show_sar_data(options, lines, no_pipe, match_headers, match_columns, graph_func=None):
     result_str = ""
     tot_idx = len(lines)
     if tot_idx == 0:
@@ -162,10 +209,10 @@ def show_sar_data(options, lines, no_pipe, match_headers, match_columns):
     result_str = get_pipe_aware_line(lines[0] + "\n", no_pipe)
     idx = 1
     while idx < tot_idx:
-        idx, header_line = find_data_header(idx, lines, options, no_pipe, match_headers)
+        idx, header_line = find_data_header(idx, lines, options, no_pipe, match_headers, graph_func)
         result_str = result_str + header_line
 
-        idx, data_lines = get_matching_data(idx, lines, options, no_pipe, match_columns)
+        idx, data_lines = get_matching_data(idx, lines, options, no_pipe, match_columns, graph_func)
         result_str = result_str + data_lines
         if is_cmd_stopped():
             return result_str
@@ -186,7 +233,7 @@ def is_line_matching(words, match_words):
     return True
 
 
-def find_data_header(idx, lines, options, no_pipe, match_headers):
+def find_data_header(idx, lines, options, no_pipe, match_headers, graph_func=None):
     global header_start_idx
 
     result_str = ""
@@ -200,7 +247,10 @@ def find_data_header(idx, lines, options, no_pipe, match_headers):
         if len(words) <= (len_headers + header_start_idx):
             continue
         if len_headers == 0 or is_line_matching(words, match_headers):
-            result_str = result_str + get_pipe_aware_line("\n" + line + "\n", no_pipe)
+            if graph_func == None:
+                result_str = result_str + get_pipe_aware_line("\n" + line + "\n", no_pipe)
+            else:
+                result_str = result_str + graph_func(line, no_pipe, is_header=True)
             break
 
         if idx > tot_idx:
@@ -209,7 +259,7 @@ def find_data_header(idx, lines, options, no_pipe, match_headers):
     return idx, result_str
 
 
-def get_matching_data(idx, lines, options, no_pipe, match_columns):
+def get_matching_data(idx, lines, options, no_pipe, match_columns, graph_func=None):
     global is_cmd_stopped
 
     result_str = ""
@@ -224,7 +274,10 @@ def get_matching_data(idx, lines, options, no_pipe, match_columns):
             break
         words = line.split()
         if len_columns == 0 or is_line_matching(words, match_columns):
-            result_str = result_str + get_pipe_aware_line(line, no_pipe)
+            if graph_func == None:
+                result_str = result_str + get_pipe_aware_line(line, no_pipe)
+            else:
+                result_str = result_str + graph_func(line, no_pipe, is_header=False)
 
     return idx, result_str
 
@@ -248,6 +301,8 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-C', '--cpuno', dest='cpu_number', default="",
             action='store', type="string",
             help="Shows only specified CPU data")
+    op.add_option('-g', '--graph', dest='graph', action='store_true',
+                  help='show data as graph if possible')
     op.add_option('-l', '--load', dest='loadavg', action='store_true',
                   help='show load average')
     op.add_option('-m', '--mem', dest='mem_usage', action='store_true',
