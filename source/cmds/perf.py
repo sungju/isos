@@ -4,6 +4,7 @@ import time
 from optparse import OptionParser
 from io import StringIO
 from subprocess import Popen, PIPE, STDOUT
+from isos import run_shell_command
 
 import ansicolor
 
@@ -117,22 +118,6 @@ def get_pipe_aware_line(line, no_pipe):
         line = line + "\n"
 
     return line
-
-
-def run_shell_command(input_str, pipe_input="", no_pipe=False):
-    if len(pipe_input.strip()) != 0:
-        input_bytes = pipe_input.encode('utf-8')
-        p = Popen(input_str, shell=True, stdout=PIPE, stdin=PIPE, stderr=STDOUT)
-        stdout_result = p.communicate(input=input_bytes)[0]
-        return stdout_result.decode()
-    elif no_pipe == True:
-        os.system(input_str)
-        return ""
-    else:
-        p = Popen(input_str, shell=True, stdout=PIPE, stderr=STDOUT, text=True)
-        result_str, errors = p.communicate()
-
-        return result_str
 
 
 def run_perf_report(perf_cmd_str, no_pipe, options):
