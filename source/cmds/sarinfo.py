@@ -117,6 +117,39 @@ def get_pipe_aware_line(line, no_pipe):
     return line
 
 
+
+def cpu_graph_func(line, no_pipe, is_header):
+    words = line.split()
+    result_str = ""
+
+    blen = 100
+    if is_header:
+        result_str = get_pipe_aware_line(line, no_pipe)
+        result_str = result_str + ('%s  %s\n' % (' '* 16, pbar('=', 100, 100, blen)))
+        if no_pipe:
+            print(result_str)
+            result_str = ''
+    else:
+        result_str = COLOR_1 + words[0] + \
+                (' %6.2f : %s%s%s%s%s%s%s%s%s' % ( \
+                100-float(words[11]),
+                COLOR_3 + pbar('#', 100, float(words[2]), blen),
+                COLOR_4 + pbar('#', 100, float(words[3]), blen),
+                COLOR_5 + pbar('#', 100, float(words[4]), blen),
+                COLOR_6 + pbar('#', 100, float(words[5]), blen),
+                COLOR_7 + pbar('#', 100, float(words[6]), blen),
+                COLOR_8 + pbar('#', 100, float(words[7]), blen),
+                COLOR_9 + pbar('#', 100, float(words[8]), blen),
+                COLOR_10 + pbar('#', 100, float(words[9]), blen),
+                COLOR_11 + pbar('#', 100, float(words[10]), blen) + COLOR_RESET))
+
+        if no_pipe:
+            print(result_str)
+            result_str = ''
+
+    return result_str
+
+
 def show_cpu_usage(options, lines, no_pipe):
     match_headers = [ "CPU", "%usr" ] # start from header_start_idx
     if options.show_all:
@@ -126,7 +159,12 @@ def show_cpu_usage(options, lines, no_pipe):
     else:
         match_columns = [ "all" ]
 
-    return show_sar_data(options, lines, no_pipe, match_headers, match_columns)
+    if options.graph:
+        graph_func = cpu_graph_func
+    else:
+        graph_func = None
+
+    return show_sar_data(options, lines, no_pipe, match_headers, match_columns, cpu_graph_func)
 
 
 def pbar(bchar, total, used, bar_len=60):
