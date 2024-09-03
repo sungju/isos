@@ -230,7 +230,7 @@ def mem_graph_func(line, no_pipe, is_header):
         kbcached  = int(words[item2_idx])
         kbitem3 = int(words[item3_idx])
         kbtotal   = kbfree + kbmemused
-        result_str = ('%s %s%% : %s%s%s' % (sartime, COLOR_8 + kbpercent, COLOR_1 + pbar('#', kbtotal, kbmemused - kbcached - kbitem3), \
+        result_str = ('%s%s%6s%% : %s%s%s' % (sartime, COLOR_8, kbpercent, COLOR_1 + pbar('#', kbtotal, kbmemused - kbcached - kbitem3), \
                                                             COLOR_3 + pbar('C', kbtotal, kbcached), \
                                                             COLOR_5 + pbar(item3_char, kbtotal, kbitem3) + COLOR_RESET))
         if no_pipe:
