@@ -120,8 +120,9 @@ def get_pipe_aware_line(line, no_pipe):
     return line
 
 
-def taint_str(taint_val):
+def translate_taint_val(taint_val):
     result_str = ''
+    bits_list = []
     taint_meaning = {
             0 : "P/G : TAINT_PROPRIETARY_MODULE",
             1 : "F   : TAINT_FORCED_MODULE",
@@ -142,15 +143,18 @@ def taint_str(taint_val):
             16: "X   : TAINT_AUX",
             17: "T   : TAINT_RANDSTRUCT",
             26: "P   : TAINT_PARTNER_SUPPORTED",
+            27: "h/r : TAINT_SUPPORT_REMOVED",
     }
     idx = 0
     while taint_val:
-        if (taint_val & 0x1) == 0x1 and idx in taint_meaning:
-            result_str = result_str + taint_meaning[idx] + "\n"
+        if (taint_val & 0x1) == 0x1:
+            bits_list.append("%d" % idx)
+            if idx in taint_meaning:
+                result_str = result_str + taint_meaning[idx] + "\n"
         idx = idx + 1
         taint_val = taint_val >> 1
 
-    return result_str
+    return result_str, ','.join(bits_list)
 
 
 def show_taint_info(sos_home, no_pipe, options):
@@ -218,12 +222,14 @@ def show_taint_info(sos_home, no_pipe, options):
                                         ('kernel.tainted', '=' * 20, kernel_tainted), \
                                         no_pipe)
                 taint_val = int(kernel_tainted.split()[2])
+                taint_str, taint_bits = translate_taint_val(taint_val)
                 result_str = result_str + \
-                        get_pipe_aware_line(taint_str(taint_val), no_pipe)
+                        get_pipe_aware_line("Bits: %s" % taint_bits, no_pipe) +\
+                        get_pipe_aware_line(taint_str, no_pipe) + \
+                        get_pipe_aware_line("\nKCS : https://access.redhat.com/solutions/40594", no_pipe)
 
     except Exception as e:
         result_str = result_str + get_pipe_aware_line(e, no_pipe)
-
 
     return result_str
 
