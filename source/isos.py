@@ -485,7 +485,7 @@ def isos():
 
     input_session = get_input_session()
     while True:
-        file_completer = WordCompleter(get_file_list())
+        file_completer = WordCompleter(get_file_list(), WORD=True)
         input_str = input_session.prompt(get_prompt_str(),
                                          completer=file_completer,
                                          complete_style=CompleteStyle.READLINE_LIKE,
