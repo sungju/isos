@@ -17,7 +17,7 @@ def add_command():
 
 
 def get_command_info():
-    return { "kernel": run_kernel }
+    return { "kerninfo": run_kernel }
 
 
 COLOR_1  = ansicolor.get_color(ansicolor.RED)
@@ -159,7 +159,7 @@ def translate_taint_val(taint_val):
 
 def show_taint_info(sos_home, no_pipe, options):
     # 1. Extract kernel version from sos_commands/kernel/uname_-a
-    # 2. find weak-updates from sos_commands/kernel/modinfo_ALL_MODULES
+    # 2. find 3rd party modules from proc/modules
     # 3. kernel.tainted from sos_commands/kernel/sysctl_-a
     result_str = ""
     try:
@@ -172,37 +172,23 @@ def show_taint_info(sos_home, no_pipe, options):
         result_str = result_str + get_pipe_aware_line(e, no_pipe)
         
     try:
-        mod_dict = {}
-        addr_len = 0
         with open(sos_home + '/proc/modules') as f:
+            result_str = result_str + \
+                    get_pipe_aware_line('\n%s\n%s\n' % \
+                                        ('Tainted modules', '=' * 20), no_pipe)
             lines = f.readlines()
             for line in lines:
                 line = line.strip()
                 words = line.split()
                 modname = words[0] + '.ko'
                 addr_idx = len(words) - 1
-                if line.endswith(")"):
-                    addr_idx = addr_idx - 1
+                if not line.endswith(")"):
+                    continue
+
+                addr_idx = addr_idx - 1
                 modaddr = words[addr_idx]
-                mod_dict[modname] = modaddr
-                if addr_len == 0:
-                    addr_len = len(modaddr)
+                result_str = result_str + get_pipe_aware_line(modaddr + ' : ' + modname + '\n', no_pipe)
 
-
-        with open(sos_home + '/sos_commands/kernel/modinfo_ALL_MODULES') as f:
-            lines = f.readlines()
-            result_str = result_str + \
-                    get_pipe_aware_line('\n%s\n%s\n' % \
-                                        ('Tainted modules', '=' * 20), no_pipe)
-            for line in lines:
-                line = line.strip()
-                if 'weak-updates' in line:
-                    modname = line[line.rfind('/') + 1:]
-                    modaddr = ' ' * addr_len
-                    if modname in mod_dict:
-                        modaddr = mod_dict[modname]
-
-                    result_str = result_str + get_pipe_aware_line(modaddr + ' : ' + modname + '\n', no_pipe)
     except Exception as e:
         result_str = result_str + get_pipe_aware_line(e, no_pipe)
 
