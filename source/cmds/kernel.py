@@ -153,13 +153,13 @@ def taint_str(taint_val):
     return result_str
 
 
-def show_taint_info(no_pipe, options):
+def show_taint_info(sos_home, no_pipe, options):
     # 1. Extract kernel version from sos_commands/kernel/uname_-a
     # 2. find weak-updates from sos_commands/kernel/modinfo_ALL_MODULES
     # 3. kernel.tainted from sos_commands/kernel/sysctl_-a
-    kerver_str = ""
+    result_str = ""
     try:
-        with open('sos_commands/kernel/uname_-a') as f:
+        with open(sos_home + '/sos_commands/kernel/uname_-a') as f:
             result = f.readlines()[0]
             words = result.split()
             kerver_str = words[2]
@@ -168,21 +168,43 @@ def show_taint_info(no_pipe, options):
         result_str = result_str + get_pipe_aware_line(e, no_pipe)
         
     try:
-        with open('sos_commands/kernel/modinfo_ALL_MODULES') as f:
+        mod_dict = {}
+        addr_len = 0
+        with open(sos_home + '/proc/modules') as f:
+            lines = f.readlines()
+            for line in lines:
+                line = line.strip()
+                words = line.split()
+                modname = words[0] + '.ko'
+                addr_idx = len(words) - 1
+                if line.endswith(")"):
+                    addr_idx = addr_idx - 1
+                modaddr = words[addr_idx]
+                mod_dict[modname] = modaddr
+                if addr_len == 0:
+                    addr_len = len(modaddr)
+
+
+        with open(sos_home + '/sos_commands/kernel/modinfo_ALL_MODULES') as f:
             lines = f.readlines()
             result_str = result_str + \
                     get_pipe_aware_line('\n%s\n%s\n' % \
                                         ('Tainted modules', '=' * 20), no_pipe)
             for line in lines:
+                line = line.strip()
                 if 'weak-updates' in line:
                     modname = line[line.rfind('/') + 1:]
-                    result_str = result_str + get_pipe_aware_line(modname + '\n', no_pipe)
+                    modaddr = ' ' * addr_len
+                    if modname in mod_dict:
+                        modaddr = mod_dict[modname]
+
+                    result_str = result_str + get_pipe_aware_line(modaddr + ' : ' + modname + '\n', no_pipe)
     except Exception as e:
         result_str = result_str + get_pipe_aware_line(e, no_pipe)
 
 
     try:
-        with open('sos_commands/kernel/sysctl_-a') as f:
+        with open(sos_home + '/sos_commands/kernel/sysctl_-a') as f:
             lines = f.readlines()
             kernel_tainted = ''
             for line in lines:
@@ -238,6 +260,6 @@ def run_kernel(input_str, env_vars, is_cmd_stopped_func,\
     sos_home = env_vars['sos_home']
 
     if o.show_taint:
-        result_str = show_taint_info(no_pipe, o)
+        result_str = show_taint_info(sos_home, no_pipe, o)
 
     return result_str
