@@ -140,7 +140,11 @@ def run_fileview(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')
 
-    (o, args) = op.parse_args(input_str.split())
+    o = args = None
+    try:
+        (o, args) = op.parse_args(input_str.split())
+    except:
+        return ""
 
     if o.help or show_help == True:
         if no_pipe == False:

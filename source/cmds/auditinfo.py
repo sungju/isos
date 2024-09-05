@@ -182,7 +182,11 @@ def run_auditinfo(input_str, env_vars, is_cmd_stopped_func,\
             action="store_true",
             help="Shows current audit status")
 
-    (o, args) = op.parse_args(input_str.split())
+    o = args = None
+    try:
+        (o, args) = op.parse_args(input_str.split())
+    except:
+        return ""
 
     if o.help or show_help == True:
         if no_pipe == False:

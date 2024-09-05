@@ -180,7 +180,11 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-q', '--quiet', dest='quiet', action='store_true',
                   help='Do not show any warnings or messages.')
 
-    (o, args) = op.parse_args(input_str.split())
+    o = args = None
+    try:
+        (o, args) = op.parse_args(input_str.split())
+    except:
+        return ""
 
     if o.help or show_help == True:
         if no_pipe == False:
