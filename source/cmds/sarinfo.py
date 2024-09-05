@@ -134,18 +134,32 @@ def cpu_graph_func(line, no_pipe, is_header):
             print(result_str)
             result_str = ''
     else:
+        item1_bar = pbar('#', 100, float(words[header_start_idx + 1]), blen)
+        item2_bar = pbar('#', 100, float(words[header_start_idx + 2]), blen)
+        item3_bar = pbar('#', 100, float(words[header_start_idx + 3]), blen)
+        item4_bar = pbar('#', 100, float(words[header_start_idx + 4]), blen)
+        item5_bar = pbar('#', 100, float(words[header_start_idx + 5]), blen)
+        item6_bar = pbar('#', 100, float(words[header_start_idx + 6]), blen)
+        item7_bar = pbar('#', 100, float(words[header_start_idx + 7]), blen)
+        item8_bar = pbar('#', 100, float(words[header_start_idx + 8]), blen)
+        item9_bar = pbar('#', 100, float(words[header_start_idx + 9]), blen)
+        avail_bar = pbar('.', blen, blen - len(item1_bar) - len(item2_bar) -\
+                len(item3_bar) - len(item4_bar) - len(item5_bar) - len(item6_bar) -\
+                len(item7_bar) - len(item8_bar) - len(item9_bar), blen)
+
         result_str = COLOR_1 + sartime + \
-                (' %6.2f : %s%s%s%s%s%s%s%s%s' % ( \
+                (' %6.2f : %s%s%s%s%s%s%s%s%s%s' % ( \
                 100-float(words[header_start_idx + 10]),
-                COLOR_3 + pbar('#', 100, float(words[header_start_idx + 1]), blen),
-                COLOR_4 + pbar('#', 100, float(words[header_start_idx + 2]), blen),
-                COLOR_5 + pbar('#', 100, float(words[header_start_idx + 3]), blen),
-                COLOR_6 + pbar('#', 100, float(words[header_start_idx + 4]), blen),
-                COLOR_7 + pbar('#', 100, float(words[header_start_idx + 5]), blen),
-                COLOR_8 + pbar('#', 100, float(words[header_start_idx + 6]), blen),
-                COLOR_9 + pbar('#', 100, float(words[header_start_idx + 7]), blen),
-                COLOR_10 + pbar('#', 100, float(words[header_start_idx + 8]), blen),
-                COLOR_11 + pbar('#', 100, float(words[header_start_idx + 9]), blen) + COLOR_RESET))
+                COLOR_3 + item1_bar,
+                COLOR_4 + item2_bar,
+                COLOR_5 + item3_bar,
+                COLOR_6 + item4_bar,
+                COLOR_7 + item5_bar,
+                COLOR_8 + item6_bar,
+                COLOR_9 + item7_bar,
+                COLOR_10 + item8_bar,
+                COLOR_11 + item9_bar,
+                COLOR_RESET + avail_bar))
 
         if no_pipe:
             print(result_str)
@@ -192,6 +206,8 @@ def mem_graph_func(line, no_pipe, is_header):
     if line.startswith("Average:"):
         return ""
 
+    blen = 60
+
     if is_header:
         if words[header_start_idx + 1] == "kbavail":
             start_idx = header_start_idx + 2
@@ -216,7 +232,7 @@ def mem_graph_func(line, no_pipe, is_header):
         result_str = ("\n%15s : %s\t%15s : %s\t%15s : %s\n" % (words[item1_idx],  COLOR_1 + '#' * 5 + COLOR_RESET, \
                                                         words[item2_idx], COLOR_3 + 'C' * 5 + COLOR_RESET, \
                                                         words[item3_idx], COLOR_5 + item3_char * 5 + COLOR_RESET))
-        result_str = result_str + ('%s  %s\n' % (' '* (len(sartime) + 8), pbar('=', 100, 100)))
+        result_str = result_str + ('%s  %s\n' % (' '* (len(sartime) + 8), pbar('=', 100, 100, blen)))
         if no_pipe:
             print(result_str)
             result_str = ''
@@ -230,9 +246,15 @@ def mem_graph_func(line, no_pipe, is_header):
         kbcached  = int(words[item2_idx])
         kbitem3 = int(words[item3_idx])
         kbtotal   = kbfree + kbmemused
-        result_str = ('%s%s%6s%% : %s%s%s' % (sartime, COLOR_8, kbpercent, COLOR_1 + pbar('#', kbtotal, kbmemused - kbcached - kbitem3), \
-                                                            COLOR_3 + pbar('C', kbtotal, kbcached), \
-                                                            COLOR_5 + pbar(item3_char, kbtotal, kbitem3) + COLOR_RESET))
+        usedbar_str = pbar('#', kbtotal, kbmemused - kbcached - kbitem3, blen)
+        cachebar_str = pbar('C', kbtotal, kbcached, blen)
+        item3bar_str = pbar(item3_char, kbtotal, kbitem3, blen)
+        availbar_str = pbar('.', blen,\
+                blen - len(usedbar_str) - len(cachebar_str) - len(item3bar_str))
+        result_str = ('%s%s%6s%% : %s%s%s%s' % (sartime, COLOR_8, kbpercent,\
+                COLOR_1 + usedbar_str, COLOR_3 + cachebar_str,\
+                COLOR_5 + item3bar_str + COLOR_RESET,\
+                availbar_str))
         if no_pipe:
             print(result_str)
             result_str = ''
