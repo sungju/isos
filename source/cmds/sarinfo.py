@@ -409,7 +409,7 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
     except:
         return ""
 
-    if o.help or show_help == True:
+    if o.help or show_help == True or len(args) == 1:
         if no_pipe == False:
             output = StringIO.StringIO()
             op.print_help(file=output)
