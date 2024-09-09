@@ -85,9 +85,12 @@ def set_color_table(no_pipe):
 
 
 def get_colored_line(line):
+    global header_start_idx
+
     words = line.split()
 
     count = 1
+    start_idx_count = header_start_idx - 1
     result_str = ""
     for word in words:
         if is_cmd_stopped():
@@ -100,8 +103,10 @@ def get_colored_line(line):
         mod_idx = line.find(colored_word) + len(colored_word)
         result_str = result_str + line[:mod_idx]
         line = line[mod_idx:]
-
-        count = count + 1
+        if start_idx_count > 0:
+            start_idx_count = start_idx_count - 1
+        else:
+            count = count + 1
 
     return result_str
 
