@@ -2,6 +2,7 @@ import sys
 import time
 from optparse import OptionParser
 from io import StringIO
+import glob
 
 import ansicolor
 
@@ -113,6 +114,12 @@ def show_file_content(file_path, no_pipe, options):
     try:
         with open(file_path) as f:
             lines = f.readlines()
+            line = get_colored_line("\n%s < %s > %s\n" %\
+                    ("=" * 10, file_path, "=" * 10))
+            if no_pipe:
+                print(line)
+            else:
+                result_str = result_str + line + '\n'
 
             for line in lines:
                 if is_cmd_stopped():
@@ -157,7 +164,10 @@ def run_fileview(input_str, env_vars, is_cmd_stopped_func,\
             op.print_help()
             return ""
 
-    words = input_str.split()
-    result_str = show_file_content(words[1], no_pipe, o)
+    result_str = ''
+    for fname in args[1:]:
+        file_list = glob.glob(fname)
+        for afile in file_list:
+            result_str = result_str + show_file_content(afile, no_pipe, o)
 
     return result_str
