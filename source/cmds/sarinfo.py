@@ -222,10 +222,18 @@ def mem_graph_func(line, no_pipe, is_header):
         
         item1_idx = start_idx
         item2_idx = start_idx + 3
+        item3_idx = -1
         if ' kbslab ' in line:
             item3_idx = start_idx + 9
-            item3_char = 'S'
-        else:
+            if words[item3_idx] != 'kbslab':
+                item3_idx = item3_idx + 1
+
+            if words[item3_idx] == 'kbslab':
+                item3_char = 'S'
+            else:
+                item3_idx = -1
+
+        if item3_idx == -1:
             item3_idx = start_idx + 2
             item3_char = 'B'
 
