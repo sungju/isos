@@ -379,8 +379,7 @@ def handle_input(input_str):
                         is_cmd_stopped, False, shell_part == "")
             elif isfile(words[0]):
                 if "cat" in cmd_list:
-                    cwd = os.path.abspath(os.getcwd())
-                    result_str = cmd_list["cat"]("cat %s/%s" % (cwd, input_str),\
+                    result_str = cmd_list["cat"]("cat %s" % (input_str),\
                             env_vars, is_cmd_stopped, False, shell_part == "")
 
             if len(shell_part) == 0:
