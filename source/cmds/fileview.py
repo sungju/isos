@@ -107,19 +107,20 @@ def get_colored_line(line):
     return result_str
 
 
-def show_file_content(file_path, no_pipe, options):
+def show_file_content(file_path, no_pipe, options, show_name=False):
     set_color_table(no_pipe)
 
     result_str = ""
     try:
         with open(file_path) as f:
             lines = f.readlines()
-            line = get_colored_line("\n%s < %s > %s\n" %\
-                    ("=" * 10, file_path, "=" * 10))
-            if no_pipe:
-                print(line)
-            else:
-                result_str = result_str + line + '\n'
+            if show_name:
+                line = get_colored_line("\n%s < %s > %s\n" %\
+                        ("=" * 10, file_path, "=" * 10))
+                if no_pipe:
+                    print(line)
+                else:
+                    result_str = result_str + line + '\n'
 
             for line in lines:
                 if is_cmd_stopped():
@@ -165,9 +166,11 @@ def run_fileview(input_str, env_vars, is_cmd_stopped_func,\
             return ""
 
     result_str = ''
+    file_list = []
     for fname in args[1:]:
-        file_list = glob.glob(fname)
-        for afile in file_list:
-            result_str = result_str + show_file_content(afile, no_pipe, o)
+        file_list = file_list + glob.glob(fname)
+
+    for afile in file_list:
+        result_str = result_str + show_file_content(afile, no_pipe, o, show_name=len(file_list) > 1)
 
     return result_str
