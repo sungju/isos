@@ -3,6 +3,7 @@ import time
 from optparse import OptionParser
 from io import StringIO
 import glob
+from os.path import expanduser, isfile, isdir, join
 
 import ansicolor
 
@@ -137,6 +138,20 @@ def show_file_content(file_path, no_pipe, options, show_name=False):
     return result_str
 
 
+def get_file_list(filename):
+    result_list = []
+
+    file_list = glob.glob(filename)
+    for file in file_list:
+        if isdir(file):
+            flist = get_file_list(file + "/*")
+            result_list = result_list + flist
+        else:
+            result_list.append(file)
+
+    return result_list
+
+
 is_cmd_stopped = None
 def run_fileview(input_str, env_vars, is_cmd_stopped_func,\
         show_help=False, no_pipe=True):
@@ -168,7 +183,7 @@ def run_fileview(input_str, env_vars, is_cmd_stopped_func,\
     result_str = ''
     file_list = []
     for fname in args[1:]:
-        file_list = file_list + glob.glob(fname)
+        file_list = file_list + get_file_list(fname)
 
     for afile in file_list:
         result_str = result_str + show_file_content(afile, no_pipe, o, show_name=len(file_list) > 1)
