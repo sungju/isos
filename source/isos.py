@@ -353,13 +353,25 @@ def handle_input(input_str):
         shell_part = input_str[pipe_idx + 1:]
         input_str = input_str[:pipe_idx]
 
+    ofile_name = ""
+    if ">" in input_str:
+        ofile_idx = input_str.find(">")
+        ofile_name = input_str[ofile_idx + 1:].strip()
+        input_str = input_str[:ofile_idx]
+
+    if shell_part != "" and ofile_name != "":
+        print("Error: It's not allowed to use redirection in the middle of pipe")
+        return ""
+    
     words = input_str.split()
+    no_pipe = shell_part == "" and ofile_name == ""
+
     result_str=""
     cmd_list = command_set | mod_command_set
     if words[0] in cmd_list:
         result_str = cmd_list[words[0]](input_str, env_vars, is_cmd_stopped,\
-                False, shell_part == "")
-        if len(shell_part) == 0:
+                False, no_pipe)
+        if no_pipe:
             if len(result_str) != 0:
                 print(result_str)
             return
@@ -367,7 +379,7 @@ def handle_input(input_str):
             input_str = shell_part
     else:
         # single ls better to get full featured output
-        if words[0] == "ls" and shell_part == "":
+        if words[0] == "ls" and no_pipe:
             run_shell_command(input_str + " --color -p", "", True)
             return
         elif words[0] == "vi":
@@ -376,13 +388,13 @@ def handle_input(input_str):
         elif isfile(words[0]) or isdir(words[0]):
             if isdir(words[0]):
                 result_str = change_dir("cd %s" % (words[0]), env_vars,\
-                        is_cmd_stopped, False, shell_part == "")
+                        is_cmd_stopped, False, no_pipe)
             elif isfile(words[0]):
                 if "cat" in cmd_list:
                     result_str = cmd_list["cat"]("cat %s" % (input_str),\
-                            env_vars, is_cmd_stopped, False, shell_part == "")
+                            env_vars, is_cmd_stopped, False, no_pipe)
 
-            if len(shell_part) == 0:
+            if no_pipe:
                 if len(result_str) != 0:
                     print(result_str)
                 return
@@ -392,6 +404,14 @@ def handle_input(input_str):
             input_str = orig_input_str
             shell_part = ""
 
+    if ofile_name != "":
+        try:
+            with open(ofile_name, 'w') as f:
+                f.write(result_str)
+                return
+        except Exception as e:
+            print(e)
+            return
 
     result_str = run_shell_command(input_str, result_str)
     print(result_str, end="")
