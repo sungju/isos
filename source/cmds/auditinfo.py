@@ -132,7 +132,7 @@ def read_audit_file(audit_path, no_pipe, is_log=True, show_path=False, sos_home=
                 if no_pipe:
                     print(line.strip())
                 else:
-                    result_str = result_str + line + "\n"
+                    result_str = result_str + line
             if no_pipe:
                 print()
     except Exception as e:
