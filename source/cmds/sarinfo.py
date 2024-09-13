@@ -3,7 +3,7 @@ import time
 from optparse import OptionParser
 from io import StringIO
 
-import ansicolor
+import screen
 
 def description():
     return "Shows sar data"
@@ -17,112 +17,6 @@ def get_command_info():
     return { "sar": run_sarinfo }
 
 
-COLOR_1  = ansicolor.get_color(ansicolor.RED)
-COLOR_2  = ansicolor.get_color(ansicolor.GREEN)
-COLOR_3  = ansicolor.get_color(ansicolor.YELLOW)
-COLOR_4  = ansicolor.get_color(ansicolor.BLUE)
-COLOR_5  = ansicolor.get_color(ansicolor.MAGENTA)
-COLOR_6  = ansicolor.get_color(ansicolor.CYAN)
-COLOR_7  = ansicolor.get_color(ansicolor.YELLOW)
-COLOR_8  = ansicolor.get_color(ansicolor.BLUE)
-COLOR_9  = ansicolor.get_color(ansicolor.LIGHTRED)
-COLOR_10 = ansicolor.get_color(ansicolor.LIGHTGREEN)
-COLOR_11 = ansicolor.get_color(ansicolor.LIGHTYELLOW)
-COLOR_12 = ansicolor.get_color(ansicolor.LIGHTBLUE)
-COLOR_13 = ansicolor.get_color(ansicolor.LIGHTMAGENTA)
-COLOR_14 = ansicolor.get_color(ansicolor.LIGHTCYAN)
-COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-
-column_color = { }
-
-def set_color_table(no_pipe):
-    global COLOR_ONE, COLOR_TWO, COLOR_THREE
-    global COLOR_FOUR, COLOR_FIVE
-    global COLOR_RED, COLOR_MAGENTA, COLOR_GREEN
-    global COLOR_RESET
-    global column_color
-
-    if no_pipe:
-        COLOR_1  = ansicolor.get_color(ansicolor.RED)
-        COLOR_2  = ansicolor.get_color(ansicolor.GREEN)
-        COLOR_3  = ansicolor.get_color(ansicolor.YELLOW)
-        COLOR_4  = ansicolor.get_color(ansicolor.BLUE)
-        COLOR_5  = ansicolor.get_color(ansicolor.MAGENTA)
-        COLOR_6  = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_7  = ansicolor.get_color(ansicolor.YELLOW)
-        COLOR_8  = ansicolor.get_color(ansicolor.BLUE)
-        COLOR_9  = ansicolor.get_color(ansicolor.LIGHTRED)
-        COLOR_10 = ansicolor.get_color(ansicolor.LIGHTGREEN)
-        COLOR_11 = ansicolor.get_color(ansicolor.LIGHTYELLOW)
-        COLOR_12 = ansicolor.get_color(ansicolor.LIGHTBLUE)
-        COLOR_13 = ansicolor.get_color(ansicolor.LIGHTMAGENTA)
-        COLOR_14 = ansicolor.get_color(ansicolor.LIGHTCYAN)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-
-        column_color = {
-                1 : COLOR_1,
-                2 : COLOR_2,
-                3 : COLOR_3,
-                4 : COLOR_4,
-                5 : COLOR_5,
-                6 : COLOR_6,
-                7 : COLOR_7,
-                8 : COLOR_8,
-                9 : COLOR_9,
-                10 : COLOR_10,
-                11 : COLOR_11,
-                12 : COLOR_12,
-                13 : COLOR_13,
-                14 : COLOR_14,
-        }
-    else:
-        COLOR_1 = COLOR_2 = COLOR_3 = COLOR_4 = ""
-        COLOR_5 = COLOR_6 = COLOR_7 = COLOR_8 = ""
-        COLOR_9 = COLOR_10 = COLOR_11 = COLOR_12 = ""
-        COLOR_13 = COLOR_14 = COLOR_RESET = ""
-
-        column_color = {}
-
-
-def get_colored_line(line):
-    global header_start_idx
-
-    words = line.split()
-
-    count = 1
-    start_idx_count = header_start_idx - 1
-    result_str = ""
-    for word in words:
-        if is_cmd_stopped():
-            return result_str
-
-        colored_word = word
-        if count in column_color:
-            colored_word = column_color[count] + word + COLOR_RESET
-        line = line.replace(word, colored_word, 1)
-        mod_idx = line.find(colored_word) + len(colored_word)
-        result_str = result_str + line[:mod_idx]
-        line = line[mod_idx:]
-        if start_idx_count > 0:
-            start_idx_count = start_idx_count - 1
-        else:
-            count = count + 1
-
-    return result_str
-
-
-def get_pipe_aware_line(line, no_pipe):
-    line = get_colored_line(line)
-    if no_pipe:
-        print(line)
-        line = ""
-    else:
-        line = line + "\n"
-
-    return line
-
-
-
 def cpu_graph_func(line, no_pipe, is_header):
     words = line.split()
     result_str = ""
@@ -133,7 +27,7 @@ def cpu_graph_func(line, no_pipe, is_header):
         sartime = sartime + words[i] + ' '
 
     if is_header:
-        result_str = get_pipe_aware_line(line, no_pipe)
+        result_str = screen.get_pipe_aware_line(line)
         result_str = result_str + ('%s  %s\n' % (' '* (len(sartime) + 8), pbar('=', 100, 100, blen)))
         if no_pipe:
             print(result_str)
@@ -152,19 +46,19 @@ def cpu_graph_func(line, no_pipe, is_header):
                 len(item3_bar) - len(item4_bar) - len(item5_bar) - len(item6_bar) -\
                 len(item7_bar) - len(item8_bar) - len(item9_bar), blen)
 
-        result_str = COLOR_1 + sartime + \
+        result_str = screen.COLOR_1 + sartime + \
                 (' %6.2f : %s%s%s%s%s%s%s%s%s%s' % ( \
                 100-float(words[header_start_idx + 10]),
-                COLOR_3 + item1_bar,
-                COLOR_4 + item2_bar,
-                COLOR_5 + item3_bar,
-                COLOR_6 + item4_bar,
-                COLOR_7 + item5_bar,
-                COLOR_8 + item6_bar,
-                COLOR_9 + item7_bar,
-                COLOR_10 + item8_bar,
-                COLOR_11 + item9_bar,
-                COLOR_RESET + avail_bar))
+                screen.COLOR_3 + item1_bar,
+                screen.COLOR_4 + item2_bar,
+                screen.COLOR_5 + item3_bar,
+                screen.COLOR_6 + item4_bar,
+                screen.COLOR_7 + item5_bar,
+                screen.COLOR_8 + item6_bar,
+                screen.COLOR_9 + item7_bar,
+                screen.COLOR_10 + item8_bar,
+                screen.COLOR_11 + item9_bar,
+                screen.COLOR_RESET + avail_bar))
 
         if no_pipe:
             print(result_str)
@@ -201,10 +95,15 @@ item1_idx = 3
 item2_idx = 5
 item3_idx = 10
 item3_char = 'S'
+mem_total=0
+kbavail_used=False
+
 def mem_graph_func(line, no_pipe, is_header):
     global start_idx
     global item1_idx, item2_idx, item3_idx
     global item3_char
+    global mem_total
+    global kbavail_used
 
     result_str = ""
     words = line.split()
@@ -216,8 +115,10 @@ def mem_graph_func(line, no_pipe, is_header):
     if is_header:
         if words[header_start_idx + 1] == "kbavail":
             start_idx = header_start_idx + 2
+            kbavail_used = True
         else:
             start_idx = header_start_idx + 1
+            kbavail_used = False
 
         
         item1_idx = start_idx
@@ -237,14 +138,22 @@ def mem_graph_func(line, no_pipe, is_header):
             item3_idx = start_idx + 2
             item3_char = 'B'
 
+
+        try:
+            with open(sos_home + "/proc/meminfo") as f:
+                line = f.readlines()[0]
+                mem_total = int(line.split()[1])
+        except Exception as e:
+            mem_total = 0
+
         sartime = ''
         for i in range(0, header_start_idx):
             sartime = sartime + words[i] + ' '
 
 
-        result_str = ("\n%15s : %s\t%15s : %s\t%15s : %s\n" % (words[item1_idx],  COLOR_1 + '#' * 5 + COLOR_RESET, \
-                                                        words[item2_idx], COLOR_3 + 'C' * 5 + COLOR_RESET, \
-                                                        words[item3_idx], COLOR_5 + item3_char * 5 + COLOR_RESET))
+        result_str = ("\n%15s : %s\t%15s : %s\t%15s : %s\n" % (words[item1_idx],  screen.COLOR_1 + '#' * 5 + screen.COLOR_RESET, \
+                                                        words[item2_idx], screen.COLOR_3 + 'C' * 5 + screen.COLOR_RESET, \
+                                                        words[item3_idx], screen.COLOR_5 + item3_char * 5 + screen.COLOR_RESET))
         result_str = result_str + ('%s  %s\n' % (' '* (len(sartime) + 8), pbar('=', 100, 100, blen)))
         if no_pipe:
             print(result_str)
@@ -258,15 +167,23 @@ def mem_graph_func(line, no_pipe, is_header):
         kbpercent = words[item1_idx + 1]
         kbcached  = int(words[item2_idx])
         kbitem3 = int(words[item3_idx])
-        kbtotal   = kbfree + kbmemused
-        usedbar_str = pbar('#', kbtotal, kbmemused - kbcached - kbitem3, blen)
+        if mem_total > 0:
+            kbtotal = mem_total
+        else:
+            kbtotal = kbfree + kbmemused
+
+
+        if not kbavail_used:
+            kbmemused = kbmemused - kbcached - kbitem3
+
+        usedbar_str = pbar('#', kbtotal, kbmemused, blen)
         cachebar_str = pbar('C', kbtotal, kbcached, blen)
         item3bar_str = pbar(item3_char, kbtotal, kbitem3, blen)
         availbar_str = pbar('.', blen,\
                 blen - len(usedbar_str) - len(cachebar_str) - len(item3bar_str))
-        result_str = ('%s%s%6s%% : %s%s%s%s' % (sartime, COLOR_8, kbpercent,\
-                COLOR_1 + usedbar_str, COLOR_3 + cachebar_str,\
-                COLOR_5 + item3bar_str + COLOR_RESET,\
+        result_str = ('%s%s%6s%% : %s%s%s%s' % (sartime, screen.COLOR_8, kbpercent,\
+                screen.COLOR_1 + usedbar_str, screen.COLOR_3 + cachebar_str,\
+                screen.COLOR_5 + item3bar_str + screen.COLOR_RESET,\
                 availbar_str))
         if no_pipe:
             print(result_str)
@@ -309,7 +226,7 @@ def show_sar_data(options, lines, no_pipe, match_headers, match_columns, graph_f
     if tot_idx == 0:
         return result_str
     
-    result_str = get_pipe_aware_line(lines[0] + "\n", no_pipe)
+    result_str = screen.get_pipe_aware_line(lines[0] + "\n")
     idx = 1
     while idx < tot_idx:
         idx, header_line = find_data_header(idx, lines, options, no_pipe, match_headers, graph_func)
@@ -320,7 +237,7 @@ def show_sar_data(options, lines, no_pipe, match_headers, match_columns, graph_f
         if is_cmd_stopped():
             return result_str
 
-    return result_str + get_pipe_aware_line("\n", no_pipe)
+    return result_str + screen.get_pipe_aware_line("\n")
 
 
 header_start_idx = 1
@@ -351,7 +268,7 @@ def find_data_header(idx, lines, options, no_pipe, match_headers, graph_func=Non
             continue
         if len_headers == 0 or is_line_matching(words, match_headers):
             if graph_func == None:
-                result_str = result_str + get_pipe_aware_line("\n" + line + "\n", no_pipe)
+                result_str = result_str + screen.get_pipe_aware_line("\n" + line + "\n")
             else:
                 result_str = result_str + graph_func(line, no_pipe, is_header=True)
             break
@@ -378,18 +295,20 @@ def get_matching_data(idx, lines, options, no_pipe, match_columns, graph_func=No
         words = line.split()
         if len_columns == 0 or is_line_matching(words, match_columns):
             if graph_func == None:
-                result_str = result_str + get_pipe_aware_line(line, no_pipe)
+                result_str = result_str + screen.get_pipe_aware_line(line)
             else:
                 result_str = result_str + graph_func(line, no_pipe, is_header=False)
 
     return idx, result_str
 
 
+sos_home=""
 is_cmd_stopped = None
 def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
         show_help=False, no_pipe=True):
     global is_cmd_stopped
     global header_start_idx
+    global sos_home
     is_cmd_stopped = is_cmd_stopped_func
 
     usage = "Usage: sar [options] <sarfile>"
@@ -433,7 +352,6 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
             op.print_help()
             return ""
     
-    set_color_table(no_pipe)
     result_str = ""
     sos_home = env_vars['sos_home']
     for file_path in args[1:]:
@@ -454,6 +372,9 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
                     header_start_idx = idx
 
 
+                screen.init_data(no_pipe, header_start_idx, is_cmd_stopped)
+
+
                 if o.cpu_usage:
                     result_str = result_str + show_cpu_usage(o, lines, no_pipe)
 
@@ -467,7 +388,7 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
                     result_str = result_str + show_net_usage(o, lines, no_pipe)
         except Exception as e:
             print(e)
-            result_str = result_str + get_pipe_aware_line("sar file '%s' cannot read" % (file_path), no_pipe)
+            result_str = result_str + screen.get_pipe_aware_line("sar file '%s' cannot read" % (file_path))
 
     else:
         pass
