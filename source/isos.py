@@ -194,11 +194,10 @@ def show_usage(input_str, env_vars, is_cmd_stopped,\
     if len(words) > 1 and words[1] != "help" and words[1] != "man":
         target_idx = input_str.find(words[1])
         if words[1] in command_set:
-            input_str = input_str[target_idx:].replace(words[1], words[1] + " -h")
-            return command_set[words[1]](input_str, env_vars, False)
+            return command_set[words[1]](input_str, env_vars, None, True)
         elif words[1] in mod_command_set:
             input_str = input_str[target_idx:].replace(words[1], words[1] + " -h")
-            return mod_command_set[words[1]](input_str, env_vars, False)
+            return mod_command_set[words[1]](input_str, env_vars, None, False)
 
     result_str = ("Help\n%s\n" % ("-" * 30))
     count = 0
@@ -220,6 +219,16 @@ def exit_app(input_str, env_vars, is_cmd_stopped = None,\
         return "Exit the application"
 
     sys.exit(0)
+
+
+def eval_expr(input_str, env_vars, is_cmd_stopped = None,
+        show_help=False, no_pipe=True):
+    if show_help:
+        return "Calculate expression"
+
+    input_str = input_str.replace("eval ", "")
+    return "%.2f" % (eval(input_str))
+
 
 def change_dir(input_str, env_vars, is_cmd_stopped, \
         show_help=False, no_pipe=True):
@@ -307,6 +316,7 @@ command_set = {
     "help" : show_usage,
     "man" : show_usage,
     "cd"   : change_dir,
+    "eval" : eval_expr,
     "set"  : set_env,
     "xsos" : xsos_run,
     "reload" : reload_commands,
