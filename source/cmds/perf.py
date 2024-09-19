@@ -169,6 +169,9 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')
 
+    op.add_option('-d', '--depth', dest='depth', default=0,
+            action='store', type="int",
+            help="Shows only specified stack depth <max-stack in perf>")
     op.add_option('-l', '--lines', dest='lines', default=0,
             action='store', type="int",
             help="Shows only specified lines from the top")
@@ -208,6 +211,9 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
                 perf_cmd_str = perf_cmd_str + " --header"
             if o.quiet:
                 perf_cmd_str = perf_cmd_str + " -q"
+
+            if o.depth > 0:
+                perf_cmd_str = perf_cmd_str + (" --max-stack %d" % (o.depth))
 
             if o.sortby == 0:
                 perf_cmd_str = perf_cmd_str + " -s overhead_sys,comm --show-cpu-utilization"
