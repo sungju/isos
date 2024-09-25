@@ -387,6 +387,9 @@ def handle_input(input_str):
             return
         else:
             input_str = shell_part
+    elif words[0][0] == "!": # Run shell command
+        input_str = orig_input_str.strip()[1:]
+        shell_part = ""
     else:
         # single ls better to get full featured output
         if words[0] == "ls" and no_pipe:
