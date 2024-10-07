@@ -398,6 +398,9 @@ def handle_input(input_str):
         elif words[0] == "vi":
             run_shell_command(input_str, "", True)
             return
+        elif words[0] == "sh":
+            run_shell_command(input_str, "", True)
+            return
         elif isfile(words[0]) or isdir(words[0]):
             if isdir(words[0]):
                 result_str = change_dir("cd %s" % (words[0]), env_vars,\
