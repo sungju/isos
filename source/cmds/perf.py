@@ -169,6 +169,8 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')
 
+    op.add_option('-b', '--debugsymbol', dest='debugsymbol', action='store_true',
+            help="Use ~/.debug symbols instead of /proc/kallsyms")
     op.add_option('-d', '--depth', dest='depth', default=0,
             action='store', type="int",
             help="Shows only specified stack depth <max-stack in perf>")
@@ -205,8 +207,12 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
     sos_home = env_vars['sos_home']
     for file_path in args[1:]:
         try:
-            perf_cmd_str = "perf report -f --stdio --kallsyms=%s/proc/kallsyms -i %s" % \
-                    (sos_home, file_path)
+            perf_cmd_str = "perf report -f --stdio"
+            if not o.debugsymbol:
+                perf_cmd_str = perf_cmd_str +\
+                        (" --kallsyms=%s/proc/kallsyms -i %s" % \
+                        (sos_home, file_path))
+
             if o.show_meta:
                 perf_cmd_str = perf_cmd_str + " --header"
             if o.quiet:
