@@ -58,6 +58,8 @@ def show_delay_times():
     result_str = ""
     for by_whom, delay_time in sorted_delay:
         by_whom = by_whom[by_whom.find("funcgraph_exit:") + 16:].strip()
+        words = by_whom.split("|")
+        by_whom = "%20s | %s" % (words[0], words[1])
         result_str = result_str + screen.get_pipe_aware_line(by_whom)
 
         print_count = print_count + 1
