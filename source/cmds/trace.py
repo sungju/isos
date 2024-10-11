@@ -6,7 +6,7 @@ import os
 import operator
 from os.path import isfile, join
 
-from isos import run_shell_command
+from isos import run_shell_command, column_strings
 import screen
 
 def description():
@@ -136,6 +136,9 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
             action='store', type="string",
             help="Save the output to the specified file")
 
+    op.add_option('-p', '--profile', dest='profile', action='store_true',
+                  help='Shows the profile from data')
+
     op.add_option('-r', '--reverse', dest='reverse', action='store_true',
                   help='Shows the result in reverse')
 
@@ -182,7 +185,8 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
     screen.init_data(no_pipe, 1, is_cmd_stopped)
 
     if not o.time and 'trace.dat' not in data_list and isfile('trace.dat'):
-        data_list.append('trace.dat')
+        if len(data_list) == 0:
+            data_list.append('trace.dat')
 
     count = 0
     for file_path in data_list:
@@ -197,12 +201,24 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
             ofile = ofile.replace("%d", ("%d" % count))
             ofile = ofile.replace("%f", file_path)
             #ofile = ofile.replace("%f", os.path.splitext(os.path.basename(file_path))[0])
-            if ofile != "":
-                ofile = " > " + ofile
+            if o.graph:
+                if ofile != "":
+                    ofile = " > " + ofile
 
-            result = run_shell_command("trace-cmd report -O fgraph:tailprint %s %s" % (file_path, ofile),
-                    "", no_pipe=no_pipe)
-            result_str = result_str + screen.get_pipe_aware_line(result)
+                result = run_shell_command("trace-cmd report -O fgraph:tailprint %s %s" % (file_path, ofile),
+                        "", no_pipe=no_pipe)
+                result_str = result_str + screen.get_pipe_aware_line(result)
+            elif o.profile:
+                result = run_shell_command("trace-cmd report --profile %s" % (file_path),
+                        "", no_pipe=False)
+                result = column_strings(result, " ")
+                if ofile != "":
+                    with open(ofile, "w") as f:
+                        f.write(result)
+                        result = ""
+
+                for line in result.splitlines():
+                    result_str = result_str + screen.get_pipe_aware_line(line)
         except Exception as e:
             print(e)
             result_str = result_str + screen.get_pipe_aware_line("trace-cmd report for '%s' failed" % (file_path))

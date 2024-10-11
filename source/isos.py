@@ -295,6 +295,30 @@ def xsos_run(input_str, env_vars, is_cmd_stopped,\
     return result
 
 
+def column_strings(strings, splitter=" "):
+    max_widths = { }
+    lines = strings.splitlines()
+    for line in lines:
+        words = line.split(splitter)
+        for idx, word in enumerate(words):
+            width = len(word.strip())
+            if idx not in max_widths:
+                max_widths[idx] = width
+            elif width > max_widths[idx]:
+                max_widths[idx] = width
+
+    result_str = ""
+    for line in lines:
+        words = line.split(splitter)
+        sline = ""
+        for idx, word in enumerate(words):
+            sline = sline + '{word:{width}} '.format(word=word, width=max_widths[idx])
+        result_str = result_str + sline + "\n"
+
+
+    return result_str
+
+
 def run_shell_command(input_str, pipe_input="", no_pipe=False):
     if len(pipe_input.strip()) != 0:
         input_bytes = pipe_input.encode('utf-8')
