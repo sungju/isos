@@ -164,7 +164,8 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
             count = count + 1
             ofile = o.outfile
             ofile = ofile.replace("%d", ("%d" % count))
-            ofile = ofile.replace("%f", os.path.splitext(os.path.basename(file_path))[0])
+            ofile = ofile.replace("%f", file_path)
+            #ofile = ofile.replace("%f", os.path.splitext(os.path.basename(file_path))[0])
             if ofile != "":
                 ofile = " > " + ofile
 
