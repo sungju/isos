@@ -120,6 +120,9 @@ def get_pipe_aware_line(line):
     global is_cmd_stopped
     global no_pipe
 
+    if line is None:
+        return ""
+
     line = get_colored_line(line)
     if no_pipe:
         print(line)
