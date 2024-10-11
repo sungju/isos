@@ -24,7 +24,7 @@ def get_command_info():
 
 delay_time_dict = {}
 print_max_count = 20
-reverse_print = True
+reverse_print = False
 
 def show_delay_list_in_file(file_path):
     result_str = ""
@@ -49,28 +49,47 @@ def show_delay_times():
     global reverse_print
 
     sorted_delay = sorted(delay_time_dict.items(),
-            key=operator.itemgetter(1), reverse=reverse_print)
+            key=operator.itemgetter(1), reverse=not reverse_print)
 
     if print_max_count < 0:
         print_max_count = len(sorted_delay)
 
     print_count = 0
     result_str = ""
+
+    total_count = len(sorted_delay) - 1
+    if print_max_count == total_count:
+        print_start = 0
+        print_end = total_count
+    else:
+        if reverse_print:
+            print_start = total_count - print_max_count
+            if print_start < 0:
+                print_start = 0
+            print_end = total_count
+        else:
+            print_start = 0
+            print_end = min(total_count, print_max_count)
+
+    skip_printed = False
+
     for by_whom, delay_time in sorted_delay:
-        by_whom = by_whom[by_whom.find("funcgraph_exit:") + 16:].strip()
-        words = by_whom.split("|")
-        by_whom = "%20s | %s" % (words[0], words[1])
-        result_str = result_str + screen.get_pipe_aware_line(by_whom)
+        if print_start <= print_count <= print_end:
+            by_whom = by_whom[by_whom.find("funcgraph_exit:") + 16:].strip()
+            words = by_whom.split("|")
+            by_whom = "%20s | %s" % (words[0], words[1])
+            result_str = result_str + screen.get_pipe_aware_line(by_whom)
+        else:
+            if len(sorted_delay) > print_max_count:
+                if not skip_printed:
+                    result_str = result_str + \
+                            screen.get_pipe_aware_line("\t%15s %d %s\n" % \
+                            ("   ... < skiped ",\
+                            len(sorted_delay) - print_max_count,\
+                            " items with less delays > ..."))
+                    skip_printed = True
 
         print_count = print_count + 1
-        if print_count > print_max_count - 1:
-            if len(sorted_delay) > print_max_count:
-                result_str = result_str + \
-                        screen.get_pipe_aware_line("\t%15s %d %s\n" % \
-                        ("   ... < skiped ",\
-                        len(sorted_delay) - print_max_count,\
-                        " items with less delays > ..."))
-                break
 
     return result_str
 
@@ -97,6 +116,8 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
     global is_cmd_stopped
     global sos_home
     global print_max_count
+    global reverse_print
+
     is_cmd_stopped = is_cmd_stopped_func
 
     usage = "Usage: %s [options] [trace.dat files]" % (cmd_name)
@@ -115,6 +136,8 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
             action='store', type="string",
             help="Save the output to the specified file")
 
+    op.add_option('-r', '--reverse', dest='reverse', action='store_true',
+                  help='Shows the result in reverse')
 
     op.add_option('-t', '--time', dest='time', action='store_true',
                   help='Shows the most spent functions')
@@ -149,6 +172,12 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
         print_max_count = o.lines
     else:
         print_max_count = 20 # default
+
+
+    if o.reverse:
+        reverse_print = True
+    else:
+        reverse_print = False
 
     screen.init_data(no_pipe, 1, is_cmd_stopped)
 
