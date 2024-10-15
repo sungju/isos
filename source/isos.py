@@ -266,11 +266,21 @@ def set_env(input_str, env_vars, is_cmd_stopped,\
     if words[1] in env_vars:
         if len(words) >= 3:
             val = words[2]
+            cdir = False
             if len(words) >= 4 and words[3] == "dir":
+                cdir = True
+
+            if words[1] == "sos_home":
+                cdir = True
+
+            if cdir:
                 val = os.path.abspath(val)
                 change_dir("cd %s" % (val), env_vars, is_cmd_stopped)
                 val = os.getcwd()
             env_vars[words[1]] = val
+
+            if words[1] == "sos_home":
+                set_time_zone(val)
         else:
             del env_vars[words[1]]
 
