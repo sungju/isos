@@ -494,7 +494,10 @@ def get_prompt_str():
 
     cur_path = os.getcwd()
 
-    return hostname + cur_path[len(home_path):] + "> "
+    if cur_path.startswith(home_path):
+        return hostname + cur_path[len(home_path):] + "> "
+    else:
+        return hostname + ":" + cur_path + "> "
 
 
 def set_time_zone(sos_home):
