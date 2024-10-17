@@ -38,6 +38,7 @@ from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.completion import PathCompleter
+from prompt_toolkit.completion import merge_completers
 from prompt_toolkit.shortcuts import CompleteStyle
 
 from prompt_toolkit.key_binding import KeyBindings
@@ -558,8 +559,11 @@ def isos():
 
     input_session = get_input_session()
     while True:
-        #file_completer = WordCompleter(get_file_list(), WORD=True)
-        file_completer = PathCompleter()
+        file_word_completer = WordCompleter(get_file_list(), WORD=True)
+        file_path_completer = PathCompleter()
+        file_completer = merge_completers(
+                [file_path_completer, file_word_completer],
+                deduplicate = False)
         input_str = input_session.prompt(get_prompt_str(),
                                          completer=file_completer,
                                          complete_style=CompleteStyle.READLINE_LIKE,
