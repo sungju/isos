@@ -36,12 +36,13 @@ from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.formatted_text import HTML
-from prompt_toolkit.completion import WordCompleter
-from prompt_toolkit.completion import PathCompleter
+#from prompt_toolkit.completion import WordCompleter
+#from prompt_toolkit.completion import PathCompleter
 from prompt_toolkit.completion import merge_completers
 from prompt_toolkit.shortcuts import CompleteStyle
 
 from prompt_toolkit.key_binding import KeyBindings
+from shell_completer import ShellCompleter
 
 
 bindings = KeyBindings()
@@ -559,13 +560,18 @@ def isos():
 
     input_session = get_input_session()
     while True:
+        '''
+        Both Completer doesn't match with my requirement.
+        So, made new completer which was modified from PathCompleter
         file_word_completer = WordCompleter(get_file_list(), WORD=True)
         file_path_completer = PathCompleter()
         file_completer = merge_completers(
                 [file_path_completer, file_word_completer],
                 deduplicate = False)
+        '''
+        shell_completer = ShellCompleter()
         input_str = input_session.prompt(get_prompt_str(),
-                                         completer=file_completer,
+                                         completer=shell_completer,
                                          complete_style=CompleteStyle.READLINE_LIKE,
                                          complete_while_typing=True,
                                          key_bindings=bindings,
