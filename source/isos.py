@@ -252,6 +252,7 @@ def change_dir(input_str, env_vars, is_cmd_stopped, \
             path = env_vars["sos_home"]
         else:
             path = words[1]
+        path = os.path.expanduser(path)
         path = os.path.abspath(path)
         os.chdir(path)
     except:
