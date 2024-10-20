@@ -145,6 +145,15 @@ def get_color(color):
     return ""
 
 
+def get_bg_color(color):
+    if not sys.stdout.isatty():
+        return ""
+    if color in bg_color_list:
+        return bg_color_list[color]
+
+    return ""
+
+
 #------------------------------------------------------------------------
 # Cursor related functions
 #------------------------------------------------------------------------

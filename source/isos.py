@@ -40,10 +40,10 @@ from prompt_toolkit.formatted_text import HTML
 #from prompt_toolkit.completion import PathCompleter
 from prompt_toolkit.completion import merge_completers
 from prompt_toolkit.shortcuts import CompleteStyle
+from prompt_toolkit.styles import Style
 
 from prompt_toolkit.key_binding import KeyBindings
 from shell_completer import ShellCompleter
-from prompt_toolkit.application import in_terminal, run_in_terminal
 
 
 class CtrlCKeyboardInterrupt(KeyboardInterrupt):
@@ -493,6 +493,24 @@ def get_home_dir():
     return home_path
 
 
+
+styles = {
+    'normal': Style.from_dict({
+        'prompt': 'ansicyan bold',
+    }),
+    'warning': Style.from_dict({
+        'prompt': 'ansiyellow bold',
+    }),
+    'error': Style.from_dict({
+        'prompt': 'ansired bold',
+    }),
+}
+
+def get_prompt_style(situation):
+    """Return the appropriate style based on the situation."""
+    return styles.get(situation, styles['normal'])
+
+
 def get_prompt_str():
     hostname = "$HOME"
     home_path = get_home_dir()
@@ -505,9 +523,9 @@ def get_prompt_str():
     cur_path = os.getcwd()
 
     if cur_path.startswith(home_path):
-        return hostname + cur_path[len(home_path):] + "> "
+        return hostname + cur_path[len(home_path):] + "> ", get_prompt_style('normal')
     else:
-        return hostname + ":" + cur_path + "> "
+        return hostname + ":" + cur_path + "> ", get_prompt_style('warning')
 
 
 def set_time_zone(sos_home):
@@ -579,7 +597,9 @@ def isos():
                 deduplicate = False)
         '''
         try:
-            input_str = input_session.prompt(get_prompt_str(),
+            prompt_str, prompt_style = get_prompt_str()
+            input_str = input_session.prompt(prompt_str,
+                                             style=prompt_style,
                                              completer=shell_completer,
                                              complete_style=CompleteStyle.READLINE_LIKE,
                                              complete_while_typing=True,
