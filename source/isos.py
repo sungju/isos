@@ -43,13 +43,21 @@ from prompt_toolkit.shortcuts import CompleteStyle
 
 from prompt_toolkit.key_binding import KeyBindings
 from shell_completer import ShellCompleter
+from prompt_toolkit.application import in_terminal, run_in_terminal
+
+
+class CtrlCKeyboardInterrupt(KeyboardInterrupt):
+    def __init__(self, message):
+        self.message = message
+        super().__init__()
 
 
 bindings = KeyBindings()
 @bindings.add('c-c')
 def _(event):
     # No ctrl-c allowed
-    pass
+    event.current_buffer.insert_text('^C')
+    raise CtrlCKeyboardInterrupt("CTRL_C")
 
 
 modules = []
@@ -559,6 +567,7 @@ def isos():
     check_startup_script()
 
     input_session = get_input_session()
+    shell_completer = ShellCompleter()
     while True:
         '''
         Both Completer doesn't match with my requirement.
@@ -569,15 +578,21 @@ def isos():
                 [file_path_completer, file_word_completer],
                 deduplicate = False)
         '''
-        shell_completer = ShellCompleter()
-        input_str = input_session.prompt(get_prompt_str(),
-                                         completer=shell_completer,
-                                         complete_style=CompleteStyle.READLINE_LIKE,
-                                         complete_while_typing=True,
-                                         key_bindings=bindings,
-                                        auto_suggest=AutoSuggestFromHistory())
+        try:
+            input_str = input_session.prompt(get_prompt_str(),
+                                             completer=shell_completer,
+                                             complete_style=CompleteStyle.READLINE_LIKE,
+                                             complete_while_typing=True,
+                                             key_bindings=bindings,
+                                            auto_suggest=AutoSuggestFromHistory())
 
-        run_one_line(input_str)
+            run_one_line(input_str)
+        except CtrlCKeyboardInterrupt as e:
+            if e.message == "CTRL_C":
+                # It only indiates that ctrl-c is pressed
+                pass
+        except Exception as e:
+            pass
 
 
 if ( __name__ == '__main__'):
