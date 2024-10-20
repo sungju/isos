@@ -24,6 +24,7 @@ import re
 from os.path import expanduser, isfile, isdir, join
 from os import listdir
 import operator
+import subprocess
 from subprocess import Popen, PIPE, STDOUT
 import ansicolor
 from optparse import OptionParser
@@ -145,8 +146,9 @@ def add_command_module(new_module):
                 print("Replacing %s from %s" % (cmd_str, mod_command_set[cmd_str]))
             mod_command_set[cmd_str] = func
         modules.append(new_module)
-    except:
+    except Exception as e:
         print("Failed to add command from %s" % (new_module))
+        print(e)
 
 
 def load_commands_in_a_path(source_path):
@@ -292,7 +294,7 @@ def set_env(input_str, env_vars, is_cmd_stopped,\
             env_vars[words[1]] = val
 
             if words[1] == "sos_home":
-                set_time_zone(val)
+                init_for_sos_home()
         else:
             del env_vars[words[1]]
 
@@ -302,6 +304,58 @@ def set_env(input_str, env_vars, is_cmd_stopped,\
         env_vars[words[1]] = words[2]
 
     return ""
+
+
+page_size=4096
+def find_page_size():
+    global page_size
+    sos_home = env_vars['sos_home']
+
+    page_size = 0
+    try:
+        with open(sos_home + "/uname", "r") as f:
+            line = f.readlines()[0]
+            words = line.split()
+            if len(words) > 3:
+                kernel_ver = words[2]
+                arch = kernel_ver.split(".")[-1]
+                if arch == "x86_64a":
+                    page_size = 4096
+                elif arch == "ppc64le":
+                    page_size = 65536
+
+                if page_size != 0:
+                    return
+    except Exception as e:
+        pass
+
+
+    try:
+        if os.path.isfile(sos_home + "/proc/1/smaps"):
+            pagesize_str = subprocess.check_output(['grep', 'KernelPageSize:', \
+                    sos_home + '/proc/1/smaps', '-m', '1'])
+            words = pagesize_str.split()
+            if len(words) == 3:
+                if words[2] == 'kB':
+                    munit = 1024
+                elif words[2] == 'mB':
+                    munit = 1024 * 1024
+                else:
+                    munit = 1024 # Who knows
+                page_size = int(words[1]) * munit
+        else:
+            page_size = int(subprocess.check_output(['getconf', 'PAGESIZE']))
+    except Exception as e:
+        pass
+
+    if page_size == 0:
+        page_size = 4096
+
+
+
+def init_for_sos_home():
+    set_time_zone(env_vars['sos_home'])
+    find_page_size()
 
 
 def xsos_run(input_str, env_vars, is_cmd_stopped,\
@@ -581,7 +635,6 @@ def isos():
 
     work_dir = os.environ.get("WORK_DIR", os.getcwd())
     set_env("set sos_home %s dir" % (work_dir), env_vars, is_cmd_stopped)
-    set_time_zone(env_vars['sos_home'])
 
     check_startup_script()
 

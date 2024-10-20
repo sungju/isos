@@ -52,22 +52,9 @@ def handle_a_file(filename, options):
         if options.pagesize != 0:
             page_size = options.pagesize
         else:
-            if os.path.isfile(sos_home + "/proc/1/smaps"):
-                pagesize_str = subprocess.check_output(['grep', 'KernelPageSize:', \
-                        sos_home + '/proc/1/smaps', '-m', '1'])
-                words = pagesize_str.split()
-                if len(words) == 3:
-                    if words[2] == 'kB':
-                        munit = 1024
-                    elif words[2] == 'mB':
-                        munit = 1024 * 1024
-                    else:
-                        munit = 1024 # Who knows
-                    page_size = int(words[1]) * munit
-                else:
-                    page_size = int(subprocess.check_output(['getconf', 'PAGESIZE']))
+            page_size = __import__("__main__").page_size
     except Exception as e:
-        print(e)
+        pass
 
     with open(filename, 'r') as f:
         while True:
