@@ -8,6 +8,7 @@ from io import StringIO
 import traceback
 
 import screen
+from soshelpers import get_main
 
 def description():
     return "Analyse page_owner text"
@@ -52,7 +53,7 @@ def handle_a_file(filename, options):
         if options.pagesize != 0:
             page_size = options.pagesize
         else:
-            page_size = __import__("__main__").page_size
+            page_size = get_main().page_size
     except Exception as e:
         pass
 
