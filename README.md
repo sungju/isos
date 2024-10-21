@@ -126,8 +126,7 @@ host0.example.com>
 - You can use pipe ('|') to pass the result to other commands in the system.
 
 ```
-host0.example.com> 
-dmidecode | grep CPU
+host0.example.com> dmidecode | grep CPU
 	Socket Designation: CPU1
 	Version: Intel(R) Xeon(R) Gold 6338 CPU @ 2.00GHz
 	Socket Designation: CPU2
@@ -136,3 +135,26 @@ dmidecode | grep CPU
 		CPU.Socket.2
 host0.example.com> 
 ```
+
+- `cat` is the internal command that reads file(s) with colored output. It has same action as just type the file name, but it can be useful to see multiple files.
+
+```
+host0.example.com> cat free
+               total        used        free      shared  buff/cache   available
+Mem:       527523056     8424572   512957876       85568     9313436   519098484
+Swap:              0           0           0
+host0.example.com> cd sos_commands/memory
+host0.example.com/sos_commands/memory> cat free*
+
+========== < free > ==========
+               total        used        free      shared  buff/cache   available
+Mem:       527523056     8424572   512957876       85568     9313436   519098484
+Swap:              0           0           0
+
+========== < free_-m > ==========
+               total        used        free      shared  buff/cache   available
+Mem:          515159        8243      500918          83        9095      506915
+Swap:              0           0           0
+host0.example.com/sos_commands/memory>
+```
+
