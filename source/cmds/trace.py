@@ -109,6 +109,38 @@ def add_consumed_time(line):
     delay_time_dict[line] = int(delay_value * 1000)
 
 
+def print_help_msg(op, no_pipe):
+    cmd_examples = '''
+Examples:
+    # Currently only works for funcgraph
+    # To save the output to the file
+    > trace -g trace.dat -o trace.txt
+
+    # You can convert multiple trace data and use 
+    # '%f'(original filename) and '%d'(sequence number)
+    # in output file name.
+    # Below generates 'trace.dat.txt' and 'old_trace.dat.txt'
+    > trace -g trace.dat old_trace.dat -o %f.txt
+
+    # To see profile from the original data
+    > trace trace.dat -p
+
+    # To see the most spent functions from converted funcgraph text
+    > trace trace.dat.txt -t
+    '''
+
+    if no_pipe == False:
+        output = StringIO.StringIO()
+        op.print_help(file=output)
+        contents = output.getvalue()
+        output.close()
+
+        return contents + "\n" + cmd_examples
+    else:
+        op.print_help()
+        print(cmd_examples)
+        return ""
+
 sos_home=""
 is_cmd_stopped = None
 def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
@@ -153,15 +185,7 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
         return ""
 
     if o.help or show_help == True:
-        if no_pipe == False:
-            output = StringIO.StringIO()
-            op.print_help(file=output)
-            contents = output.getvalue()
-            output.close()
-            return contents
-        else:
-            op.print_help()
-            return ""
+        return print_help_msg(op, no_pipe)
     
     result_str = ""
     sos_home = env_vars['sos_home']

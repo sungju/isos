@@ -201,6 +201,30 @@ def read_ps_basic(ps_path, no_pipe, options):
     return result_str
 
 
+def print_help_msg(op, no_pipe):
+    cmd_examples = '''
+Examples:
+    # To see only specified number of lines
+    > ps -l 10
+
+    # To sort by resource type. It shows the highest at the bottom
+    # unless specifying line numbers with -l
+    > ps -s rss 
+    '''
+
+    if no_pipe == False:
+        output = StringIO.StringIO()
+        op.print_help(file=output)
+        contents = output.getvalue()
+        output.close()
+
+        return contents + "\n" + cmd_examples
+    else:
+        op.print_help()
+        print(cmd_examples)
+        return ""
+
+
 is_cmd_stopped = None
 def run_psinfo(input_str, env_vars, is_cmd_stopped_func,\
         show_help=False, no_pipe=True):
@@ -230,15 +254,7 @@ def run_psinfo(input_str, env_vars, is_cmd_stopped_func,\
         return ""
 
     if o.help or show_help == True:
-        if no_pipe == False:
-            output = StringIO.StringIO()
-            op.print_help(file=output)
-            contents = output.getvalue()
-            output.close()
-            return contents
-        else:
-            op.print_help()
-            return ""
+        return print_help_msg(op, no_pipe)
 
     result_str = read_ps_basic(env_vars["sos_home"] + "/ps", no_pipe, o)
 

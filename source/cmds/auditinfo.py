@@ -172,7 +172,9 @@ def run_auditinfo(input_str, env_vars, is_cmd_stopped_func,\
     is_cmd_stopped = is_cmd_stopped_func
 
     usage = "Usage: audit [options]"
-    op = OptionParser(usage=usage, add_help_option=False)
+    cmd_examples = ""
+
+    op = OptionParser(usage=usage, epilog=cmd_examples, add_help_option=False)
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')
 

@@ -309,6 +309,35 @@ def handle_a_file(filename, options):
     return result_str
 
 
+def print_help_msg(op, no_pipe):
+    cmd_examples = '''
+Examples:
+    # To see summary with 20 entries of call trace and module list
+    > powner sorted_page_owner.txt
+
+    # To see specific number of entries only. ex) 5 entries only.
+    > powner sorted_page_owner.txt -n 5
+
+    # To see all entries.
+    > powner sorted_page_owner.txt -a
+
+    # Specify the page size when the system falsely detect the page size.
+    > powner sorted_page_owner.txt -p 65536
+    '''
+
+    if no_pipe == False:
+        output = StringIO.StringIO()
+        op.print_help(file=output)
+        contents = output.getvalue()
+        output.close()
+
+        return contents + "\n" + cmd_examples
+    else:
+        op.print_help()
+        print(cmd_examples)
+        return ""
+
+
 sos_home=""
 is_cmd_stopped = None
 def page_owner_stat(input_str, env_vars, is_cmd_stopped_func,\
@@ -319,6 +348,7 @@ def page_owner_stat(input_str, env_vars, is_cmd_stopped_func,\
     is_cmd_stopped = is_cmd_stopped_func
 
     usage = "Usage: powner [options] <page_owner.txt ...>"
+
     op = OptionParser(usage=usage, add_help_option=False)
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')
@@ -347,15 +377,7 @@ def page_owner_stat(input_str, env_vars, is_cmd_stopped_func,\
         return ""
 
     if o.help or show_help == True or len(args) == 1:
-        if no_pipe == False:
-            output = StringIO.StringIO()
-            op.print_help(file=output)
-            contents = output.getvalue()
-            output.close()
-            return contents
-        else:
-            op.print_help()
-            return ""
+        return print_help_msg(op, no_pipe)
 
     result_str = ""
     sos_home = env_vars['sos_home']

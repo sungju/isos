@@ -302,6 +302,43 @@ def get_matching_data(idx, lines, options, no_pipe, match_columns, graph_func=No
     return idx, result_str
 
 
+def print_help_msg(op, no_pipe):
+    cmd_examples = '''
+Examples:
+    # Four resource types are selectable
+        # -c : CPU usage
+        # -l : load average
+        # -m : memory usage
+        # -n : network usage
+    > sar sar14 -c | head -n 4
+        Linux 4.18.0-553.16.1.el8_10.x86_64 (test) 	2024-10-14 	_x86_64_	(8 CPU)
+
+        00:00:00        CPU      %usr     %nice      %sys   %iowait    %steal      %irq     %soft    %guest    %gnice     %idle
+        00:10:01        all      4.77      0.00      1.67      0.07      0.00      0.23      0.10      0.00      0.00     93.16
+
+    # Data can be shown in bar graph style for CPU and memory usage
+    > sar sar28 -gc
+        Linux 4.18.0-553.16.1.el8_10.x86_64 (test) 	2024-09-28 	_x86_64_	(8 CPU)
+        00:00:00        CPU      %usr     %nice      %sys   %iowait    %steal      %irq     %soft    %guest    %gnice     %idle
+                           ====================================================================================================
+
+        00:10:00   18.14 : ###############.....................................................................................
+        00:20:01    4.52 : ###.................................................................................................
+    '''
+
+    if no_pipe == False:
+        output = StringIO.StringIO()
+        op.print_help(file=output)
+        contents = output.getvalue()
+        output.close()
+
+        return contents + "\n" + cmd_examples
+    else:
+        op.print_help()
+        print(cmd_examples)
+        return ""
+
+
 sos_home=""
 is_cmd_stopped = None
 def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
@@ -342,16 +379,8 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
         return ""
 
     if o.help or show_help == True or len(args) == 1:
-        if no_pipe == False:
-            output = StringIO.StringIO()
-            op.print_help(file=output)
-            contents = output.getvalue()
-            output.close()
-            return contents
-        else:
-            op.print_help()
-            return ""
-    
+        return print_help_msg(op, no_pipe)
+
     result_str = ""
     sos_home = env_vars['sos_home']
     for file_path in args[1:]:

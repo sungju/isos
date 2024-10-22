@@ -158,6 +158,49 @@ def run_perf_report(perf_cmd_str, no_pipe, options):
     return result_str
 
 
+def print_help_msg(op, no_pipe):
+    cmd_examples = '''
+Examples:
+    # To see the output with 10 lines and 6 depth
+    > perf perf.data -l 10 -d 6
+
+    # Sort options with -s : 0 = default. 0~3
+    > perf perf.data -s 0
+        perf report -f --stdio --kallsyms=... -s overhead_sys,comm --show-cpu-utilization
+
+        # 0 : -s overhead_sys,comm --show-cpu-utilization
+        # 1 : --no-children -s comm,dso
+        # 2 : -s overhead,overhead_us,overhead_sys,comm
+        # 3 : -s overhead
+
+    # To see metadata
+    > perf perf.data -m
+        perf report -f --stdio --kallsyms=./hlviqfw/proc/kallsyms -i 0080-perf.data --header -s overhead_sys,comm --show-cpu-utilization
+        ==============================================================================
+        # ========
+        # captured on    : Mon Oct 14 11:32:43 2024
+        # header version : 1
+        # data offset    : 880
+        # data size      : 122828776
+        # feat offset    : 122829656
+
+    # Use ~/.debug symbols instead of kallsysm from sosreport
+    > perf perf.data -b
+    '''
+
+    if no_pipe == False:
+        output = StringIO.StringIO()
+        op.print_help(file=output)
+        contents = output.getvalue()
+        output.close()
+
+        return contents + "\n" + cmd_examples
+    else:
+        op.print_help()
+        print(cmd_examples)
+        return ""
+
+
 is_cmd_stopped = None
 def run_perf(input_str, env_vars, is_cmd_stopped_func,\
         show_help=False, no_pipe=True):
@@ -192,15 +235,7 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
         return ""
 
     if o.help or show_help == True:
-        if no_pipe == False:
-            output = StringIO.StringIO()
-            op.print_help(file=output)
-            contents = output.getvalue()
-            output.close()
-            return contents
-        else:
-            op.print_help()
-            return ""
+        return print_help_msg(op, no_pipe)
     
     set_color_table(no_pipe)
     result_str = ""

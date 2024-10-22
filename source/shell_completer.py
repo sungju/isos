@@ -86,9 +86,8 @@ class ShellCompleter(Completer):
 
                 if os.path.isdir(full_name):
                     # For directories, add a slash to the filename.
-                    # (We don't add them to the `completion`. Users can type it
-                    # to trigger the autocompletion themselves.)
                     filename += "/"
+                    completion += "/"
                 elif self.only_directories:
                     continue
 
