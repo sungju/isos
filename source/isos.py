@@ -31,6 +31,7 @@ from optparse import OptionParser
 import importlib
 import time
 import signal
+import glob
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
@@ -478,6 +479,7 @@ def handle_input(input_str):
 
     result_str=""
     cmd_list = command_set | mod_command_set
+    files = get_file_list(words[0])
     if words[0] in cmd_list:
         result_str = cmd_list[words[0]](input_str, env_vars, is_cmd_stopped,\
                 False, no_pipe)
@@ -501,12 +503,13 @@ def handle_input(input_str):
         elif words[0] == "sh":
             run_shell_command(input_str, "", True)
             return
-        elif isfile(words[0]) or isdir(words[0]):
+        elif len(files) or isdir(words[0]):
             if isdir(words[0]):
                 result_str = change_dir("cd %s" % (words[0]), env_vars,\
                         is_cmd_stopped, False, no_pipe)
-            elif isfile(words[0]):
+            else:
                 if "cat" in cmd_list:
+                    input_str = ' '.join(files)
                     result_str = cmd_list["cat"]("cat %s" % (input_str),\
                             env_vars, is_cmd_stopped, False, no_pipe)
 
@@ -533,10 +536,17 @@ def handle_input(input_str):
     print(result_str, end="")
 
 
+'''
 def get_file_list():
     #files = [f for f in listdir(".") if isfile(f)]
     files = [f for f in listdir(".")]
     return files
+'''
+
+def get_file_list(pattern):
+    files = [f for f in glob.glob(pattern)]
+    return files
+
 
 
 def get_home_dir():
