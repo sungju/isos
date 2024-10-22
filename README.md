@@ -6,6 +6,8 @@ Interactive sos checker
 - It is convinent to make an alias like below.
 
 ```
+$ cd ~/
+$ git clone https://github.com/sungju/isos.git
 $ alias is='~/isos/isos.sh'
 ```
 
@@ -64,6 +66,15 @@ Options:
                         Show data with different options
   -q, --quiet           Do not show any warnings or messages.
 host0.example.com> 
+```
+
+- Prompt: it shows hostname for the home directory in isos. Changing directory will shows the path after the hostname. If the directory is outside of the path, it'll show full path.
+
+```
+host0.example.com> cd sos_commands/kernel
+host0.example.com/sos_commands/kernel> 
+host0.example.com/sos_commands/kernel> cd ~/
+host0.example.com:/home/sungju> 
 ```
 
 - If you enter text, isos is checking if it is matching with the file in sosreport. If so, it will show you the content with `cat` command.
