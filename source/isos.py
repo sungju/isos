@@ -617,6 +617,83 @@ def run_one_line(input_str):
     end_input_handling()
 
 
+# Don't use get_history_list() and parse_input_str
+# as it saves `h` as an entry as well.
+# Better to use my own version of list
+# I am leaving this here for future reference
+def get_history_list(input_session, start_idx=0):
+    history_list = []
+    try:
+        history_list = list(input_session.history.load_history_strings())
+        if len(history_list) > start_idx:
+            history_list = history_list[start_idx:]
+
+        history_list.reverse()
+    except Exception as e:
+        print(e)
+        pass
+
+    return history_list
+
+
+def parse_input_str(input_session, input_str, history_start_idx):
+    history_list = get_history_list(input_session, history_start_idx)
+    words = input_str.split()
+    modified = False
+
+    if input_str == "h":
+        idx = 1
+        for item in history_list:
+            print("[%3d] : %s" % (idx, item))
+            idx = idx + 1
+        return ""
+
+    for word in words:
+        if word.startswith("!") and word[1:].isdecimal():
+            hidx = int(word[1:], 10) - 2
+            input_str = input_str.replace(word, history_list[hidx])
+            modified = True
+
+    if modified:
+        print(input_str)
+    return input_str
+
+# Do not use the above
+
+
+history_cmds = []
+
+def parse_history(input_str):
+    global history_cmds
+    input_str = input_str.strip()
+    words = input_str.split()
+    if input_str == "h" or input_str == "history":
+        idx = 1
+        for item in history_cmds:
+            print("[%d] %s" % (idx, item))
+            idx = idx + 1
+        return ""
+
+    modified = False
+    for word in words:
+        if word.startswith("!") and word[1:].isdecimal():
+            hidx = int(word[1:], 10) - 1
+            input_str = input_str.replace(word, history_cmds[hidx])
+            modified = True
+
+    if modified:
+        print(input_str)
+
+    if input_str != "":
+        hlen = len(history_cmds)
+        if hlen > 0 and history_cmds[hlen - 1] == input_str:
+            pass
+        else:
+            history_cmds.append(input_str)
+
+    return input_str
+
+
 def check_startup_script():
     try:
         fname = expanduser("~") + "/.isosrc"
@@ -625,12 +702,14 @@ def check_startup_script():
             for line in lines:
                 line = line.strip()
                 if len(line) > 0 and line[0] != '#':
-                    run_one_line(line)
+                    run_one_line(parse_history(line))
     except:
         pass
 
 
 def isos():
+    global history_cmds
+
     op = OptionParser()
     op.add_option("-a", "--all", dest="all", default=0,
             action="store_true",
@@ -646,10 +725,14 @@ def isos():
     work_dir = os.environ.get("WORK_DIR", os.getcwd())
     set_env("set sos_home %s dir" % (work_dir), env_vars, is_cmd_stopped)
 
-    check_startup_script()
-
     input_session = get_input_session()
     shell_completer = ShellCompleter()
+
+    #history_start_idx = len(get_history_list(input_session))
+    history_cmds = []
+
+    check_startup_script()
+
     while True:
         '''
         Both Completer doesn't match with my requirement.
@@ -669,13 +752,14 @@ def isos():
                                              complete_while_typing=True,
                                              key_bindings=bindings,
                                             auto_suggest=AutoSuggestFromHistory())
-
-            run_one_line(input_str)
+            #input_str = parse_input_str(input_session, input_str, history_start_idx)
+            run_one_line(parse_history(input_str))
         except CtrlCKeyboardInterrupt as e:
             if e.message == "CTRL_C":
                 # It only indiates that ctrl-c is pressed
                 pass
         except Exception as e:
+            print(e)
             pass
 
 
