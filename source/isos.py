@@ -43,6 +43,7 @@ from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.completion import merge_completers
 from prompt_toolkit.shortcuts import CompleteStyle
 from prompt_toolkit.styles import Style
+from prompt_toolkit import print_formatted_text, HTML
 
 from prompt_toolkit.key_binding import KeyBindings
 from shell_completer import ShellCompleter
@@ -608,13 +609,19 @@ def set_time_zone(sos_home):
         pass
 
 
-def run_one_line(input_str):
+def run_one_line(input_str, path):
+    cur_path = os.getcwd()
+    if path != "":
+        os.chdir(path)
+
     start_input_handling()
     try:
         handle_input(input_str)
     except Exception as e:
         print(e)
     end_input_handling()
+    if path != "":
+        os.chdir(cur_path)
 
 
 # Don't use get_history_list() and parse_input_str
@@ -662,23 +669,39 @@ def parse_input_str(input_session, input_str, history_start_idx):
 
 
 history_cmds = []
+history_cwds = []
 
 def parse_history(input_str):
     global history_cmds
+    global history_cwds
     input_str = input_str.strip()
     words = input_str.split()
-    if input_str == "h" or input_str == "history":
+    sos_home = env_vars["sos_home"]
+    if words[0] == "h" or words[0] == "history":
         idx = 1
+        if len(words) > 1 and words[1] == "-d":
+            show_dir = True
+        else:
+            show_dir = False
         for item in history_cmds:
-            print("[%d] %s" % (idx, item))
+            item = "<b>%s</b>" % (item)
+            if show_dir == True:
+                cmd_path = history_cwds[idx - 1]
+                if cmd_path.startswith(sos_home):
+                    cmd_path = cmd_path.replace(sos_home, "~")
+                item = "%s <ansigreen>[%s]</ansigreen>" % (item, cmd_path)
+
+            print_formatted_text(HTML("[%d] %s" % (idx, item)))
             idx = idx + 1
-        return ""
+        return "", ""
 
     modified = False
+    run_path = ""
     for word in words:
         if word.startswith("!") and word[1:].isdecimal():
             hidx = int(word[1:], 10) - 1
             input_str = input_str.replace(word, history_cmds[hidx])
+            run_path = history_cwds[hidx]
             modified = True
 
     if modified:
@@ -686,12 +709,15 @@ def parse_history(input_str):
 
     if input_str != "":
         hlen = len(history_cmds)
-        if hlen > 0 and history_cmds[hlen - 1] == input_str:
+        cwd = os.getcwd()
+        if hlen > 0 and history_cmds[hlen - 1] == input_str and \
+            history_cwds[hlen - 1] == cwd:
             pass
         else:
             history_cmds.append(input_str)
+            history_cwds.append(cwd)
 
-    return input_str
+    return input_str, run_path
 
 
 def check_startup_script():
@@ -702,7 +728,8 @@ def check_startup_script():
             for line in lines:
                 line = line.strip()
                 if len(line) > 0 and line[0] != '#':
-                    run_one_line(parse_history(line))
+                    cmd, path = parse_history(line)
+                    run_one_line(cmd, path)
     except:
         pass
 
@@ -753,7 +780,8 @@ def isos():
                                              key_bindings=bindings,
                                             auto_suggest=AutoSuggestFromHistory())
             #input_str = parse_input_str(input_session, input_str, history_start_idx)
-            run_one_line(parse_history(input_str))
+            cmd, path = parse_history(input_str)
+            run_one_line(cmd, path)
         except CtrlCKeyboardInterrupt as e:
             if e.message == "CTRL_C":
                 # It only indiates that ctrl-c is pressed
