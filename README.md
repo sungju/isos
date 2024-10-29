@@ -120,6 +120,45 @@ exit
 host0.example.com> 
 ```
 
+- `!` can be used for history execution as well. To check the current history, you can use `h` or `h -d`. `h -d` shows the path when the command was executed.
+
+```
+host0.example.com> h
+[1] xsos
+[2] ls
+[3] sos_commands/
+[4] ls
+[5] cd
+host0.example.com> h -d
+[1] xsos [~]
+[2] ls [~]
+[3] sos_commands/ [~]
+[4] ls [~/sos_commands]
+[5] cd [~/sos_commands]
+```
+
+- `!<number>` exeucte the command from history with the specified path. If you only want to run the command, but not want to run it in the specified path, you can use `?<number>` instead.
+
+```
+host0.example.com> !4
+ls
+alternatives/  devices/       kpatch/      ntp/        smartcard/
+ata/           dmraid/        ldap/        pacemaker/  subscription_manager/
+
+...
+dbus/          kernel/        nfs/         selinux/
+devicemapper/  keyutils/      nis/         services/
+
+host0.example.com> ?4
+ls
+apps/      environment     last   netstat  run/           uname
+boot/      etc/            lib    proc/    sos_commands/  uptime
+chkconfig  free            lsmod  ps       sos_logs/      usr/
+date       hostname        lsof   pstree   sos_reports/   var/
+df         installed-rpms  lspci  root/    sos_strings/   version.txt
+dmidecode  ip_addr         mount  route    sys/           vgdisplay
+```
+
 - sosreport home path is saved in `sos_home` variable in isos. You can see and change that with `set` command.
 
 ```

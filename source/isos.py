@@ -703,6 +703,10 @@ def parse_history(input_str):
             input_str = input_str.replace(word, history_cmds[hidx])
             run_path = history_cwds[hidx]
             modified = True
+        elif word.startswith("?") and word[1:].isdecimal():
+            hidx = int(word[1:], 10) - 1
+            input_str = input_str.replace(word, history_cmds[hidx])
+            modified = True
 
     if modified:
         print(input_str)
