@@ -675,6 +675,9 @@ def parse_history(input_str):
     global history_cmds
     global history_cwds
     input_str = input_str.strip()
+    if len(input_str) == 0:
+        return "", ""
+
     words = input_str.split()
     sos_home = env_vars["sos_home"]
     if words[0] == "h" or words[0] == "history":
