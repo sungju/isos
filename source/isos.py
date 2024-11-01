@@ -492,10 +492,10 @@ def handle_input(input_str):
             input_str = shell_part
     elif words[0][0] == "!": # Run shell command
         input_str = orig_input_str.strip()[1:]
-        words = input_str.split()
-        if words[0] in ["sh", "bash", "zsh", "ksh"]:
-            run_shell_command(input_str, "", True)
-            return
+#        words = input_str.split()
+#        if words[0] in ["sh", "bash", "zsh", "ksh"]:
+#            run_shell_command(input_str, "", True)
+#            return
 
         shell_part = ""
     else:
@@ -503,12 +503,12 @@ def handle_input(input_str):
         if words[0] == "ls" and no_pipe:
             run_shell_command(input_str + " --color -p", "", True)
             return
-        elif words[0] == "vi":
-            run_shell_command(input_str, "", True)
-            return
-        elif words[0] in ["sh", "bash", "zsh", "ksh"]:
-            run_shell_command(input_str, "", True)
-            return
+#        elif words[0] == "vi":
+#            run_shell_command(input_str, "", True)
+#            return
+#        elif words[0] in ["sh", "bash", "zsh", "ksh"]:
+#            run_shell_command(input_str, "", True)
+#            return
         elif len(files) or isdir(words[0]):
             if isdir(words[0]):
                 result_str = change_dir("cd %s" % (words[0]), env_vars,\
@@ -538,7 +538,7 @@ def handle_input(input_str):
             print(e)
             return
 
-    result_str = run_shell_command(input_str, result_str)
+    result_str = run_shell_command(input_str, result_str, shell_part == "")
     print(result_str, end="")
 
 
