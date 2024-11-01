@@ -492,6 +492,11 @@ def handle_input(input_str):
             input_str = shell_part
     elif words[0][0] == "!": # Run shell command
         input_str = orig_input_str.strip()[1:]
+        words = input_str.split()
+        if words[0] in ["sh", "bash", "zsh", "ksh"]:
+            run_shell_command(input_str, "", True)
+            return
+
         shell_part = ""
     else:
         # single ls better to get full featured output
@@ -501,7 +506,7 @@ def handle_input(input_str):
         elif words[0] == "vi":
             run_shell_command(input_str, "", True)
             return
-        elif words[0] == "sh":
+        elif words[0] in ["sh", "bash", "zsh", "ksh"]:
             run_shell_command(input_str, "", True)
             return
         elif len(files) or isdir(words[0]):
