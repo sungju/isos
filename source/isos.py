@@ -19,6 +19,7 @@
 #
 
 ISOS_VERSION="0.1"
+ISOS_YEARS="2024"
 
 import sys
 import os
@@ -217,7 +218,8 @@ def show_usage(input_str, env_vars, is_cmd_stopped,\
             return mod_command_set[words[1]](input_str, env_vars, None, False)
 
     if len(words) > 1 and words[1] == "-v":
-        result_str = "isos v%s\nCopyright (c) 2024 Sungju Kwon\n\n" % (ISOS_VERSION)
+        result_str = "isos v%s\nCopyright (c) %s Sungju Kwon\n\n" % \
+                (ISOS_VERSION, ISOS_YEARS)
     else:
         result_str = ""
     result_str = result_str + ("Help\n%s\n" % ("-" * 30))
