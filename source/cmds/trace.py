@@ -225,14 +225,7 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
             ofile = ofile.replace("%d", ("%d" % count))
             ofile = ofile.replace("%f", file_path)
             #ofile = ofile.replace("%f", os.path.splitext(os.path.basename(file_path))[0])
-            if o.graph:
-                if ofile != "":
-                    ofile = " > " + ofile
-
-                result = run_shell_command("trace-cmd report -O fgraph:tailprint %s %s" % (file_path, ofile),
-                        "", no_pipe=no_pipe)
-                result_str = result_str + screen.get_pipe_aware_line(result)
-            elif o.profile:
+            if o.profile:
                 result = run_shell_command("trace-cmd report --profile %s" % (file_path),
                         "", no_pipe=False)
                 result = column_strings(result, " ")
@@ -243,6 +236,14 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
 
                 for line in result.splitlines():
                     result_str = result_str + screen.get_pipe_aware_line(line)
+            else: # elif o.graph: # If nothing specified, let's consider funcgraph
+                if ofile != "":
+                    ofile = " > " + ofile
+
+                result = run_shell_command("trace-cmd report -O fgraph:tailprint %s %s" % (file_path, ofile),
+                        "", no_pipe=no_pipe)
+                result_str = result_str + screen.get_pipe_aware_line(result)
+
         except Exception as e:
             print(e)
             result_str = result_str + screen.get_pipe_aware_line("trace-cmd report for '%s' failed" % (file_path))
