@@ -18,6 +18,8 @@
 # GNU General Public License for more details.
 #
 
+ISOS_VERSION="0.1"
+
 import sys
 import os
 import re
@@ -214,7 +216,11 @@ def show_usage(input_str, env_vars, is_cmd_stopped,\
             input_str = input_str[target_idx:].replace(words[1], words[1] + " -h")
             return mod_command_set[words[1]](input_str, env_vars, None, False)
 
-    result_str = ("Help\n%s\n" % ("-" * 30))
+    if len(words) > 1 and words[1] == "-v":
+        result_str = "isos v%s\nCopyright (c) 2024 Sungju Kwon\n\n" % (ISOS_VERSION)
+    else:
+        result_str = ""
+    result_str = result_str + ("Help\n%s\n" % ("-" * 30))
     count = 0
     for key in command_set | mod_command_set:
         result_str = result_str + ("%-10s " % (key))
