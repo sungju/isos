@@ -1,6 +1,8 @@
 import os
 import sys
 import time
+from os.path import isfile, join
+
 from optparse import OptionParser
 from io import StringIO
 from subprocess import Popen, PIPE, STDOUT
@@ -172,6 +174,7 @@ Examples:
         # 1 : --no-children -s comm,dso
         # 2 : -s overhead,overhead_us,overhead_sys,comm
         # 3 : -s overhead
+        # 4 : --tasks
 
     # To see metadata
     > perf perf.data -m
@@ -240,7 +243,10 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
     set_color_table(no_pipe)
     result_str = ""
     sos_home = env_vars['sos_home']
-    for file_path in args[1:]:
+    file_list = args[1:]
+    if len(file_list) == 0 and isfile('perf.data'):
+        file_list = ['perf.data']
+    for file_path in file_list:
         try:
             perf_cmd_str = "perf report -f --stdio"
             if not o.debugsymbol:
@@ -264,6 +270,8 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
                 perf_cmd_str = perf_cmd_str + " -s overhead,overhead_us,overhead_sys,comm"
             elif o.sortby == 3:
                 perf_cmd_str = perf_cmd_str + " -s overhead"
+            elif o.sortby == 4:
+                perf_cmd_str = perf_cmd_str + " --tasks"
 
             result_str = result_str + run_perf_report(perf_cmd_str, no_pipe, o)
         except Exception as e:
