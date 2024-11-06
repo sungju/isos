@@ -371,7 +371,8 @@ def init_for_sos_home():
 def xsos_run(input_str, env_vars, is_cmd_stopped,\
         show_help=False, no_pipe=True):
     if show_help:
-        return "Run xsos within the app"
+        result = run_shell_command("xsos -h")
+        return result
 
     cmd_idx = input_str.find('xsos')
     input_str = input_str[cmd_idx + 4:]
