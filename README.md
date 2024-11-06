@@ -15,28 +15,27 @@ Interactive sos checker
 - Clone the code to local filesystem
 
 ```
-# Clone the source
-$ cd ~/
-$ git clone https://github.com/sungju/isos.git
+cd ~/
+git clone https://github.com/sungju/isos.git
 ```
 
 - Using alias is recommended
 
 ```
-$ alias is='~/isos/isos.sh'
+alias is='~/isos/isos.sh'
 ```
 
 - It is convinent to make an alias like below in bashrc.
 
 ```
-$ echo "alias is='~/isos/isos.sh'" >> ~/.bashrc
+echo "alias is='~/isos/isos.sh'" >> ~/.bashrc
 ```
 
 - Move to the sosreport directory and start the command.
 
 ```
-$ cd mysosreport/
-$ is
+cd mysosreport/
+is
 ```
 
 - If you want to autostart some commands, you can use `~/.isosrc`. Below example executes `xsos` command as soon as `isos` started. `xsos` uses the sosreport directory as a home for further checking
