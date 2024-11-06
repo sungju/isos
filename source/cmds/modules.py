@@ -220,6 +220,43 @@ def show_taint_info(sos_home, no_pipe, options):
     return result_str
 
 
+def print_help_msg(op, no_pipe):
+    cmd_examples = '''
+It shows tainted module information
+
+Examples:
+    > mods
+    Kernel version : 5.14.0-284.66.1.el9_2.x86_64
+
+    Tainted modules
+    ====================
+    0xffffffffc11e8000 : scini.ko
+
+    kernel.tainted
+    ====================
+    kernel.tainted = 12289
+    Bits: 0,12,13
+    P/G : TAINT_PROPRIETARY_MODULE
+    O   : TAINT_OOT_MODULE
+    E   : TAINT_UNSIGNED_MODULE
+
+    KCS : https://access.redhat.com/solutions/40594
+
+    '''
+
+    if no_pipe == False:
+        output = StringIO.StringIO()
+        op.print_help(file=output)
+        contents = output.getvalue()
+        output.close()
+
+        return contents + "\n" + cmd_examples
+    else:
+        op.print_help()
+        print(cmd_examples)
+        return ""
+
+
 is_cmd_stopped = None
 def run_modules(input_str, env_vars, is_cmd_stopped_func,\
         show_help=False, no_pipe=True):
@@ -237,16 +274,8 @@ def run_modules(input_str, env_vars, is_cmd_stopped_func,\
     except:
         return ""
 
-    if o.help or show_help == True:
-        if no_pipe == False:
-            output = StringIO.StringIO()
-            op.print_help(file=output)
-            contents = output.getvalue()
-            output.close()
-            return contents
-        else:
-            op.print_help()
-            return ""
+    if o.help or show_help == True or len(args) == 1:
+        return print_help_msg(op, no_pipe)
     
     set_color_table(no_pipe)
     result_str = ""

@@ -164,6 +164,39 @@ def get_audit_status_files(sos_home):
     return get_files_in_path(sos_home + "/sos_commands/auditd", "")
 
 
+def print_help_msg(op, no_pipe):
+    cmd_examples = '''
+- Shows /var/log/audit/audit.log with system's time.
+- Shows audit rules
+
+Examples:
+    > audit -c
+    ==========> /etc/audit/auditd.conf <==========
+    #
+    # This file controls the configuration of the audit daemon
+    #
+
+    local_events = yes
+    write_logs = yes
+    log_file = /var/log/audit/audit.log
+    log_group = root
+    ...
+
+    '''
+
+    if no_pipe == False:
+        output = StringIO.StringIO()
+        op.print_help(file=output)
+        contents = output.getvalue()
+        output.close()
+
+        return contents + "\n" + cmd_examples
+    else:
+        op.print_help()
+        print(cmd_examples)
+        return ""
+
+
 is_cmd_stopped = None
 
 def run_auditinfo(input_str, env_vars, is_cmd_stopped_func,\
@@ -194,16 +227,8 @@ def run_auditinfo(input_str, env_vars, is_cmd_stopped_func,\
     except:
         return ""
 
-    if o.help or show_help == True:
-        if no_pipe == False:
-            output = StringIO.StringIO()
-            op.print_help(file=output)
-            contents = output.getvalue()
-            output.close()
-            return contents
-        else:
-            op.print_help()
-            return ""
+    if o.help or show_help == True or len(args) == 1:
+        return print_help_msg(op, no_pipe)
 
     sos_home = env_vars["sos_home"]
     result_str = ""

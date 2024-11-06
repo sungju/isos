@@ -143,6 +143,24 @@ def get_cron_files(sos_home):
     return file_list
 
 
+def print_help_msg(op, no_pipe):
+    cmd_examples = '''
+It shows cron settings by checking /etc/crontab, /etc/cron.XXX/*
+    '''
+
+    if no_pipe == False:
+        output = StringIO.StringIO()
+        op.print_help(file=output)
+        contents = output.getvalue()
+        output.close()
+
+        return contents + "\n" + cmd_examples
+    else:
+        op.print_help()
+        print(cmd_examples)
+        return ""
+
+
 is_cmd_stopped = None
 
 def run_croninfo(input_str, env_vars, is_cmd_stopped_func,\
@@ -161,17 +179,8 @@ def run_croninfo(input_str, env_vars, is_cmd_stopped_func,\
     except:
         return ""
 
-    if o.help or show_help == True:
-        if no_pipe == False:
-            output = StringIO.StringIO()
-            op.print_help(file=output)
-            contents = output.getvalue()
-            output.close()
-            return contents
-        else:
-            op.print_help()
-            return ""
-
+    if o.help or show_help == True or len(args) == 1:
+        return print_help_msg(op, no_pipe)
 
     set_color_table(no_pipe)
 

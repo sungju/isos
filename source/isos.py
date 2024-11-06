@@ -90,7 +90,8 @@ def load_commands():
 def show_commands(input_str, env_var, is_cmd_stopped=None, \
         show_help=False, no_pipe=True):
     if show_help:
-        return "Show the pluggable command list"
+        result = "[For developers only]\nShow the extension module list"
+        return result
 
     result_str = ""
     for comm in mod_command_set:
@@ -103,7 +104,8 @@ def reload_commands(input_str, env_str, is_cmd_stopped=None,\
         show_help=False, no_pipe=True):
     global modules
     if show_help:
-        return "Reloading commands"
+        result = "[For developers only]\nreloading isos extension module"
+        return result
 
     for module in modules:
         try:
@@ -239,7 +241,7 @@ def show_usage(input_str, env_vars, is_cmd_stopped,\
 def exit_app(input_str, env_vars, is_cmd_stopped = None,\
         show_help=False, no_pipe=True):
     if show_help:
-        return "Exit the application"
+        return "Exit the isos application"
 
     sys.exit(0)
 
@@ -247,7 +249,9 @@ def exit_app(input_str, env_vars, is_cmd_stopped = None,\
 def eval_expr(input_str, env_vars, is_cmd_stopped = None,
         show_help=False, no_pipe=True):
     if show_help:
-        return "Calculate expression"
+        result = "Calculate expression\n\neval <expression>\n\nExample) eval 53828382/1024/1024\n51.33"
+
+        return result
 
     input_str = input_str.replace("eval ", "")
     return "%.2f" % (eval(input_str))
@@ -256,7 +260,8 @@ def eval_expr(input_str, env_vars, is_cmd_stopped = None,
 def change_dir(input_str, env_vars, is_cmd_stopped, \
         show_help=False, no_pipe=True):
     if show_help:
-        return "Change directory in the app"
+        result = "Change directory in the app\n\ncd <directory path>"
+        return result
 
     words = input_str.split()
     try:

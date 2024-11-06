@@ -152,6 +152,42 @@ def get_file_list(filename):
     return result_list
 
 
+def print_help_msg(op, no_pipe):
+    cmd_examples = '''
+It shows file content with different color for each columns.
+Wildcard is allowed which can be used to see multiple files
+
+Example)
+    > cat proc/*/stack
+
+    ========== < proc/1/stack > ==========
+    [<0>] ep_poll+0x348/0x3b0
+    [<0>] do_epoll_wait+0xa3/0xc0
+    [<0>] __x64_sys_epoll_wait+0x60/0x100
+    [<0>] do_syscall_64+0x5c/0x90
+    [<0>] entry_SYSCALL_64_after_hwframe+0x64/0xce
+
+    ========== < proc/10/stack > ==========
+    [<0>] worker_thread+0xbb/0x3a0
+    [<0>] kthread+0xd9/0x100
+    [<0>] ret_from_fork+0x22/0x30
+    ...
+
+    '''
+
+    if no_pipe == False:
+        output = StringIO.StringIO()
+        op.print_help(file=output)
+        contents = output.getvalue()
+        output.close()
+
+        return contents + "\n" + cmd_examples
+    else:
+        op.print_help()
+        print(cmd_examples)
+        return ""
+
+
 is_cmd_stopped = None
 def run_fileview(input_str, env_vars, is_cmd_stopped_func,\
         show_help=False, no_pipe=True):
@@ -169,16 +205,8 @@ def run_fileview(input_str, env_vars, is_cmd_stopped_func,\
     except:
         return ""
 
-    if o.help or show_help == True:
-        if no_pipe == False:
-            output = StringIO.StringIO()
-            op.print_help(file=output)
-            contents = output.getvalue()
-            output.close()
-            return contents
-        else:
-            op.print_help()
-            return ""
+    if o.help or show_help == True or len(args) == 1:
+        return print_help_msg(op, no_pipe)
 
     result_str = ''
     file_list = []
