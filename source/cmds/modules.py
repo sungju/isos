@@ -274,7 +274,7 @@ def run_modules(input_str, env_vars, is_cmd_stopped_func,\
     except:
         return ""
 
-    if o.help or show_help == True or len(args) == 1:
+    if o.help or show_help == True:
         return print_help_msg(op, no_pipe)
     
     set_color_table(no_pipe)
