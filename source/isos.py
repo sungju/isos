@@ -226,7 +226,9 @@ def show_usage(input_str, env_vars, is_cmd_stopped,\
         result_str = ""
     result_str = result_str + ("Help\n%s\n" % ("-" * 30))
     count = 0
-    for key in command_set | mod_command_set:
+    combined_dict = command_set | mod_command_set
+    combined_dict = dict(sorted(combined_dict.items(), key=lambda item: item[0]))
+    for key in combined_dict:
         result_str = result_str + ("%-10s " % (key))
         count = count + 1
         if ((count % 4) == 0):
