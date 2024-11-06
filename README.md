@@ -1,6 +1,14 @@
 # isos
 Interactive sos checker
 
+### Reason of this tool
+
+- Reduce typing
+  - Shows the file content in color if the command is matching with the file in the current directory. Otherwise, try to run the command underlying system
+  - It changes directory if command is matching with directory name. 
+- Automate some tedious jobs
+  - It's trying to avoid multi-step commands with single option.
+
 ## Usage
 
 - It is convinent to make an alias like below.
