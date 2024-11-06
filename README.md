@@ -12,12 +12,24 @@ Interactive sos checker
 
 ## Usage
 
-- It is convinent to make an alias like below.
+- Clone the code to local filesystem
 
 ```
+# Clone the source
 $ cd ~/
 $ git clone https://github.com/sungju/isos.git
+```
+
+- Using alias is recommended
+
+```
 $ alias is='~/isos/isos.sh'
+```
+
+- It is convinent to make an alias like below in bashrc.
+
+```
+$ echo "alias is='~/isos/isos.sh'" >> ~/.bashrc
 ```
 
 - Move to the sosreport directory and start the command.
