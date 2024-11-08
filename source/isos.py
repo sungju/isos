@@ -41,7 +41,7 @@ from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.formatted_text import HTML
-#from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.completion import WordCompleter
 #from prompt_toolkit.completion import PathCompleter
 from prompt_toolkit.completion import merge_completers
 from prompt_toolkit.shortcuts import CompleteStyle
@@ -782,6 +782,11 @@ def isos():
 
     input_session = get_input_session()
     shell_completer = ShellCompleter()
+    cmd_completer = WordCompleter((command_set | mod_command_set).keys(), WORD=True)
+    my_completer = merge_completers(
+            [cmd_completer, shell_completer],
+            deduplicate = False)
+
 
     #history_start_idx = len(get_history_list(input_session))
     history_cmds = []
@@ -802,7 +807,7 @@ def isos():
             prompt_str, prompt_style = get_prompt_str()
             input_str = input_session.prompt(prompt_str,
                                              style=prompt_style,
-                                             completer=shell_completer,
+                                             completer=my_completer,
                                              complete_style=CompleteStyle.READLINE_LIKE,
                                              complete_while_typing=True,
                                              key_bindings=bindings,
