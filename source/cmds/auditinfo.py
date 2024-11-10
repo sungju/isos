@@ -146,7 +146,11 @@ def get_files_in_path(mypath, extension):
     if not mypath.endswith("/"):
         mypath = mypath + "/"
 
-    onlyfiles = [mypath + f for f in listdir(mypath) if isfile(join(mypath, f)) and f.endswith(extension)]
+    onlyfiles = []
+    try:
+        onlyfiles = [mypath + f for f in listdir(mypath) if isfile(join(mypath, f)) and f.endswith(extension)]
+    except:
+        pass
     return onlyfiles
 
 
