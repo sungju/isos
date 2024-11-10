@@ -27,21 +27,30 @@ def cpu_graph_func(line, no_pipe, is_header):
         sartime = sartime + words[i] + ' '
 
     if is_header:
+        line = line.replace('%usr', '%Usr')
+        line = line.replace('%nice', '%Nice')
+        line = line.replace('%sys', '%Sys')
+        line = line.replace('%iowait', '%Iowait')
+        line = line.replace('%steal', '%sTeal')
+        line = line.replace('%irq', '%irQ')
+        line = line.replace('%soft', '%soFt')
+        line = line.replace('%guest', '%Guest')
+        line = line.replace('%gnice', '%gniCe')
         result_str = screen.get_pipe_aware_line(line)
         result_str = result_str + ('%s  %s\n' % (' '* (len(sartime) + 8), pbar('=', 100, 100, blen)))
         if no_pipe:
             print(result_str)
             result_str = ''
     else:
-        item1_bar = pbar('#', 100, float(words[header_start_idx + 1]), blen)
-        item2_bar = pbar('#', 100, float(words[header_start_idx + 2]), blen)
-        item3_bar = pbar('#', 100, float(words[header_start_idx + 3]), blen)
-        item4_bar = pbar('#', 100, float(words[header_start_idx + 4]), blen)
-        item5_bar = pbar('#', 100, float(words[header_start_idx + 5]), blen)
-        item6_bar = pbar('#', 100, float(words[header_start_idx + 6]), blen)
-        item7_bar = pbar('#', 100, float(words[header_start_idx + 7]), blen)
-        item8_bar = pbar('#', 100, float(words[header_start_idx + 8]), blen)
-        item9_bar = pbar('#', 100, float(words[header_start_idx + 9]), blen)
+        item1_bar = pbar('U', 100, float(words[header_start_idx + 1]), blen)
+        item2_bar = pbar('N', 100, float(words[header_start_idx + 2]), blen)
+        item3_bar = pbar('S', 100, float(words[header_start_idx + 3]), blen)
+        item4_bar = pbar('I', 100, float(words[header_start_idx + 4]), blen)
+        item5_bar = pbar('T', 100, float(words[header_start_idx + 5]), blen)
+        item6_bar = pbar('Q', 100, float(words[header_start_idx + 6]), blen)
+        item7_bar = pbar('F', 100, float(words[header_start_idx + 7]), blen)
+        item8_bar = pbar('G', 100, float(words[header_start_idx + 8]), blen)
+        item9_bar = pbar('C', 100, float(words[header_start_idx + 9]), blen)
         avail_bar = pbar('.', blen, blen - len(item1_bar) - len(item2_bar) -\
                 len(item3_bar) - len(item4_bar) - len(item5_bar) - len(item6_bar) -\
                 len(item7_bar) - len(item8_bar) - len(item9_bar), blen)
