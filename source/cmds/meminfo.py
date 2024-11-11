@@ -40,6 +40,7 @@ def show_slabtop(op, no_pipe):
     result_str = ''
     slab_list = {}
     slab_objsize = {}
+    total_slab = 0
     idx_pagesperslab = -1
     idx_num_slabs = -1
     idx_objsize = -1
@@ -67,6 +68,7 @@ def show_slabtop(op, no_pipe):
                 total_used = int(result_line[idx_pagesperslab]) *\
                              int(result_line[idx_num_slabs])
                 slab_list[result_line[0]] = total_used
+                total_slab = total_slab + total_used
                 slab_objsize[result_line[0]] = int(result_line[idx_objsize])
 
     except Exception as e:
@@ -101,6 +103,9 @@ def show_slabtop(op, no_pipe):
     if print_count < len(sorted_slabtop) - 1:
         result_str = result_str + screen.get_pipe_aware_line("\t<...>")
     result_str = result_str + screen.get_pipe_aware_line("=" * 51)
+    result_str = result_str +\
+            screen.get_pipe_aware_line("Total memory usage from SLAB = %s" %
+          (get_size_str(total_slab * 1024)))
 
     return result_str
 
