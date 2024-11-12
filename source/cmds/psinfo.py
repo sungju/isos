@@ -14,8 +14,9 @@ def add_command():
     return True
 
 
+cmd_name = "psinfo"
 def get_command_info():
-    return { "ps": run_psinfo }
+    return { "%s" % cmd_name : run_psinfo }
 
 
 COLOR_ONE   = ansicolor.get_color(ansicolor.YELLOW)
@@ -205,11 +206,11 @@ def print_help_msg(op, no_pipe):
     cmd_examples = '''
 Examples:
     # To see only specified number of lines
-    > ps -l 10
+    > psinfo -l 10
 
     # To sort by resource type. It shows the highest at the bottom
     # unless specifying line numbers with -l
-    > ps -s rss 
+    > psinfo -s rss 
     '''
 
     if no_pipe == False:
@@ -231,7 +232,7 @@ def run_psinfo(input_str, env_vars, is_cmd_stopped_func,\
     global is_cmd_stopped
     is_cmd_stopped = is_cmd_stopped_func
 
-    usage = "Usage: ps [options]"
+    usage = "Usage: %s [options]" % (cmd_name)
     op = OptionParser(usage=usage, add_help_option=False)
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')

@@ -55,7 +55,7 @@ Help
 ------------------------------
 help       man        cd         eval       
 set        xsos       reload     list       
-exit       ps         cron       cat        
+exit       psinfo     cron       cat        
 perf       mods       trace      audit      
 powner     log        sar   
 ```
