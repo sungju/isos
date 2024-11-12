@@ -215,6 +215,8 @@ def show_oom_events(op, args, no_pipe):
                     line = line.replace("[", "")
                     line = line.replace("]", "")
                     words = line.split()
+                    if len(words) <= pname_index:
+                        continue
                     pid = words[pid_index]
                     rss = int(words[rss_index]) * page_size
                     total_usage = total_usage + rss
