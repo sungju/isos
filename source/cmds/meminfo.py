@@ -3,6 +3,7 @@ import time
 from optparse import OptionParser
 from io import StringIO
 import os
+import glob
 import operator
 from os.path import isfile, join
 
@@ -34,6 +35,82 @@ def get_size_str(size):
         size_str = "%.0f B" % (size)
 
     return size_str
+
+def get_file_list(filename):
+    result_list = []
+
+    file_list = glob.glob(filename)
+    for file in file_list:
+        result_list.append(file)
+
+    return result_list
+
+
+def show_swap_usage(op, no_pipe):
+    result_str = ""
+    swap_usage_dict = {}
+    pid_name_dict = {}
+    total_swap = 0
+    try:
+        pid_list = get_file_list(sos_home + "/proc/[0-9]*")
+        for path in pid_list:
+            try:
+                with open(path + "/status") as f:
+                    result_lines = f.readlines()
+                    swap_usage = 0
+                    pid = os.path.basename(path)
+                    for line in result_lines:
+                        if line.startswith("VmSwap:"):
+                            words = line.split()
+                            swap_usage = swap_usage + int(words[1])
+                        elif line.startswith("Name:"):
+                            pname = line.split()[1]
+                            pid_name_dict[pid] = pname
+
+                    if swap_usage > 0:
+                        swap_usage_dict[pid] = swap_usage
+                        total_swap = total_swap + swap_usage
+
+            except: # Ignore the case that doesn't have status
+                pass
+    except Exception as e:
+        print(e)
+        return ""
+
+    sorted_swap_usage = sorted(swap_usage_dict.items(),
+                            key=operator.itemgetter(1), reverse=True)
+    min_number = 10
+    if (op.all):
+        min_number = len(sorted_swap_usage) - 1
+
+    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
+    result_str = result_str +\
+            screen.get_pipe_aware_line("%-29s %-12s %15s" %
+            ("NAME", "PID", "Usage (KB)"))
+    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
+
+    print_count = min(len(sorted_swap_usage) - 1, min_number)
+
+    for i in range(0, print_count):
+        pid = sorted_swap_usage[i][0]
+        pname = pid_name_dict[pid]
+
+        result_str = result_str + \
+                screen.get_pipe_aware_line("%-29s %-12s %15s" % 
+                (pname,
+                 pid,
+                 get_size_str(sorted_swap_usage[i][1] * 1024)))
+
+    if print_count < len(sorted_swap_usage) - 1:
+        result_str = result_str + screen.get_pipe_aware_line("\t<...>")
+    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
+    result_str = result_str +\
+            screen.get_pipe_aware_line("Total memory usage from swap = %s" %
+          (get_size_str(total_swap * 1024)))
+    result_str = result_str +\
+            screen.get_pipe_aware_line("Notes) The total can be bigger than actual usage due to the shared memory")
+
+    return result_str
 
 
 def show_slabtop(op, no_pipe):
@@ -204,6 +281,10 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-s', '--slab', dest='slab', action='store_true',
                   help='Shows slabtop')
 
+    op.add_option("-w", "--swap", dest="swapshow", default=0,
+                  action="store_true",
+                  help="Show swap usage")
+
     o = args = None
     try:
         (o, args) = op.parse_args(input_str.split())
@@ -221,6 +302,8 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
     result_str = ""
     if o.slab: # show slabtop
         result_str = show_slabtop(o, no_pipe)
+    elif o.swapshow:
+        result_str = show_swap_usage(o, no_pipe)
     else: # process list
         result_str = show_ps_memusage(o, no_pipe)
 
