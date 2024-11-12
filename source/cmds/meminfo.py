@@ -5,7 +5,8 @@ from io import StringIO
 import os
 import glob
 import operator
-from os.path import isfile, join
+from os.path import expanduser, isfile, isdir, join
+
 
 from isos import run_shell_command, column_strings
 import screen
@@ -36,14 +37,138 @@ def get_size_str(size):
 
     return size_str
 
-def get_file_list(filename):
+def get_file_list(filename, checkdir=True):
     result_list = []
 
     file_list = glob.glob(filename)
     for file in file_list:
-        result_list.append(file)
+        if isdir(file) and checkdir:
+            flist = get_file_list(file + "/*")
+            result_list = result_list + flist
+        else:
+            result_list.append(file)
 
     return result_list
+
+
+def show_oom_memory_usage(op, no_pipe, oom_dict):
+    result_str = ""
+    sorted_oom_dict = sorted(oom_dict.items(),
+                            key=operator.itemgetter(1), reverse=True)
+    min_number = 10
+    if (op.all):
+        min_number = len(sorted_oom_dict) - 1
+
+    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
+    result_str = result_str +\
+            screen.get_pipe_aware_line("%-40s %15s" %
+            ("NAME", "Usage"))
+    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
+
+    print_count = min(len(sorted_oom_dict) - 1, min_number)
+
+    total_usage = 0
+
+    for i in range(0, print_count):
+        pname = sorted_oom_dict[i][0]
+
+        mem_usage = sorted_oom_dict[i][1] * 1024
+        total_usage = total_usage + mem_usage
+        result_str = result_str + \
+                screen.get_pipe_aware_line("%-40s %15s" %
+                (pname, get_size_str(mem_usage)))
+
+    if print_count < len(sorted_oom_dict) - 1:
+        result_str = result_str + screen.get_pipe_aware_line("\t<...>")
+    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
+    result_str = result_str +\
+            screen.get_pipe_aware_line("Total memory usage from processes = %s" %
+                    get_size_str(total_usage))
+
+    return result_str
+
+
+def show_oom_events(op, args, no_pipe):
+    result_str = ""
+    file_list = []
+    for file in args[1:]:
+        file_list = file_list + get_file_list(file, True)
+        
+    if len(file_list) == 0:
+        file_list.append(sos_home + "/var/log/messages")
+
+    is_first_oom = True
+    for file in file_list:
+        if not isfile(file):
+            print("Not a file : '%s'" % (file))
+            continue
+        try:
+            with open(file) as f:
+                result_lines = f.readlines()
+                oom_invoked = False
+                oom_ps_started = False
+                rss_index = -1
+                pid_index = -1
+                pname_index = -1
+                oom_dict = {}
+                for line in result_lines:
+                    if "invoked oom-killer:" in line:
+                        oom_invoked = True
+                        if not is_first_oom:
+                            line = "\n" + line
+                        result_str = result_str + \
+                                screen.get_pipe_aware_line(line.rstrip())
+                        is_first_oom = False
+                        continue
+
+                    if oom_invoked and "uid" in line and "total_vm" in line:
+                        oom_ps_started = True
+                        line = line.split(":")[3]
+                        line = line.replace("[", "")
+                        line = line.replace("]", "")
+                        words = line.split()
+                        for i in range(0, len(words)):
+                            if words[i] == "rss":
+                                rss_index = i
+                            elif words[i] == "pid":
+                                pid_index = i
+                            elif words[i] == "name":
+                                pname_index = i
+
+                        continue
+
+                    if not oom_ps_started:
+                        continue
+
+                    if "[" not in line: #end of oom_ps
+                        result_str = result_str +\
+                                show_oom_memory_usage(op, no_pipe, oom_dict)
+                        oom_invoked = False
+                        oom_ps_started = False
+                        rss_index = -1
+                        pid_index = -1
+                        pname_index = -1
+                        oom_dict = {}
+                        continue
+
+                    line = line.split(":")[3]
+                    line = line.replace("[", "")
+                    line = line.replace("]", "")
+                    words = line.split()
+                    pid = words[pid_index]
+                    rss = int(words[rss_index])
+                    pname = words[pname_index]
+                    if op.all:
+                        pname = pname + (" (%s)" % pid)
+                    if pname in oom_dict:
+                        rss = rss + oom_dict[pname]
+                    oom_dict[pname] = rss
+
+        except Exception as e:
+            print(e)
+
+
+    return result_str
 
 
 def show_swap_usage(op, no_pipe):
@@ -52,7 +177,7 @@ def show_swap_usage(op, no_pipe):
     pid_name_dict = {}
     total_swap = 0
     try:
-        pid_list = get_file_list(sos_home + "/proc/[0-9]*")
+        pid_list = get_file_list(sos_home + "/proc/[0-9]*", checkdir=False)
         for path in pid_list:
             try:
                 with open(path + "/status") as f:
@@ -86,7 +211,7 @@ def show_swap_usage(op, no_pipe):
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
     result_str = result_str +\
             screen.get_pipe_aware_line("%-29s %-12s %15s" %
-            ("NAME", "PID", "Usage (KB)"))
+            ("NAME", "PID", "Usage"))
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
 
     print_count = min(len(sorted_swap_usage) - 1, min_number)
@@ -280,6 +405,10 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-a', '--all', dest='all', action='store_true',
                   help='Show all entries')
 
+    op.add_option('-o', '--oom', dest='oom', action='store_true',
+                  help='Shows OOM events')
+
+
     op.add_option('-s', '--slab', dest='slab', action='store_true',
                   help='Shows slabtop')
 
@@ -304,6 +433,8 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
     result_str = ""
     if o.slab: # show slabtop
         result_str = show_slabtop(o, no_pipe)
+    elif o.oom:
+        result_str = show_oom_events(o, args, no_pipe)
     elif o.swapshow:
         result_str = show_swap_usage(o, no_pipe)
     else: # process list
