@@ -196,6 +196,8 @@ def show_ps_memusage(op, no_pipe):
             result_lines = f.readlines()
             for i in range(1, len(result_lines)):
                 result_line = result_lines[i].split()
+                if result_line[5] == "-":
+                    continue
                 if len(result_line) < 11:
                     continue
                 pid = result_line[1]
