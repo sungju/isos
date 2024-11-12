@@ -52,6 +52,32 @@ def get_file_list(filename, checkdir=True):
     return result_list
 
 
+def show_oom_meminfo(op, no_pipe, meminfo_dict):
+    result_str = ""
+    page_size = get_main().page_size
+    result_str = result_str + screen.get_pipe_aware_line("\n%s" % ('#' * 46))
+    result_str = result_str +\
+            screen.get_pipe_aware_line("%-30s %15s" %
+                    ("Category", "Size"))
+    result_str = result_str + screen.get_pipe_aware_line("%s" % ('-' * 46))
+
+    for key in meminfo_dict:
+        try:
+            val = meminfo_dict[key]
+            if val.endswith("B"):
+                size_str = val
+            else:
+                size_str = get_size_str(int(val.split('#')[0]) * page_size)
+            result_str = result_str +\
+                    screen.get_pipe_aware_line("%-30s %15s" % 
+                            (key, size_str))
+        except:
+            pass
+    result_str = result_str + screen.get_pipe_aware_line("%s" % ('~' * 46))
+
+    return result_str
+
+
 def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
     result_str = ""
     sorted_oom_dict = sorted(oom_dict.items(),
@@ -105,11 +131,13 @@ def show_oom_events(op, args, no_pipe):
             with open(file) as f:
                 result_lines = f.readlines()
                 oom_invoked = False
+                oom_meminfo = False
                 oom_ps_started = False
                 rss_index = -1
                 pid_index = -1
                 pname_index = -1
                 oom_dict = {}
+                meminfo_dict = {}
                 total_usage = 0
                 for line in result_lines:
                     if "invoked oom-killer:" in line:
@@ -121,8 +149,34 @@ def show_oom_events(op, args, no_pipe):
                         is_first_oom = False
                         continue
 
+                    if oom_invoked and "Mem-Info:" in line:
+                        oom_meminfo = True
+                        continue
+
+                    if oom_meminfo:
+                        if " Node " not in line and "shmem:" in line:
+                            line = line[line.find(" kernel: ") + 9:]
+                            words = line.split()
+                            for entry in words:
+                                key_val = entry.split(':')
+                                meminfo_dict[key_val[0]] = key_val[1]
+                            continue
+                        elif " hugepages_total" in line:
+                            line = line[line.find("hugepages_total="):]
+                            words = line.split()
+                            for entry in words:
+                                key_val = entry.split('=')
+                                meminfo_dict[key_val[0]] = key_val[1]
+                            continue
+                        elif " total pagecache pages" in line:
+                            line = line[line.find(" kernel: ") + 9:]
+                            words = line.split()
+                            meminfo_dict["Pagecaches"] = words[0]
+
+
                     if oom_invoked and "uid" in line and "total_vm" in line:
                         oom_ps_started = True
+                        oom_meminfo = False
                         line = line.split(":")[3]
                         line = line.replace("[", "")
                         line = line.replace("]", "")
@@ -143,12 +197,17 @@ def show_oom_events(op, args, no_pipe):
                     if "[" not in line: #end of oom_ps
                         result_str = result_str +\
                                 show_oom_memory_usage(op, no_pipe, oom_dict, total_usage)
+                        if op.details:
+                            result_str = result_str +\
+                                    show_oom_meminfo(op, no_pipe, meminfo_dict)
                         oom_invoked = False
+                        oom_meminfo = False
                         oom_ps_started = False
                         rss_index = -1
                         pid_index = -1
                         pname_index = -1
                         oom_dict = {}
+                        meminfo_dict = {}
                         total_usage = 0
                         continue
 
@@ -407,6 +466,9 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
 
     op.add_option('-a', '--all', dest='all', action='store_true',
                   help='Show all entries')
+
+    op.add_option('-d', '--details', dest='details', action='store_true',
+                  help='Show further details')
 
     op.add_option('-o', '--oom', dest='oom', action='store_true',
                   help='Shows OOM events')
