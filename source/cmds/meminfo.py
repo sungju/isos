@@ -10,6 +10,7 @@ from os.path import expanduser, isfile, isdir, join
 
 from isos import run_shell_command, column_strings
 import screen
+from soshelpers import get_main
 
 def description():
     return "Shows memory related information"
@@ -51,7 +52,7 @@ def get_file_list(filename, checkdir=True):
     return result_list
 
 
-def show_oom_memory_usage(op, no_pipe, oom_dict):
+def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
     result_str = ""
     sorted_oom_dict = sorted(oom_dict.items(),
                             key=operator.itemgetter(1), reverse=True)
@@ -67,13 +68,10 @@ def show_oom_memory_usage(op, no_pipe, oom_dict):
 
     print_count = min(len(sorted_oom_dict) - 1, min_number)
 
-    total_usage = 0
-
     for i in range(0, print_count):
         pname = sorted_oom_dict[i][0]
 
-        mem_usage = sorted_oom_dict[i][1] * 1024
-        total_usage = total_usage + mem_usage
+        mem_usage = sorted_oom_dict[i][1]
         result_str = result_str + \
                 screen.get_pipe_aware_line("%-40s %15s" %
                 (pname, get_size_str(mem_usage)))
@@ -98,6 +96,7 @@ def show_oom_events(op, args, no_pipe):
         file_list.append(sos_home + "/var/log/messages")
 
     is_first_oom = True
+    page_size = get_main().page_size
     for file in file_list:
         if not isfile(file):
             print("Not a file : '%s'" % (file))
@@ -111,6 +110,7 @@ def show_oom_events(op, args, no_pipe):
                 pid_index = -1
                 pname_index = -1
                 oom_dict = {}
+                total_usage = 0
                 for line in result_lines:
                     if "invoked oom-killer:" in line:
                         oom_invoked = True
@@ -142,13 +142,14 @@ def show_oom_events(op, args, no_pipe):
 
                     if "[" not in line: #end of oom_ps
                         result_str = result_str +\
-                                show_oom_memory_usage(op, no_pipe, oom_dict)
+                                show_oom_memory_usage(op, no_pipe, oom_dict, total_usage)
                         oom_invoked = False
                         oom_ps_started = False
                         rss_index = -1
                         pid_index = -1
                         pname_index = -1
                         oom_dict = {}
+                        total_usage = 0
                         continue
 
                     line = line.split(":")[3]
@@ -156,7 +157,8 @@ def show_oom_events(op, args, no_pipe):
                     line = line.replace("]", "")
                     words = line.split()
                     pid = words[pid_index]
-                    rss = int(words[rss_index])
+                    rss = int(words[rss_index]) * page_size
+                    total_usage = total_usage + rss
                     pname = words[pname_index]
                     if op.all:
                         pname = pname + (" (%s)" % pid)
