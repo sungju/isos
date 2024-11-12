@@ -174,7 +174,6 @@ def show_oom_events(op, args, no_pipe):
 def show_swap_usage(op, no_pipe):
     result_str = ""
     swap_usage_dict = {}
-    pid_name_dict = {}
     total_swap = 0
     try:
         pid_list = get_file_list(sos_home + "/proc/[0-9]*", checkdir=False)
@@ -184,19 +183,24 @@ def show_swap_usage(op, no_pipe):
                     result_lines = f.readlines()
                     swap_usage = 0
                     pid = os.path.basename(path)
+                    pname = ""
                     for line in result_lines:
                         if line.startswith("VmSwap:"):
                             words = line.split()
                             swap_usage = swap_usage + int(words[1])
                         elif line.startswith("Name:"):
                             pname = line.split()[1]
-                            pid_name_dict[pid] = pname
 
                     if swap_usage > 0:
-                        swap_usage_dict[pid] = swap_usage
+                        if op.all:
+                            pname = pname + (" (%s)" % pid)
                         total_swap = total_swap + swap_usage
+                        if pname in swap_usage_dict:
+                            swap_usage = swap_usage + swap_usage_dict[pname]
+                        swap_usage_dict[pname] = swap_usage
 
-            except: # Ignore the case that doesn't have status
+            except Exception as ie:
+                # Ignore the case that doesn't have status
                 pass
     except Exception as e:
         print(e)
@@ -210,21 +214,18 @@ def show_swap_usage(op, no_pipe):
 
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
     result_str = result_str +\
-            screen.get_pipe_aware_line("%-29s %-12s %15s" %
-            ("NAME", "PID", "Usage"))
+            screen.get_pipe_aware_line("%-42s %15s" %
+            ("NAME", "Usage"))
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
 
     print_count = min(len(sorted_swap_usage) - 1, min_number)
 
     for i in range(0, print_count):
-        pid = sorted_swap_usage[i][0]
-        pname = pid_name_dict[pid]
+        pname = sorted_swap_usage[i][0]
 
         result_str = result_str + \
-                screen.get_pipe_aware_line("%-29s %-12s %15s" % 
-                (pname,
-                 pid,
-                 get_size_str(sorted_swap_usage[i][1] * 1024)))
+                screen.get_pipe_aware_line("%-42s %15s" % 
+                (pname, get_size_str(sorted_swap_usage[i][1] * 1024)))
 
     if print_count < len(sorted_swap_usage) - 1:
         result_str = result_str + screen.get_pipe_aware_line("\t<...>")
