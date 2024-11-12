@@ -436,6 +436,22 @@ def show_ps_memusage(op, no_pipe):
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
     It shows memory usage from process / slab.
+
+Example)
+    To see oom events, you can specify log name or default file (/var/log/messages)
+    will be used.
+
+    example.com> meminfo -o
+    Nov  9 01:12:50 example.com kernel: https-jsse-nio- invoked oom-killer: ...
+    ==========================================================
+    NAME                                               Usage
+    ==========================================================
+    java                                            11.2 GiB
+    nft                                              1.3 GiB
+    ...
+        <...>
+    ==========================================================
+    Total memory usage from processes = 14.0 GiB
     '''
 
     if no_pipe == False:
@@ -459,7 +475,7 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
 
     is_cmd_stopped = is_cmd_stopped_func
 
-    usage = "Usage: %s [options]" % (cmd_name)
+    usage = "Usage: %s [options] [file names]" % (cmd_name)
     op = OptionParser(usage=usage, add_help_option=False)
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')
