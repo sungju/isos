@@ -120,6 +120,8 @@ def show_oom_events(op, args, no_pipe):
         
     if len(file_list) == 0:
         file_list.append(sos_home + "/var/log/messages")
+        file_list = file_list + \
+                get_file_list(sos_home + "/sos_commands/logs/journalctl*", False)
 
     is_first_oom = True
     page_size = get_main().page_size
@@ -129,6 +131,8 @@ def show_oom_events(op, args, no_pipe):
             continue
         try:
             with open(file) as f:
+                result_str = result_str +\
+                        screen.get_pipe_aware_line("\nChecking file %s\n" % file)
                 result_lines = f.readlines()
                 oom_invoked = False
                 oom_meminfo = False
