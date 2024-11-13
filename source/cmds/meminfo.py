@@ -88,7 +88,7 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
 
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
     result_str = result_str +\
-            screen.get_pipe_aware_line("%-40s %15s" %
+            screen.get_pipe_aware_line("%-42s %15s" %
             ("NAME", "Usage"))
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
 
@@ -99,7 +99,7 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
 
         mem_usage = sorted_oom_dict[i][1]
         result_str = result_str + \
-                screen.get_pipe_aware_line("%-40s %15s" %
+                screen.get_pipe_aware_line("%-42s %15s" %
                 (pname, get_size_str(mem_usage)))
 
     if print_count < len(sorted_oom_dict) - 1:
@@ -138,6 +138,7 @@ def show_oom_events(op, args, no_pipe):
                 pname_index = -1
                 oom_dict = {}
                 meminfo_dict = {}
+                cgroup_dict = {}
                 total_usage = 0
                 for line in result_lines:
                     if "invoked oom-killer:" in line:
@@ -149,9 +150,23 @@ def show_oom_events(op, args, no_pipe):
                         is_first_oom = False
                         continue
 
-                    if oom_invoked and "Mem-Info:" in line:
-                        oom_meminfo = True
-                        continue
+                    if oom_invoked:
+                        if "Mem-Info:" in line:
+                            oom_meminfo = True
+                            continue
+                        elif "memory: usage" in line:
+                            line = line[line.find(" kernel: ") + 9:]
+                            cgroup_dict["memory"] = line
+                            continue
+                        elif "swap: usage" in line:
+                            line = line[line.find(" kernel: ") + 9:]
+                            cgroup_dict["swap"] = line
+                            continue
+                        elif "Memory cgroup stats for" in line:
+                            line = line[line.find(" stats for ") + 11:-2]
+                            cgroup_dict["cgroup"] = line
+                            continue
+
 
                     if oom_meminfo:
                         if " Node " not in line and "shmem:" in line:
@@ -195,6 +210,14 @@ def show_oom_events(op, args, no_pipe):
                         continue
 
                     if "[" not in line: #end of oom_ps
+                        if len(cgroup_dict) > 0:
+                            result_str = result_str +\
+                                    screen.get_pipe_aware_line("CGroup : " + cgroup_dict["cgroup"])
+                            cgroup_dict.pop("cgroup")
+                            for key in cgroup_dict:
+                                result_str = result_str + \
+                                        screen.get_pipe_aware_line("  " + cgroup_dict[key])
+
                         result_str = result_str +\
                                 show_oom_memory_usage(op, no_pipe, oom_dict, total_usage)
                         if op.details:
@@ -208,6 +231,7 @@ def show_oom_events(op, args, no_pipe):
                         pname_index = -1
                         oom_dict = {}
                         meminfo_dict = {}
+                        cgroup_dict = {}
                         total_usage = 0
                         continue
 
@@ -491,6 +515,8 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-o', '--oom', dest='oom', action='store_true',
                   help='Shows OOM events')
 
+    op.add_option('-p', '--process', dest='process', action='store_true',
+                  help='Shows process memory usage (default)')
 
     op.add_option('-s', '--slab', dest='slab', action='store_true',
                   help='Shows slabtop')
@@ -520,7 +546,9 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
         result_str = show_oom_events(o, args, no_pipe)
     elif o.swapshow:
         result_str = show_swap_usage(o, no_pipe)
-    else: # process list
+    elif o.process:
+        result_str = show_ps_memusage(o, no_pipe)
+    else: # default: process list
         result_str = show_ps_memusage(o, no_pipe)
 
     return result_str
