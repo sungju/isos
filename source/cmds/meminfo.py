@@ -25,6 +25,39 @@ def get_command_info():
     return { cmd_name : run_meminfo }
 
 
+
+def show_mem_balloon(op, no_pipe):
+    result_str = ''
+    page_size = get_main().page_size
+    try:
+        with open(sos_home + "/sys/kernel/debug/vmmemctl") as f:
+            result_lines = f.readlines()
+            target = 0
+            current = 0
+            for line in result_lines:
+                words = line.split(":")
+                if words[0] == "target" and words[1].endswith("pages"):
+                    target = int(words[1].split()[0])
+                elif words[0] == "current":
+                    current = int(words[1].split()[0])
+
+
+            result_str = result_str +\
+                    screen.get_pipe_aware_line("VMware VM")
+            result_str = result_str +\
+                    screen.get_pipe_aware_line("Target : %d pages (%s)" %\
+                        (target, get_size_str(target * page_size)))
+            result_str = result_str +\
+                    screen.get_pipe_aware_line("Current: %d pages (%s)" %\
+                        (current, get_size_str(current * page_size)))
+
+            return result_str
+    except:
+        pass
+
+    return result_str
+
+
 def get_size_str(size):
     size_str = ""
     if size > (1024 * 1024 * 1024): # GiB
@@ -513,6 +546,9 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-a', '--all', dest='all', action='store_true',
                   help='Show all entries')
 
+    op.add_option('-b', '--balloon', dest='balloon', action='store_true',
+                  help='Show memory balloon')
+
     op.add_option('-d', '--details', dest='details', action='store_true',
                   help='Show further details')
 
@@ -546,6 +582,8 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
     result_str = ""
     if o.slab: # show slabtop
         result_str = show_slabtop(o, no_pipe)
+    elif o.balloon:
+        result_str = show_mem_balloon(o, no_pipe)
     elif o.oom:
         result_str = show_oom_events(o, args, no_pipe)
     elif o.swapshow:
