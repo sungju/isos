@@ -45,10 +45,10 @@ def show_mem_balloon(op, no_pipe):
             result_str = result_str +\
                     screen.get_pipe_aware_line("VMware VM")
             result_str = result_str +\
-                    screen.get_pipe_aware_line("Target : %d pages (%s)" %\
+                    screen.get_pipe_aware_line("Target  : %d pages (%s)" %\
                         (target, get_size_str(target * page_size)))
             result_str = result_str +\
-                    screen.get_pipe_aware_line("Current: %d pages (%s)" %\
+                    screen.get_pipe_aware_line("Current : %d pages (%s)" %\
                         (current, get_size_str(current * page_size)))
 
             return result_str
