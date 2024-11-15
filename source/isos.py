@@ -383,8 +383,18 @@ def xsos_run(input_str, env_vars, is_cmd_stopped,\
 
     cmd_idx = input_str.find('xsos')
     input_str = input_str[cmd_idx + 4:]
+    sos_home = env_vars["sos_home"]
+    try:
+        words = input_str.split()
+        for word in words:
+            if not word.startswith("-"):
+                sos_home = os.path.abspath(word)
+                input_str = input_str.replace(" %s" % word, "")
+                break
+    except:
+        pass
 
-    input_str = ("xsos %s %s" % (input_str, env_vars["sos_home"]))
+    input_str = ("xsos %s %s" % (input_str, sos_home))
     result = run_shell_command(input_str)
     return result
 
