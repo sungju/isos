@@ -86,7 +86,11 @@ def get_file_list(filename, checkdir=True):
     return result_list
 
 
+hugepages_size = 2 * 1024 * 1024
+
 def show_oom_meminfo(op, no_pipe, meminfo_dict):
+    global hugepages_size
+
     result_str = ""
     page_size = get_main().page_size
     result_str = result_str + screen.get_pipe_aware_line("\n%s" % ('#' * 46))
@@ -102,6 +106,8 @@ def show_oom_meminfo(op, no_pipe, meminfo_dict):
         try:
             key = sorted_meminfo_dict[i][0]
             val = sorted_meminfo_dict[i][1]
+            if key.startswith("hugepages_") and key != "hugepages_size":
+                val = val * hugepages_size
             result_str = result_str +\
                     screen.get_pipe_aware_line("%-30s %15s" % 
                             (key, get_size_str(val)))
@@ -160,6 +166,8 @@ def get_size(val):
 
 
 def show_oom_events(op, args, no_pipe):
+    global hugepages_size
+
     result_str = ""
     file_list = []
     for file in args[1:]:
@@ -229,12 +237,20 @@ def show_oom_events(op, args, no_pipe):
                                 key_val = entry.split(':')
                                 meminfo_dict[key_val[0]] = get_size(key_val[1])
                             continue
-                        elif " hugepages_total" in line:
+                        elif " Node " not in line and " hugepages_total" in line:
                             line = line[line.find("hugepages_total="):]
                             words = line.split()
                             for entry in words:
-                                key_val = entry.split('=')
-                                meminfo_dict[key_val[0]] = get_size(key_val[1])
+                                try:
+                                    key_val = entry.split('=')
+                                    if key_val[0] != "hugepages_size":
+                                        size = int(key_val[1])
+                                    else:
+                                        size = get_size(key_val[1])
+                                        hugepages_size = size
+                                    meminfo_dict[key_val[0]] = size
+                                except Exception as ie:
+                                    print(ie)
                             continue
                         elif " total pagecache pages" in line:
                             line = line[line.find(" kernel: ") + 9:]
