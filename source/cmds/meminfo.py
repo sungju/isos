@@ -165,6 +165,14 @@ def get_size(val):
     return size
 
 
+def get_sos_relative_name(path):
+    if path.startswith(sos_home):
+        prompt_str, _ = get_main().get_home_path_str()
+        path = prompt_str + path[len(sos_home):]
+
+    return path
+
+
 def show_oom_events(op, args, no_pipe):
     global hugepages_size
 
@@ -187,7 +195,7 @@ def show_oom_events(op, args, no_pipe):
         try:
             with open(file) as f:
                 result_str = result_str +\
-                        screen.get_pipe_aware_line("\nChecking file %s\n" % file)
+                        screen.get_pipe_aware_line("\nChecking file %s\n" % get_sos_relative_name(file))
                 result_lines = f.readlines()
                 oom_invoked = False
                 oom_meminfo = False

@@ -608,7 +608,7 @@ def get_prompt_style(situation):
     return styles.get(situation, styles['normal'])
 
 
-def get_prompt_str():
+def get_home_path_str():
     hostname = "$HOME"
     home_path = get_home_dir()
     if home_path != "":
@@ -617,6 +617,11 @@ def get_prompt_str():
             with open(hostname_str) as f:
                 hostname = f.read().strip()
 
+    return hostname, home_path
+
+
+def get_prompt_str():
+    hostname, home_path = get_home_path_str()
     cur_path = os.getcwd()
 
     if cur_path.startswith(home_path):
