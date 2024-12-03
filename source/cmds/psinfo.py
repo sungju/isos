@@ -4,6 +4,7 @@ from optparse import OptionParser
 from io import StringIO
 
 import ansicolor
+import screen
 
 
 def description():
@@ -202,6 +203,99 @@ def read_ps_basic(ps_path, no_pipe, options):
     return result_str
 
 
+def show_ps_tree(sos_home, no_pipe, options):
+    result_str = ""
+    pid = options.process_details
+    try:
+        with open(sos_home + "/sos_commands/process/pidstat_-tl") as f:
+            result_lines = f.readlines()
+            for line in result_lines:
+                words = line.split()
+                if len(words) > 3 and words[2] == pid:
+                    result_str = result_str +\
+                        screen.get_pipe_aware_line(
+                            "CPU Usage: %s, usr: %s, sys: %s, guest: %s, wait: %s" %\
+                            (words[8], words[4], words[5], words[6], words[7]))
+    except Exception as e:
+        #print(e)
+        pass
+
+    try:
+        with open(sos_home + "/sos_commands/process/ps_auxwwwm") as f:
+            result_lines = f.readlines()
+            for line in result_lines:
+                words = line.split()
+                if len(words) > 7 and words[1] == pid:
+                    result_str = result_str + screen.get_pipe_aware_line(
+                            "MEM Usage: %s, VSZ: %s, RSS: %s" %\
+                            (words[3], get_size_str(int(words[4])),\
+                             get_size_str(int(words[5]))))
+                    break
+        result_str = result_str + screen.get_pipe_aware_line("")
+    except Exception as e:
+        #print(e)
+        pass
+
+
+    try:
+        with open(sos_home + "/sos_commands/process/ps_-elfL") as f:
+            result_lines = f.readlines()
+            for line in result_lines:
+                if pid in line:
+                    words = line.split()
+                    if len(words) < 17:
+                        continue
+                    pstate = words[1]
+                    if words[3] == words[5]: # thread leader
+                        cmd_str = line[line.find(words[15]) + len(words[15]):].strip()
+                        result_str = result_str +\
+                                screen.get_pipe_aware_line(
+                                        "%s (%s) [%s] by %s" % (cmd_str, pid, pstate, words[2]))
+                    else:
+                        wchan = words[12]
+                        result_str = result_str + \
+                                screen.get_pipe_aware_line(
+                                        "\t+- %s (%s) [%s]" % (words[5], wchan, pstate))
+
+    except Exception as e:
+        #print(e)
+        pass
+
+
+    proc_dir = sos_home + ("/proc/%s" % (pid))
+    try:
+        with open(proc_dir + "/stack") as f:
+            result_lines = f.readlines()
+            result_str = result_str + screen.get_pipe_aware_line("\nCall Trace:\n")
+            for line in result_lines:
+                result_str = result_str + screen.get_pipe_aware_line("  " + line)
+    except Exception as e:
+        #print(e)
+        pass
+
+
+    try:
+        with open(proc_dir + "/limits") as f:
+            result_lines = f.readlines()
+            result_str = result_str + screen.get_pipe_aware_line("\n\n")
+            for line in result_lines:
+                result_str = result_str + screen.get_pipe_aware_line(line)
+    except Exception as e:
+        #print(e)
+        pass
+
+
+
+    return result_str
+
+
+def show_process_details(sos_home, no_pipe, options):
+    result_str = show_ps_tree(sos_home, no_pipe, options)
+
+
+    return result_str
+
+
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
 Examples:
@@ -240,6 +334,9 @@ def run_psinfo(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-l', '--lines', dest='lines_to_print', default=0,
             action='store', type="int",
             help="Shows only specified number of lines from the top")
+    op.add_option('-p', '--pid', dest='process_details', default='',
+            action='store', type="string",
+            help="Shows details of a specified process")
     op.add_option('-s', '--sort', dest='sort_by', default="",
             action='store', type="string",
             help="Sorts the output by one of the below options\n" + \
@@ -254,9 +351,16 @@ def run_psinfo(input_str, env_vars, is_cmd_stopped_func,\
     except:
         return ""
 
+
     if o.help or show_help == True:
         return print_help_msg(op, no_pipe)
 
-    result_str = read_ps_basic(env_vars["sos_home"] + "/ps", no_pipe, o)
+    sos_home = env_vars["sos_home"]
+    screen.init_data(no_pipe, 1, is_cmd_stopped)
+
+    if o.process_details:
+        result_str = show_process_details(sos_home, no_pipe, o)
+    else:
+        result_str = read_ps_basic(sos_home + "/ps", no_pipe, o)
 
     return result_str
