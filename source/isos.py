@@ -284,6 +284,21 @@ env_vars = {
     "sos_home": os.getcwd(),
 }
 
+def set_home(input_str, env_vars, is_cmd_stopped,\
+        show_help=False, no_pipe=True):
+    words = input_str.split()
+    if show_help:
+        result_str = "Usage) sethome [path]\n\nChange sosreport root directory"
+        return result_str
+
+    new_path = "."
+    if len(words) > 1:
+        new_path = words[1]
+    input_str = "set sos_home %s" % new_path
+
+    return set_env(input_str, env_vars, is_cmd_stopped, show_help, no_pipe)
+
+
 def set_env(input_str, env_vars, is_cmd_stopped,\
         show_help=False, no_pipe=True):
     words = input_str.split()
@@ -446,6 +461,7 @@ command_set = {
     "cd"   : change_dir,
     "eval" : eval_expr,
     "set"  : set_env,
+    "sethome" : set_home,
     "xsos" : xsos_run,
     "reload" : reload_commands,
     "list" : show_commands,
