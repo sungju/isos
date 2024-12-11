@@ -98,30 +98,35 @@ def load_rules():
 def show_rules_list():
     global modules
 
+    result_str = ""
     count = len(modules)
     if count == 0:
-        print("No rules available for this system")
+        result_str = result_str + \
+                screen.get_pipe_color_line("No rules available for this system")
         return
 
-    print("-" * 75)
+    result_str = result_str + screen.get_pipe_color_line("-" * 75)
     for module in modules:
-        ansicolor.set_color(ansicolor.BLUE)
-        print("[%s]" % (module.__name__), end='')
+        result_str = result_str + screen.get_pipe_color_line("[%s]" % (module.__name__), "blue", end='')
         if module.is_major():
-            ansicolor.set_color(ansicolor.GREEN)
+            mod_color = "green"
         else:
-            ansicolor.set_color(ansicolor.RESET)
+            mod_color = ""
         try:
-            print(": %s" % (module.description()))
+            result_str = result_str + \
+                    screen.get_pipe_color_line(": %s" % (module.description()),
+                            mod_color)
         except:
-            print(": No description available")
+            result_str = result_str + \
+                    screen.get_pipe_color_line(": No description available")
 
-        ansicolor.set_color(ansicolor.RESET)
 
+    result_str = result_str + screen.get_pipe_color_line("-" * 75)
+    result_str = result_str + \
+            screen.get_pipe_color_line("There are %d rules available for this system" % (count))
+    result_str = result_str + screen.get_pipe_color_line("=" * 75)
 
-    print("-" * 75)
-    print("There are %d rules available for this vmcore" % (count))
-    print("=" * 75)
+    return result_str
 
 
 def load_rules_in_a_path(source_path):
@@ -145,52 +150,64 @@ def load_rules_in_a_path(source_path):
 
 
 def print_result(result_list):
+    result_str = ""
     for result_dict in result_list:
-        print("=" * 75)
-        ansicolor.set_color(ansicolor.LIGHTRED)
+        result_str = result_str + screen.get_pipe_color_line("=" * 75)
         if "TITLE" in result_dict:
-            print("ISSUE: %s" % result_dict["TITLE"])
+            result_str = result_str + \
+                    screen.get_pipe_color_line("ISSUE: %s" % result_dict["TITLE"], "brown")
         else:
-            print("No title given")
-        ansicolor.set_color(ansicolor.RESET)
-        print("-" * 75)
+            result_str = result_str + \
+                    screen.get_pipe_color_line("No title given", "brown")
+        result_str = result_str + screen.get_pipe_color_line("-" * 75)
         if "MSG" in result_dict:
-            print(result_dict["MSG"])
+            result_str = result_str + \
+                    screen.get_pipe_color_line(result_dict["MSG"])
         else:
-            print("No message given")
-        print("-" * 75)
+            result_str = result_str + \
+                    screen.get_pipe_color_line("No message given")
+        result_str = result_str + screen.get_pipe_color_line("-" * 75)
 
-        print("KCS:")
+        result_str = result_str + screen.get_pipe_color_line("KCS:", "green")
         if "KCS_TITLE" in result_dict:
-            print("\t%s" % result_dict["KCS_TITLE"])
+            result_str = result_str + \
+                    screen.get_pipe_color_line("\t%s" % result_dict["KCS_TITLE"])
         else:
-            print("\tNo subject for KCS")
-        ansicolor.set_color(ansicolor.BLUE)
+            result_str = result_str + \
+                    screen.get_pipe_color_line("\tNo subject for KCS")
         if "KCS_URL" in result_dict:
-            print("\t%s" % result_dict["KCS_URL"])
+            result_str = result_str + \
+                    screen.get_pipe_color_line("\t%s" % result_dict["KCS_URL"],
+                            "blue")
         else:
-            print("\tNo URL for KCS")
-        ansicolor.set_color(ansicolor.RESET)
+            result_str = result_str + \
+                    screen.get_pipe_color_line("\tNo URL for KCS", "blue")
 
-        print("Resolution:")
-        ansicolor.set_color(ansicolor.RED)
+        result_str = result_str + screen.get_pipe_color_line("Resolution:", "green")
         if "RESOLUTION" in result_dict:
-            print("\t%s" % result_dict["RESOLUTION"])
+            result_str = result_str + \
+                    screen.get_pipe_color_line("\t%s" % result_dict["RESOLUTION"], "red")
         else:
-            print("\tNo resolution given")
-        ansicolor.set_color(ansicolor.RESET)
+            result_str = result_str + \
+                    screen.get_pipe_color_line("\tNo resolution given", "red")
 
-        print("Fixed kernel version: current = %s" % sysinfo["RELEASE"])
-        ansicolor.set_color(ansicolor.CYAN)
+        result_str = result_str + \
+                screen.get_pipe_color_line("Fixed kernel version:", "green")
         if "KERNELS" in result_dict:
             kernels = result_dict["KERNELS"]
             for kernel in kernels:
-                print("\t%s" % kernel)
+                result_str = result_str + \
+                        screen.get_pipe_color_line("\t%s" % kernel, "cyan")
         else:
-            print("\tNo resolution given")
+            result_str = result_str + \
+                    screen.get_pipe_color_line("\tNo resolution given", "cyan")
 
-        ansicolor.set_color(ansicolor.RESET)
-        print("-" * 75)
+        result_str = result_str + \
+                screen.get_pipe_color_line("Current kernel version: %s" % sysinfo["RELEASE"], "grey")
+
+        result_str = result_str + screen.get_pipe_color_line("-" * 75)
+
+    return result_str
 
 
 def get_file_content(path):
@@ -202,9 +219,11 @@ def get_file_content(path):
         return "Error reading %s" % path
 
 
-def run_rules(options, env_vars):
+def run_rules():
     global modules
     global sysinfo
+
+    result_str = ""
 
     issue_count = 0
     log_str = get_file_content("/var/log/messages")
@@ -221,36 +240,42 @@ def run_rules(options, env_vars):
             result_list = module.run_rule(basic_data)
             if result_list != None:
                 issue_count = issue_count + len(result_list)
-                print_result(result_list)
+                result_str = result_str + print_result(result_list)
         except:
-            print("Error running rule %s" % (module))
+            result_str = result_str + \
+                    screen.get_pipe_color_line("Error running rule %s" % (module))
 
     if issue_count > 0:
-        print("*" * 75)
-        ansicolor.set_color(ansicolor.RED | ansicolor.BLINK)
-        print("\tWARNING: %d issue%s detected" %
-              (issue_count, "s" if issue_count > 1 else ""))
-        ansicolor.set_color(ansicolor.RESET)
-        print("*" * 75)
+        result_str = result_str + screen.get_pipe_color_line("*" * 75)
+        result_str = result_str + \
+                screen.get_pipe_color_line("\tWARNING: %d issue%s detected" %
+                    (issue_count, "s" if issue_count > 1 else ""),
+                    "red")
+        result_str = result_str + screen.get_pipe_color_line("*" * 75)
     else:
-        print("No issues detected")
+        result_str = result_str + \
+                screen.get_pipe_color_line("No issues detected")
 
 
-    return ""
+    return result_str
 
 
 def reload_rules():
     global modules
 
+    result_str = ""
     for module in modules:
         try:
-            print("Reloading [%s]" % (module.__name__), end='')
+            result_str = result_str + \
+                    screen.get_pipe_color_line("Reloading [%s]" % (module.__name__), end='')
             module = importlib.reload(module)
-            print("... DONE")
+            result_str = result_str + screen.get_pipe_color_line("... DONE")
         except:
-            print("... FAILED")
+            result_str = result_str + screen.get_pipe_color_line("... FAILED")
 
-    print("Reloading DONE")
+    result_str = result_str + screen.get_pipe_color_line("Reloading DONE")
+
+    return result_str
 
 
 def print_help_msg(op, no_pipe):
@@ -271,10 +296,17 @@ def print_help_msg(op, no_pipe):
 
 sos_home=""
 is_cmd_stopped = None
-def run_autocheck(input_str, env_vars, is_cmd_stopped_func,\
-        show_help=False, no_pipe=True):
+options = None
+no_pipe = True
+env_vars = None
+
+def run_autocheck(input_str, l_env_vars, is_cmd_stopped_func,\
+        show_help=False, l_no_pipe=True):
     global is_cmd_stopped
     global sos_home
+    global options
+    global no_pipe
+    global env_vars
 
     is_cmd_stopped = is_cmd_stopped_func
 
@@ -307,6 +339,10 @@ def run_autocheck(input_str, env_vars, is_cmd_stopped_func,\
     except:
         return ""
 
+    options = o
+    no_pipe = l_no_pipe
+    env_vars = l_env_vars
+
     if o.help or show_help == True:
         return print_help_msg(op, no_pipe)
     
@@ -326,6 +362,6 @@ def run_autocheck(input_str, env_vars, is_cmd_stopped_func,\
     elif o.list == True:
         result_str = show_rules_list()
     else:
-        result_str = run_rules(o, env_vars)
+        result_str = run_rules()
 
     return result_str

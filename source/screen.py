@@ -1,5 +1,5 @@
 import ansicolor
-
+from prompt_toolkit import print_formatted_text, HTML
 
 no_pipe = True
 is_cmd_stopped = None
@@ -132,3 +132,15 @@ def get_pipe_aware_line(line):
 
     return line
 
+
+def get_pipe_color_line(line, color="normal", end="\n"):
+    if line is None:
+        return ""
+
+    if no_pipe:
+        print_formatted_text(HTML("<%s>%s</%s>" % (color, line, color)), end=end)
+        line = ""
+    else:
+        line = line + end
+
+    return line
