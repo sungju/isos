@@ -165,7 +165,7 @@ def mem_graph_func(line, no_pipe, is_header):
                                                         words[item3_idx], screen.COLOR_5 + item3_char * 5 + screen.COLOR_RESET))
         result_str = result_str + ('%s  %s\n' % (' '* (len(sartime) + 8), pbar('=', 100, 100, blen)))
         if no_pipe:
-            print(result_str)
+            print(result_str.rstrip())
             result_str = ''
     else:
         sartime = ''
