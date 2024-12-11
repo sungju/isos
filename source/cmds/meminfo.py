@@ -551,6 +551,21 @@ def show_ps_memusage(op, no_pipe):
             screen.get_pipe_aware_line("Total memory usage from user-space = %s" %
           (get_size_str(total_rss * 1024)))
 
+    try:
+        total_mem = 0
+        with open(sos_home + "/proc/meminfo") as f:
+            lines = f.readlines()
+            for line in lines:
+                if "MemTotal:" in line:
+                    total_mem = int(line.split()[1])
+                    result_str = result_str +\
+                            screen.get_pipe_aware_line("\tNotes) %.2f percent from total system memory(%s)" % \
+                            (total_rss * 100 / total_mem, get_size_str(total_mem * 1024)))
+                    break
+    except:
+        pass
+
+
     return result_str
 
 
