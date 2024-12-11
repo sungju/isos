@@ -76,7 +76,7 @@ def run_rule(basic_data):
         result_dict = {}
         result_dict["TITLE"] = "num_cgroups bug detected by %s" % \
                                 ntpath.basename(__file__)
-        result_dict["MSG"] = "(pcpu_nr_populated * pcpu_nr_units) * " \
+        result_dict["MSG"] = "Percpu = (pcpu_nr_populated * pcpu_nr_units) * " \
                 "page\n\t%s (%d %%) out of %s" % \
                 (get_size_str(total_used_kb * 1024), \
                  used_percent, \
