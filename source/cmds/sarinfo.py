@@ -39,7 +39,7 @@ def cpu_graph_func(line, no_pipe, is_header):
         result_str = screen.get_pipe_aware_line(line)
         result_str = result_str + ('%s  %s\n' % (' '* (len(sartime) + 8), pbar('=', 100, 100, blen)))
         if no_pipe:
-            print(result_str)
+            print(result_str.rstrip())
             result_str = ''
     else:
         item1_bar = pbar('U', 100, float(words[header_start_idx + 1]), blen)
