@@ -788,9 +788,11 @@ def check_startup_script():
                 line = line.strip()
                 if len(line) > 0 and line[0] != '#':
                     cmd, path = parse_history(line)
+                    prompt_str, prompt_style = get_prompt_str()
+                    print_formatted_text(prompt_str + cmd, style=prompt_style)
                     run_one_line(cmd, path)
-    except:
-        pass
+    except Exception as e:
+        print(e)
 
 
 def isos():
