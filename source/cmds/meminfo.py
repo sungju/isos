@@ -182,7 +182,7 @@ def show_oom_events(op, args, no_pipe):
         file_list = file_list + get_file_list(file, True)
         
     if len(file_list) == 0:
-        file_list.append(sos_home + "/var/log/messages")
+        file_list = get_file_list(sos_home + "/var/log/messages*", False)
         file_list = file_list + \
                 get_file_list(sos_home + "/sos_commands/logs/journalctl*", False)
 
