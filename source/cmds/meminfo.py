@@ -625,7 +625,7 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-d', '--details', dest='details', action='store_true',
                   help='Show further details')
 
-    op.add_option('-o', '--oom', dest='oom', action='store_true',
+    op.add_option('-O', '--oom', dest='oom', action='store_true',
                   help='Shows OOM events')
 
     op.add_option('-p', '--process', dest='process', action='store_true',
