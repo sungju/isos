@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# Env config
+pyvenv.cfg
+
 # Distribution / packaging
 .Python
 bin/
