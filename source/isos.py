@@ -327,6 +327,8 @@ def set_env(input_str, env_vars, is_cmd_stopped,\
 
             if words[1] == "sos_home":
                 init_for_sos_home()
+
+            check_startup_script()
         else:
             del env_vars[words[1]]
 
@@ -826,8 +828,6 @@ def isos():
 
     #history_start_idx = len(get_history_list(input_session))
     history_cmds = []
-
-    check_startup_script()
 
     while True:
         '''
