@@ -795,7 +795,7 @@ def check_startup_script():
                             ("grey", cmd, "grey")))
                     run_one_line(cmd, path)
     except Exception as e:
-        print(e)
+        pass
 
 
 def isos():
