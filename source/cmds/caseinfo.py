@@ -44,13 +44,68 @@ def show_caseinfo(options, no_pipe):
                 caseno_str = path
                 break
 
-    result_str = screen.get_pipe_aware_line("Case No: " + caseno_str)
+    result_str = "Case No: " + caseno_str
+    try:
+        with open(sos_home + "/uname") as f:
+            line = f.readlines()[0]
+            words = line.split()
+            result_str = result_str + ", Kernel: " + words[2] +\
+                    "\nHostname: " + words[1]
+    except:
+        pass
+
+
+    result_str = screen.get_pipe_aware_line(result_str)
 
     return result_str
 
 
 def show_system(options, no_pipe):
-    result_str = ''
+    result_str = screen.get_pipe_aware_line('\n')
+
+    try:
+        with open(sos_home + "/dmidecode") as f:
+            lines = f.readlines()
+            bios_check_started = False
+            for line in lines:
+                sline = line.strip()
+                if sline == "BIOS Information":
+                    bios_check_started = True
+                    line = screen.get_pipe_aware_line(line)
+                    result_str = result_str + line
+                    continue
+                elif sline == "Characteristics:":
+                    bios_check_started = False
+                    continue
+                elif bios_check_started and len(sline) == 0:
+                    bios_check_started = False
+                    continue
+
+                if bios_check_started:
+                    line = screen.get_pipe_aware_line(line)
+                    result_str = result_str + line
+    except:
+        pass
+
+    result_str = screen.get_pipe_aware_line(result_str)
+
+    try:
+        with open(sos_home + "/date") as f:
+            lines = f.readlines()
+            result_str = result_str +\
+                   screen.get_pipe_aware_line("Date and Time\n")
+            break_print = False
+            for line in lines:
+                if line.strip().startswith("Time zone:"):
+                    break_print = True
+                line = screen.get_pipe_aware_line(line)
+                result_str = result_str + line
+                if break_print:
+                    break
+    except:
+        pass
+
+    result_str = screen.get_pipe_aware_line(result_str)
 
     return result_str
 
