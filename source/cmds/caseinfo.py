@@ -7,6 +7,7 @@ import glob
 import operator
 from os.path import expanduser, isfile, isdir, join
 import traceback
+from datetime import datetime
 
 
 from isos import run_shell_command, column_strings
@@ -95,13 +96,27 @@ def show_system(options, no_pipe):
             result_str = result_str +\
                    screen.get_pipe_aware_line("Date and Time\n")
             break_print = False
+            local_time = ''
             for line in lines:
                 if line.strip().startswith("Time zone:"):
                     break_print = True
+                if "Local time:" in line:
+                    local_time = line.strip()
                 line = screen.get_pipe_aware_line(line)
                 result_str = result_str + line
                 if break_print:
                     break
+
+            if local_time != '':
+                local_time = local_time.strip()[len("Local time:"):].strip()
+                tz=local_time.split()[-1]
+                local_time = local_time.replace(tz, "")
+                datetime_fmt = '%a %Y-%m-%d %H:%M:%S'
+                dt = datetime.strptime(local_time.strip(), datetime_fmt)
+                date_ago = datetime.now() - dt
+                result_str = result_str +\
+                        screen.get_pipe_aware_line(
+                                "\tCollected %d day(s) ago." % (date_ago.days))
     except:
         pass
 
