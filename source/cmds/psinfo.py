@@ -208,8 +208,7 @@ def show_ps_tree(sos_home, no_pipe, options):
     pid = options.process_details
     try:
         with open(sos_home + "/sos_commands/process/pidstat_-tl") as f:
-            result_lines = f.readlines()
-            for line in result_lines:
+            for line in f:
                 words = line.split()
                 if len(words) > 3 and words[2] == pid:
                     result_str = result_str +\
@@ -222,8 +221,7 @@ def show_ps_tree(sos_home, no_pipe, options):
 
     try:
         with open(sos_home + "/sos_commands/process/ps_auxwwwm") as f:
-            result_lines = f.readlines()
-            for line in result_lines:
+            for line in f:
                 words = line.split()
                 if len(words) > 7 and words[1] == pid:
                     result_str = result_str + screen.get_pipe_aware_line(
@@ -239,8 +237,7 @@ def show_ps_tree(sos_home, no_pipe, options):
 
     try:
         with open(sos_home + "/sos_commands/process/ps_-elfL") as f:
-            result_lines = f.readlines()
-            for line in result_lines:
+            for line in f:
                 if pid in line:
                     words = line.split()
                     if len(words) < 17:
@@ -265,9 +262,8 @@ def show_ps_tree(sos_home, no_pipe, options):
     proc_dir = sos_home + ("/proc/%s" % (pid))
     try:
         with open(proc_dir + "/stack") as f:
-            result_lines = f.readlines()
             result_str = result_str + screen.get_pipe_aware_line("\nCall Trace:\n")
-            for line in result_lines:
+            for line in f:
                 result_str = result_str + screen.get_pipe_aware_line("  " + line)
     except Exception as e:
         #print(e)
@@ -276,9 +272,8 @@ def show_ps_tree(sos_home, no_pipe, options):
 
     try:
         with open(proc_dir + "/limits") as f:
-            result_lines = f.readlines()
             result_str = result_str + screen.get_pipe_aware_line("\n\n")
-            for line in result_lines:
+            for line in f:
                 result_str = result_str + screen.get_pipe_aware_line(line)
     except Exception as e:
         #print(e)

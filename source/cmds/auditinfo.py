@@ -113,8 +113,7 @@ def read_audit_file(audit_path, no_pipe, is_log=True, show_path=False, sos_home=
             result_str = result_str + "\n"
 
         with open(audit_path) as f:
-            lines = f.readlines()
-            for line in lines:
+            for line in f:
                 if is_cmd_stopped():
                     break
                 if is_log:

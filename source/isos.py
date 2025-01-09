@@ -652,8 +652,7 @@ def set_time_zone(sos_home):
     try:
         path = sos_home + "/sos_commands/systemd/timedatectl"
         with open(path) as f:
-            lines = f.readlines()
-            for line in lines:
+            for line in f:
                 words = line.split(':')
                 if words[0].strip() == "Time zone":
                     os.environ['TZ'] = words[1].split()[0]
@@ -785,8 +784,7 @@ def check_startup_script():
     try:
         fname = expanduser("~") + "/.isosrc"
         with open(fname) as f:
-            lines = f.readlines()
-            for line in lines:
+            for line in f:
                 line = line.strip()
                 if len(line) > 0 and line[0] != '#':
                     cmd, path = parse_history(line)

@@ -30,8 +30,7 @@ def show_delay_list_in_file(file_path):
     result_str = ""
     try:
         with open(file_path) as f:
-            lines = f.readlines()
-            for line in lines:
+            for line in f:
                 add_consumed_time(line)
 
             result_str = show_delay_times()

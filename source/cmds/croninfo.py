@@ -101,8 +101,7 @@ def read_cron_basic(log_path, no_pipe, show_path=False, sos_home=""):
             result_str = result_str + "\n"
 
         with open(log_path) as f:
-            lines = f.readlines()
-            for line in lines:
+            for line in f:
                 if is_cmd_stopped():
                     return result_str
 

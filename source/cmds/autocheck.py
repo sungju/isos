@@ -40,8 +40,7 @@ def get_system_info():
 
     try:
         with open(sos_home + "/dmidecode") as f:
-            lines = f.readlines()
-            for line in lines:
+            for line in f:
                 if ':' not in line:
                     continue
                 words = line.split(':', 1)

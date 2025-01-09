@@ -32,10 +32,9 @@ def show_mem_balloon(op, no_pipe):
     page_size = get_main().page_size
     try:
         with open(sos_home + "/sys/kernel/debug/vmmemctl") as f:
-            result_lines = f.readlines()
             target = 0
             current = 0
-            for line in result_lines:
+            for line in f:
                 words = line.split(":")
                 if words[0] == "target" and words[1].endswith("pages"):
                     target = int(words[1].split()[0])
@@ -196,7 +195,6 @@ def show_oom_events(op, args, no_pipe):
             with open(file) as f:
                 result_str = result_str +\
                         screen.get_pipe_aware_line("\nChecking file %s\n" % get_sos_relative_name(file))
-                result_lines = f.readlines()
                 oom_invoked = False
                 oom_meminfo = False
                 oom_cgroup_stats = False
@@ -208,7 +206,7 @@ def show_oom_events(op, args, no_pipe):
                 meminfo_dict = {}
                 cgroup_dict = {}
                 total_usage = 0
-                for line in result_lines:
+                for line in f:
                     if "invoked oom-killer:" in line:
                         oom_invoked = True
                         if not is_first_oom:
@@ -362,11 +360,10 @@ def show_swap_usage(op, no_pipe):
         for path in pid_list:
             try:
                 with open(path + "/status") as f:
-                    result_lines = f.readlines()
                     swap_usage = 0
                     pid = os.path.basename(path)
                     pname = ""
-                    for line in result_lines:
+                    for line in f:
                         if line.startswith("VmSwap:"):
                             words = line.split()
                             swap_usage = swap_usage + int(words[1])
@@ -554,8 +551,7 @@ def show_ps_memusage(op, no_pipe):
     try:
         total_mem = 0
         with open(sos_home + "/proc/meminfo") as f:
-            lines = f.readlines()
-            for line in lines:
+            for line in f:
                 if "MemTotal:" in line:
                     total_mem = int(line.split()[1])
                     result_str = result_str +\

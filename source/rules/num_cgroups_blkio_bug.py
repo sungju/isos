@@ -59,8 +59,7 @@ def run_rule(basic_data):
         total_physical_mem_kb = 0
         total_used_kb = 0
         with open(sos_home + "/proc/meminfo") as f:
-            lines = f.readlines()
-            for line in lines:
+            for line in f:
                 if "MemTotal:" in line:
                     total_physical_mem_kb = int(line.split()[1])
                 elif "Percpu:" in line:

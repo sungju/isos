@@ -176,8 +176,7 @@ def show_taint_info(sos_home, no_pipe, options):
             result_str = result_str + \
                     get_pipe_aware_line('\n%s\n%s\n' % \
                                         ('Tainted modules', '=' * 20), no_pipe)
-            lines = f.readlines()
-            for line in lines:
+            for line in f:
                 line = line.strip()
                 words = line.split()
                 modname = words[0] + '.ko'
@@ -195,9 +194,8 @@ def show_taint_info(sos_home, no_pipe, options):
 
     try:
         with open(sos_home + '/sos_commands/kernel/sysctl_-a') as f:
-            lines = f.readlines()
             kernel_tainted = ''
-            for line in lines:
+            for line in f:
                 if 'kernel.tainted =' in line:
                     kernel_tainted = line
                     break

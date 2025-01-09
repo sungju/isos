@@ -66,9 +66,8 @@ def show_system(options, no_pipe):
 
     try:
         with open(sos_home + "/dmidecode") as f:
-            lines = f.readlines()
             bios_check_started = False
-            for line in lines:
+            for line in f:
                 sline = line.strip()
                 if sline == "BIOS Information":
                     bios_check_started = True

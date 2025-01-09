@@ -89,8 +89,7 @@ def read_log_basic(log_path, no_pipe):
     result_str = ""
     try:
         with open(log_path) as f:
-            lines = f.readlines()
-            for line in lines:
+            for line in f:
                 if is_cmd_stopped():
                     return result_str
 

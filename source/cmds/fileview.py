@@ -114,7 +114,6 @@ def show_file_content(file_path, no_pipe, options, show_name=False):
     result_str = ""
     try:
         with open(file_path) as f:
-            lines = f.readlines()
             if show_name:
                 line = get_colored_line("\n%s < %s > %s\n" %\
                         ("=" * 10, file_path, "=" * 10))
@@ -123,7 +122,7 @@ def show_file_content(file_path, no_pipe, options, show_name=False):
                 else:
                     result_str = result_str + line + '\n'
 
-            for line in lines:
+            for line in f:
                 if is_cmd_stopped():
                     return result_str
 
