@@ -57,7 +57,7 @@ help       man        cd         eval
 set        xsos       reload     list       
 exit       psinfo     cron       cat        
 perf       mods       trace      audit      
-powner     log        sar   
+powner     log        sarinfo
 ```
 
 - Some commands are very simple and gives you a single line help.

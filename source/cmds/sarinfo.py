@@ -14,7 +14,7 @@ def add_command():
 
 
 def get_command_info():
-    return { "sar": run_sarinfo }
+    return { "sarinfo": run_sarinfo }
 
 
 def cpu_graph_func(line, no_pipe, is_header):
