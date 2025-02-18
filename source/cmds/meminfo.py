@@ -207,6 +207,10 @@ def show_oom_events(op, args, no_pipe):
                 cgroup_dict = {}
                 total_usage = 0
                 for line in f:
+                    trim_word = ' kernel: '
+                    if trim_word not in line:
+                        trim_word = '] '
+                    trim_ends_idx = line.find(trim_word) + len(trim_word)
                     if "invoked oom-killer:" in line:
                         oom_invoked = True
                         if not is_first_oom:
@@ -221,11 +225,11 @@ def show_oom_events(op, args, no_pipe):
                             oom_meminfo = True
                             continue
                         elif "memory: usage" in line:
-                            line = line[line.find(" kernel: ") + 9:]
+                            line = line[trim_ends_idx:]
                             cgroup_dict["memory"] = line
                             continue
                         elif "swap: usage" in line:
-                            line = line[line.find(" kernel: ") + 9:]
+                            line = line[trim_ends_idx:]
                             cgroup_dict["swap"] = line
                             continue
                         elif "Memory cgroup stats for" in line:
@@ -237,11 +241,16 @@ def show_oom_events(op, args, no_pipe):
 
                     if oom_meminfo:
                         if " Node " not in line and "shmem:" in line:
-                            line = line[line.find(" kernel: ") + 9:]
+                            line = line[trim_ends_idx:]
                             words = line.split()
                             for entry in words:
-                                key_val = entry.split(':')
-                                meminfo_dict[key_val[0]] = get_size(key_val[1])
+                                try:
+                                    if ':' not in entry:
+                                        continue
+                                    key_val = entry.split(':')
+                                    meminfo_dict[key_val[0]] = get_size(key_val[1])
+                                except Exception as ie:
+                                    print(ie)
                             continue
                         elif " Node " not in line and " hugepages_total" in line:
                             line = line[line.find("hugepages_total="):]
@@ -259,11 +268,11 @@ def show_oom_events(op, args, no_pipe):
                                     print(ie)
                             continue
                         elif " total pagecache pages" in line:
-                            line = line[line.find(" kernel: ") + 9:]
+                            line = line[trim_ends_idx:]
                             words = line.split()
                             meminfo_dict["Pagecaches"] = get_size(words[0])
-                        elif " kernel:" not in line or " kernel: active_anon" in line:
-                            line = line[line.find(" kernel: ") + 9:]
+                        elif trim_word not in line or ("%sactive_anon" % trim_word) in line:
+                            line = line[trim_ends_idx:]
                             try:
                                 words = line.split()
                                 for word in words:
@@ -273,8 +282,8 @@ def show_oom_events(op, args, no_pipe):
                                 pass
 
                     if oom_cgroup_stats:
-                        if " kernel:" not in line or " kernel: anon" in line:
-                            line = line[line.find(" kernel: ") + 9:]
+                        if trim_word not in line or ("%sanon" % trim_word) in line:
+                            line = line[trim_ends_idx:]
                             words = line.split()
                             meminfo_dict[words[0]] = get_size(words[1])
 
@@ -282,7 +291,7 @@ def show_oom_events(op, args, no_pipe):
                         oom_ps_started = True
                         oom_meminfo = False
                         oom_cgroup_stats = False
-                        line = line.split(":")[3]
+                        line = line[trim_ends_idx:]
                         line = line.replace("[", "")
                         line = line.replace("]", "")
                         words = line.split()
@@ -299,7 +308,7 @@ def show_oom_events(op, args, no_pipe):
                     if not oom_ps_started:
                         continue
 
-                    if "[" not in line: #end of oom_ps
+                    if oom_ps_started and "[" not in line: #end of oom_ps
                         if len(cgroup_dict) > 0:
                             result_str = result_str +\
                                     screen.get_pipe_aware_line("CGroup : " + cgroup_dict["cgroup"])
@@ -326,15 +335,18 @@ def show_oom_events(op, args, no_pipe):
                         total_usage = 0
                         continue
 
-                    line = line.split(":")[3]
+                    line = line[trim_ends_idx:]
                     line = line.replace("[", "")
                     line = line.replace("]", "")
                     words = line.split()
                     if len(words) <= pname_index:
                         continue
                     pid = words[pid_index]
-                    rss = int(words[rss_index]) * page_size
-                    total_usage = total_usage + rss
+                    try:
+                        rss = int(words[rss_index]) * page_size
+                        total_usage = total_usage + rss
+                    except:
+                        pass
                     pname = words[pname_index]
                     if op.all:
                         pname = pname + (" (%s)" % pid)
@@ -343,9 +355,8 @@ def show_oom_events(op, args, no_pipe):
                     oom_dict[pname] = rss
 
         except Exception as e:
-            pass
-            #print(e)
-            #traceback.print_stack()
+            print(e)
+            traceback.print_stack()
 
 
     return result_str
