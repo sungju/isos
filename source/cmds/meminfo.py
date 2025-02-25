@@ -560,6 +560,7 @@ def show_slabtop(op, no_pipe):
 
     print_count = min(len(sorted_slabtop) - 1, min_number)
 
+    page_size = get_main().page_size
     for i in range(0, print_count):
         slab_name = sorted_slabtop[i][0]
         obj_size = slab_objsize[slab_name]
@@ -567,7 +568,7 @@ def show_slabtop(op, no_pipe):
         result_str = result_str + \
                 screen.get_pipe_aware_line("%-29s %12s %8d" %
                 (slab_name,
-                 get_size_str(sorted_slabtop[i][1] * 1024),
+                 get_size_str(sorted_slabtop[i][1] * page_size),
                  obj_size))
 
 
@@ -576,7 +577,7 @@ def show_slabtop(op, no_pipe):
     result_str = result_str + screen.get_pipe_aware_line("=" * 51)
     result_str = result_str +\
             screen.get_pipe_aware_line("Total memory usage from SLAB = %s" %
-          (get_size_str(total_slab * 1024)))
+          (get_size_str(total_slab * page_size)))
 
     return result_str
 
