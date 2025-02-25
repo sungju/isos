@@ -130,7 +130,7 @@ def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
     result_str = result_str +\
             screen.get_pipe_aware_line("%-42s %15s" %
-            ("NAME", "Usage"))
+            ("SLAB_Name", "Usage"))
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
 
     print_count = min(len(sorted_slab_dict) - 1, min_number)
@@ -164,7 +164,7 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
     result_str = result_str +\
             screen.get_pipe_aware_line("%-42s %15s" %
-            ("NAME", "Usage"))
+            ("Process_Name", "Usage"))
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
 
     print_count = min(len(sorted_oom_dict) - 1, min_number)
