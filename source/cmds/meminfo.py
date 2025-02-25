@@ -7,6 +7,7 @@ import glob
 import operator
 from os.path import expanduser, isfile, isdir, join
 import traceback
+from itertools import chain
 
 
 from isos import run_shell_command, column_strings
@@ -118,6 +119,40 @@ def show_oom_meminfo(op, no_pipe, meminfo_dict):
     return result_str
 
 
+def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
+    result_str = ""
+    sorted_slab_dict = sorted(slab_dict.items(),
+                            key=operator.itemgetter(1), reverse=True)
+    min_number = 10
+    if (op.all):
+        min_number = len(sorted_slab_dict) - 1
+
+    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
+    result_str = result_str +\
+            screen.get_pipe_aware_line("%-42s %15s" %
+            ("NAME", "Usage"))
+    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
+
+    print_count = min(len(sorted_slab_dict) - 1, min_number)
+
+    for i in range(0, print_count):
+        pname = sorted_slab_dict[i][0]
+
+        mem_usage = sorted_slab_dict[i][1]
+        result_str = result_str + \
+                screen.get_pipe_aware_line("%-42s %15s" %
+                (pname, get_size_str(mem_usage)))
+
+    if print_count < len(sorted_slab_dict) - 1:
+        result_str = result_str + screen.get_pipe_aware_line("\t<...>")
+    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
+    result_str = result_str +\
+            screen.get_pipe_aware_line("Total memory usage from SLABs = %s" %
+                    get_size_str(total_usage))
+
+    return result_str
+
+
 def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
     result_str = ""
     sorted_oom_dict = sorted(oom_dict.items(),
@@ -199,14 +234,18 @@ def show_oom_events(op, args, no_pipe):
                 oom_meminfo = False
                 oom_cgroup_stats = False
                 oom_ps_started = False
+                oom_slab_started = False
                 rss_index = -1
                 pid_index = -1
                 pname_index = -1
                 oom_dict = {}
+                sname_index = -1
+                stotal_index = -1
+                slab_dict = {}
                 meminfo_dict = {}
                 cgroup_dict = {}
                 total_usage = 0
-                for line in f:
+                for line in chain(f, [""]):
                     trim_word = ' kernel: '
                     if trim_word not in line:
                         trim_word = '] '
@@ -286,6 +325,45 @@ def show_oom_events(op, args, no_pipe):
                             line = line[trim_ends_idx:]
                             words = line.split()
                             meminfo_dict[words[0]] = get_size(words[1])
+
+                    if oom_invoked and "Unreclaimable slab info:" in line:
+                        oom_slab_started = True
+                        oom_meminfo = False
+                        oom_cgroup_stats = False
+                        line = f.readline() # read one more line to get title line
+                        line = line[trim_ends_idx:]
+                        words = line.split()
+                        for i in range(0, len(words)):
+                            if words[i] == "Name":
+                                sname_index = i
+                            elif words[i] == "Total":
+                                stotal_index = i
+
+                        continue
+
+                    if oom_slab_started:
+                        if "Tasks state (memory values in pages):" in line:
+                            oom_slab_started = False
+                            result_str = result_str +\
+                                show_oom_slab_usage(op, no_pipe, slab_dict, total_usage) +\
+                                screen.get_pipe_aware_line("")
+                            slab_dict = {}
+                            total_usage = 0
+                            continue
+
+                        line = line[trim_ends_idx:]
+                        words = line.split()
+                        stotal = 0
+                        if len(words) <= sname_index:
+                            continue
+                        try:
+                            stotal = int(words[stotal_index][:-2]) * 1024
+                            total_usage = total_usage + stotal
+                        except:
+                            pass
+                        sname = words[sname_index]
+                        slab_dict[sname] = stotal
+
 
                     if oom_invoked and "uid" in line and "total_vm" in line:
                         oom_ps_started = True
