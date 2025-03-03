@@ -386,7 +386,7 @@ def show_oom_events(op, args, no_pipe):
                     if not oom_ps_started:
                         continue
 
-                    if oom_ps_started and "[" not in line: #end of oom_ps
+                    if oom_ps_started and "[" not in line[trim_ends_idx:]: #end of oom_ps
                         if len(cgroup_dict) > 0:
                             result_str = result_str +\
                                     screen.get_pipe_aware_line("CGroup : " + cgroup_dict["cgroup"])
