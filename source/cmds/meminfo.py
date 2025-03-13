@@ -247,6 +247,13 @@ def show_oom_events(op, args, no_pipe):
                 total_usage = 0
                 for line in chain(f, [""]):
                     trim_word = ' kernel: '
+                    if op.trim_word != "":
+                        trim_word = op.trim_word
+                    if op.trim_idx != 0:
+                        try:
+                            trim_word = line.split()[op.trim_idx + 1]
+                        except:
+                            pass
                     if trim_word not in line:
                         trim_word = '] '
                     trim_ends_idx = line.find(trim_word) + len(trim_word)
@@ -719,6 +726,14 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
 
     op.add_option('-s', '--slab', dest='slab', action='store_true',
                   help='Shows slabtop')
+
+    op.add_option('-t', '--trim_word', dest='trim_word', default="",
+            action='store', type="string",
+            help="trim word to skip certain words in line")
+
+    op.add_option('-T', '--trim_idx', dest='trim_idx', default=0,
+            action='store', type="int",
+            help="trim index to skip certain words in line")
 
     op.add_option("-w", "--swap", dest="swapshow", default=0,
                   action="store_true",
