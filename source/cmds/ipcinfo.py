@@ -66,6 +66,18 @@ def show_shmem(op, no_pipe):
                     ipc_title = ipc_title + "\n" + result_line
                     continue
                 elif len(result_line) == 0:
+                    if ipc_mode == IPC_SHM:
+                        sorted_usage = sorted(shmem_usage_dict.items(),
+                                key=operator.itemgetter(1), reverse=False)
+                        result_str = result_str + screen.get_pipe_aware_line(ipc_title)
+                        for i in range(0, len(sorted_usage)):
+                            result_str = result_str + screen.get_pipe_aware_line(sorted_usage[i][0])
+
+                        result_str = result_str + \
+                                screen.get_pipe_aware_line("\n\tTotal shared memory allocation = %s" % get_size_str(shmem_total_usage))
+
+                    result_str = result_str + \
+                            screen.get_pipe_aware_line("")
                     ipc_mode = IPC_NONE
                     continue
 
@@ -80,43 +92,20 @@ def show_shmem(op, no_pipe):
                             shmem_total_usage = shmem_total_usage + alloc_bytes
                     except:
                         pass
+                else:
+                    result_str = result_str + \
+                            screen.get_pipe_aware_line(result_line)
     except Exception as e:
         print(e)
         return ""
 
-
-    sorted_usage = sorted(shmem_usage_dict.items(),
-            key=operator.itemgetter(1), reverse=False)
-    result_str = result_str + screen.get_pipe_aware_line(ipc_title)
-    for i in range(0, len(sorted_usage)):
-        result_str = result_str + screen.get_pipe_aware_line(sorted_usage[i][0])
-
-
-    result_str = result_str + \
-            screen.get_pipe_aware_line("\n\tTotal shared memory allocation = %s" % get_size_str(shmem_total_usage))
 
     return result_str
 
 
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
-    It shows memory usage from process / slab.
-
-Example)
-    To see oom events, you can specify log name or default file (/var/log/messages)
-    will be used.
-
-    example.com> meminfo -o
-    Nov  9 01:12:50 example.com kernel: https-jsse-nio- invoked oom-killer: ...
-    ==========================================================
-    NAME                                               Usage
-    ==========================================================
-    java                                            11.2 GiB
-    nft                                              1.3 GiB
-    ...
-        <...>
-    ==========================================================
-    Total memory usage from processes = 14.0 GiB
+    It shows SYSV IPC usage
     '''
 
     if no_pipe == False:
@@ -145,11 +134,6 @@ def run_ipcinfo(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')
 
-    op.add_option('-a', '--all', dest='all', action='store_true',
-                  help='Show all entries')
-
-    op.add_option('-m', '--shmem', dest='shmem', action='store_true',
-                  help='Shows shared memory allocation')
 
     o = args = None
     try:
@@ -165,8 +149,6 @@ def run_ipcinfo(input_str, env_vars, is_cmd_stopped_func,\
 
     screen.init_data(no_pipe, 1, is_cmd_stopped)
 
-    result_str = ""
-    if o.shmem: # show shared memory
-        result_str = show_shmem(o, no_pipe)
+    result_str = show_shmem(o, no_pipe)
 
     return result_str
