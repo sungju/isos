@@ -3,6 +3,9 @@ import ntpath
 import operator
 import math
 
+import rules_helper as rh
+
+
 def is_major():
     return True
 
@@ -20,34 +23,6 @@ def add_rule(sysinfo):
         return True
 
     return False
-
-
-def get_total_physical_mem_kb():
-    try:
-        if symbol_exists("totalram_pages"):
-            totalram_pages = readSymbol("totalram_pages")
-        elif symbol_exists("_totalram_pages"):
-            totalram_pages = readSymbol("_totalram_pages").counter
-        else:
-            totalram_pages = 0
-    except:
-        totalram_pages = 0
-
-    return totalram_pages * 4
-
-
-def get_size_str(size):
-    size_str = ""
-    if size > (1024 * 1024 * 1024): # GiB
-        size_str = "%.1f GiB" % (size / (1024*1024*1024))
-    elif size > (1024 * 1024): # MiB
-        size_str = "%.1f MiB" % (size / (1024*1024))
-    elif size > (1024): # KiB
-        size_str = "%.1f KiB" % (size / (1024))
-    else:
-        size_str = "%.0f B" % (size)
-
-    return size_str
 
 
 BUG_CONSIDER_PERCENT = 30 # Not scientific number, but 30% sounds reasonable
@@ -77,9 +52,9 @@ def run_rule(basic_data):
                                 ntpath.basename(__file__)
         result_dict["MSG"] = "Percpu = (pcpu_nr_populated * pcpu_nr_units) * " \
                 "page\n\t%s (%d %%) out of %s" % \
-                (get_size_str(total_used_kb * 1024), \
+                (rh.get_size_str(total_used_kb * 1024), \
                  used_percent, \
-                 get_size_str(total_physical_mem_kb * 1024))
+                 rh.get_size_str(total_physical_mem_kb * 1024))
         result_dict["KCS_TITLE"] = "The num_cgroups for blkio in cgroups keeps increasing"
         result_dict["KCS_URL"] = "https://access.redhat.com/solutions/7014337"
         result_dict["RESOLUTION"] = "Please upgrade kernel as specified in the KCS"

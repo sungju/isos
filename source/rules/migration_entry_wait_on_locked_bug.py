@@ -3,6 +3,9 @@ import ntpath
 import operator
 import math
 
+import rules_helper as rh
+
+
 def is_major():
     return True
 
@@ -23,11 +26,9 @@ def add_rule(sysinfo):
 
 
 def run_rule(basic_data):
-    env_vars = basic_data["env_vars"]
-    sos_home = env_vars["sos_home"]
     try:
         if basic_data == None:
-            return None
+            log_string = rh.get_data(basic_data, "log")
         else:
             log_string = basic_data["log_str"]
         migration_entry_wait_on_locked = log_string.find("migration_entry_wait_on_locked+0x")
