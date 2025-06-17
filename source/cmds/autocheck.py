@@ -102,7 +102,7 @@ def show_rules_list():
     if count == 0:
         result_str = result_str + \
                 screen.get_pipe_color_line("No rules available for this system")
-        return
+        return result_str
 
     result_str = result_str + screen.get_pipe_color_line("-" * 75)
     for module in modules:
