@@ -117,14 +117,17 @@ def read_audit_file(audit_path, no_pipe, is_log=True, show_path=False, sos_home=
                 if is_cmd_stopped():
                     break
                 if is_log:
-                    words = line.split()
-                    epoch = line[line.find(" msg=audit(") + 11:]
-                    epoch = epoch[:epoch.find(")")]
-                    if len(epoch.strip()) > 0:
-                        localtime = time.ctime(float(epoch.split(':')[0]))
-                    line = get_colored_line(line)
-                    if len(epoch.strip()) > 0:
-                        line = line.replace(epoch, localtime)
+                    try:
+                        words = line.split()
+                        epoch = line[line.find(" msg=audit(") + 11:]
+                        epoch = epoch[:epoch.find(")")]
+                        if len(epoch.strip()) > 0:
+                            localtime = time.ctime(float(epoch.split(':')[0]))
+                        line = get_colored_line(line)
+                        if len(epoch.strip()) > 0:
+                            line = line.replace(epoch, localtime)
+                    except:
+                        pass
                 else:
                     line = get_colored_line_per_column(line)
 
