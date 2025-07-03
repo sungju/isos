@@ -55,7 +55,6 @@ def run_rule(basic_data):
 
         return [result_dict]
     except Exception as e:
-        print(e)
         return None
 
 
