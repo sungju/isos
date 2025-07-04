@@ -161,7 +161,7 @@ def print_result(result_list):
         result_str = result_str + screen.get_pipe_color_line("-" * 75)
         if "MSG" in result_dict:
             result_str = result_str + \
-                    screen.get_pipe_color_line(result_dict["MSG"])
+                    screen.get_pipe_aware_line(result_dict["MSG"])
         else:
             result_str = result_str + \
                     screen.get_pipe_color_line("No message given")
@@ -190,19 +190,18 @@ def print_result(result_list):
             result_str = result_str + \
                     screen.get_pipe_color_line("\tNo resolution given", "red")
 
-        result_str = result_str + \
-                screen.get_pipe_color_line("Fixed kernel version:", "green")
         if "KERNELS" in result_dict:
             kernels = result_dict["KERNELS"]
-            for kernel in kernels:
+            
+            if len(kernels) > 0:
                 result_str = result_str + \
-                        screen.get_pipe_color_line("\t%s" % kernel, "cyan")
-        else:
-            result_str = result_str + \
-                    screen.get_pipe_color_line("\tNo resolution given", "cyan")
+                        screen.get_pipe_color_line("Fixed kernel version:", "green")
+                for kernel in kernels:
+                    result_str = result_str + \
+                            screen.get_pipe_color_line("\t%s" % kernel, "cyan")
 
-        result_str = result_str + \
-                screen.get_pipe_color_line("Current kernel version: %s" % sysinfo["RELEASE"], "grey")
+                result_str = result_str + \
+                        screen.get_pipe_color_line("Current kernel version: %s" % sysinfo["RELEASE"], "grey")
 
         result_str = result_str + screen.get_pipe_color_line("-" * 75)
 
@@ -245,12 +244,14 @@ def run_rules():
                     screen.get_pipe_color_line("Error running rule %s" % (module))
 
     if issue_count > 0:
+        print("Hello")
         result_str = result_str + screen.get_pipe_color_line("*" * 75)
         result_str = result_str + \
                 screen.get_pipe_color_line("\tWARNING: %d issue%s detected" %
                     (issue_count, "s" if issue_count > 1 else ""),
                     "red")
         result_str = result_str + screen.get_pipe_color_line("*" * 75)
+        print("BYE")
     else:
         result_str = result_str + \
                 screen.get_pipe_color_line("No issues detected")
