@@ -244,7 +244,6 @@ def run_rules():
                     screen.get_pipe_color_line("Error running rule %s" % (module))
 
     if issue_count > 0:
-        print("Hello")
         result_str = result_str + screen.get_pipe_color_line("*" * 75)
         result_str = result_str + \
                 screen.get_pipe_color_line("\tWARNING: %d issue%s detected" %
