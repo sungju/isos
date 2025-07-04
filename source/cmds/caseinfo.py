@@ -56,6 +56,12 @@ def show_caseinfo(options, no_pipe):
         pass
 
 
+    try:
+        with open(sos_home + "/proc/cmdline") as f:
+            result_str = result_str + "\n- - - -\n" + f.readlines()[0]
+    except:
+        pass
+
     result_str = screen.get_pipe_aware_line(result_str)
 
     return result_str
