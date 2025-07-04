@@ -250,7 +250,6 @@ def run_rules():
                     (issue_count, "s" if issue_count > 1 else ""),
                     "red")
         result_str = result_str + screen.get_pipe_color_line("*" * 75)
-        print("BYE")
     else:
         result_str = result_str + \
                 screen.get_pipe_color_line("No issues detected")
