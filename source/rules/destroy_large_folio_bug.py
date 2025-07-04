@@ -35,6 +35,8 @@ def run_rule(basic_data):
             log_string = basic_data["log_str"]
 
         large_rmappable_string = log_string.find("__folio_undo_large_rmappable+0x")
+        if large_rmappable_string < 0:
+            large_rmappable_string = log_string.find("__folio_undo_large_rmappable+0x")
         list_corruption_string = log_string.find("kernel BUG at lib/list_debug")
 
         if list_corruption_string < 0 or large_rmappable_string < 0:
