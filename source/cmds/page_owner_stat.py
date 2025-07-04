@@ -42,6 +42,14 @@ alloc_module_dict = {}
 page_size=4096
 
 def handle_a_file(filename, options):
+    global alloc_by_dict
+    global alloc_type_dict
+    global alloc_module_dict
+
+    alloc_by_dict = {}
+    alloc_type_dict = {}
+    alloc_module_dict = {}
+
     if not os.path.isfile(filename):
         return screen.get_pipe_aware_line("File '%s' does not exist" % (filename))
 
