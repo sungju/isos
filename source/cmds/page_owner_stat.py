@@ -66,6 +66,11 @@ def handle_a_file(filename, options):
         pass
 
     with open(filename, 'r') as f:
+        current_pos = f.tell()
+        f.seek(0, 2)
+        file_size = f.tell()
+        f.seek(current_pos)
+
         while True:
             by_type = ""
             by_whom = ""
@@ -73,6 +78,11 @@ def handle_a_file(filename, options):
             line = f.readline()
             if not line:
                 break
+
+            if get_main().stop_cmd:
+                break
+
+            print("%6.2f %% of file %s has been completed" % ((f.tell() / file_size) * 100, filename), end="\r")
             
             try:
                 if ("times," in line) and ("pages," in line):
@@ -98,6 +108,9 @@ def handle_a_file(filename, options):
                     if ("times:" in line):
                         times = int(words[0])
                         words = f.readline().split(",")
+                    elif words[0] == "PFN": # It's from page_owner.so extension
+                        times = 1           # https://github.com/k-hagio/crash-pageowner
+                        words = f.readline().split(",")
                     else:
                         times = 1
                         words = line.split(",")
@@ -109,12 +122,6 @@ def handle_a_file(filename, options):
                         by_type = ""
                     elif len(words) >= 4 and words[0] == 'Page':
                         by_type = words[3].split()[2]
-                    elif words[0].startswith("PFN"):
-                        while True:
-                            line = f.readline().strip()
-                            if len(line) == 0:
-                                break
-                        continue
                     else:
                         by_type = ""
 
