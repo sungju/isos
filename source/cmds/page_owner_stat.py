@@ -80,6 +80,8 @@ def handle_a_file(filename, options):
                 break
 
             if get_main().stop_cmd:
+                get_main().stop_cmd = False
+                print("\n")
                 break
 
             print("%6.2f %% of file %s has been completed" % ((f.tell() / file_size) * 100, filename), end="\r")
