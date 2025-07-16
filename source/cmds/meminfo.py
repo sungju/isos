@@ -260,10 +260,17 @@ def show_oom_events(op, args, no_pipe):
                     if "invoked oom-killer:" in line:
                         oom_invoked = True
                         if not is_first_oom:
-                            line = "\n" + line
+                            line = "\n\n" + line
                         result_str = result_str + \
                                 screen.get_pipe_aware_line(line.rstrip())
                         is_first_oom = False
+                        continue
+
+                    if "Out of memory: Killed process" in line:
+                        if not is_first_oom:
+                            line = "\n" + line
+                        result_str = result_str + \
+                                screen.get_pipe_aware_line(line.rstrip())
                         continue
 
                     if oom_invoked:
