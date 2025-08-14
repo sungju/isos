@@ -677,7 +677,7 @@ Example)
     To see oom events, you can specify log name or default file (/var/log/messages)
     will be used.
 
-    example.com> meminfo -o
+    example.com> meminfo -O
     Nov  9 01:12:50 example.com kernel: https-jsse-nio- invoked oom-killer: ...
     ==========================================================
     NAME                                               Usage
