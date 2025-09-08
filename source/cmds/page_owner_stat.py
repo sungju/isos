@@ -169,7 +169,7 @@ def handle_a_file(filename, options):
                 alloc_module_dict[mod_name] = pages
 
     
-    print("%s\r" % (" " * 70))
+    print(" " * 70, end="\r")
     if options.number > 0:
         n_items = options.number
     else:
