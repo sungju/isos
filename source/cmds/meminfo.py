@@ -323,7 +323,10 @@ def show_oom_events(op, args, no_pipe):
                         elif " total pagecache pages" in line:
                             line = line[trim_ends_idx:]
                             words = line.split()
-                            meminfo_dict["Pagecaches"] = get_size(words[0])
+                            try:
+                                meminfo_dict["Pagecaches"] = get_size(words[0])
+                            except:
+                                pass
                         elif trim_word not in line or ("%sactive_anon" % trim_word) in line:
                             line = line[trim_ends_idx:]
                             try:
