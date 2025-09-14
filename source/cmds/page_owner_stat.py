@@ -71,13 +71,15 @@ def handle_a_file(filename, options):
         file_size = f.tell()
         f.seek(current_pos)
 
-        while True:
+        while True: # Skip leading garbage lines
+            line = f.readline()
+            if line.strip() != "" and not line.startswith(" "):
+                break
+
+        while line:
             by_type = ""
             by_whom = ""
             mod_name = ""
-            line = f.readline()
-            if not line:
-                break
 
             if get_main().stop_cmd:
                 get_main().stop_cmd = False
@@ -168,6 +170,8 @@ def handle_a_file(filename, options):
 
                 alloc_module_dict[mod_name] = pages
 
+            # read next line
+            line = f.readline()
     
     print(" " * 70, end="\r")
     if options.number > 0:
