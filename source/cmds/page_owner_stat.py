@@ -146,6 +146,7 @@ def handle_a_file(filename, options):
                             mod_name = words[-1][1:-1]
 
             except ValueError as e:
+                print(e)
                 traceback.print_exc()
 
 
@@ -171,7 +172,14 @@ def handle_a_file(filename, options):
                 alloc_module_dict[mod_name] = pages
 
             # read next line
-            line = f.readline()
+            while True:
+                line = f.readline()
+                if not line:  # EOF
+                    break
+                if line.startswith("Charged to "):
+                    continue
+                if line.strip():  # Non-empty line
+                    break
     
     print(" " * 70, end="\r")
     if options.number > 0:
