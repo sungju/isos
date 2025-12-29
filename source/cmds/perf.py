@@ -175,6 +175,7 @@ Examples:
         # 2 : -s overhead,overhead_us,overhead_sys,comm
         # 3 : -s overhead
         # 4 : --tasks
+        # 5 : script
 
     # To see metadata
     > perf perf.data -m
@@ -220,6 +221,8 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-d', '--depth', dest='depth', default=0,
             action='store', type="int",
             help="Shows only specified stack depth <max-stack in perf>")
+    op.add_option('-g', '--graph', dest='graph', action='store_true',
+            help="Show data in hierarchy")
     op.add_option('-l', '--lines', dest='lines', default=0,
             action='store', type="int",
             help="Shows only specified lines from the top")
@@ -248,7 +251,7 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
         file_list = ['perf.data']
     for file_path in file_list:
         try:
-            perf_cmd_str = "perf report -f --stdio"
+            perf_cmd_str = "perf report --stdio -f"
             if not o.debugsymbol:
                 perf_cmd_str = perf_cmd_str +\
                         (" --kallsyms=%s/proc/kallsyms -i %s" % \
@@ -272,6 +275,12 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
                 perf_cmd_str = perf_cmd_str + " -s overhead"
             elif o.sortby == 4:
                 perf_cmd_str = perf_cmd_str + " --tasks"
+            elif o.sortby == 5:
+                perf_cmd_str = perf_cmd_str.replace(" report --stdio ",\
+                        " script ", 1)
+
+            if o.graph:
+                perf_cmd_str = perf_cmd_str + " --hierarchy"
 
             result_str = result_str + run_perf_report(perf_cmd_str, no_pipe, o)
         except Exception as e:
