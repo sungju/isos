@@ -497,11 +497,34 @@ def is_cmd_stopped():
     return stop_cmd
 
 
+import shlex
+
+last_args = []
+last_result = None
+
+def substitute_variables(text):
+    result = text
+    for i, arg in enumerate(last_args):
+        result = result.replace(f"${i}", arg)
+    if len(last_args) > 0:
+        result = result.replace(f"!$", last_args[-1])
+    if last_result is not None:
+        result = result.replace("$?", str(last_result))
+    return result
+
+
 def handle_input(input_str):
+    global last_args
+
     if len(input_str.strip()) == 0:
         return ""
 
     orig_input_str = input_str
+    input_str = substitute_variables(input_str)
+    if input_str != orig_input_str:
+        orig_input_str = input_str
+        print("%s%s" % (get_prompt_str()[0], input_str))
+    last_args = shlex.split(input_str)
     shell_part = ""
 
     if "|" in input_str:
