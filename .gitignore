@@ -8,6 +8,7 @@ __pycache__/
 
 # Env config
 pyvenv.cfg
+source/pyvenv.cfg
 
 # Distribution / packaging
 .Python
