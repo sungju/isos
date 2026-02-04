@@ -20,50 +20,21 @@ def get_command_info():
     return { "%s" % cmd_name : run_psinfo }
 
 
-COLOR_ONE   = ansicolor.get_color(ansicolor.YELLOW)
-COLOR_TWO   = ansicolor.get_color(ansicolor.GREEN)
-COLOR_THREE = ansicolor.get_color(ansicolor.RED)
-COLOR_FOUR  = ansicolor.get_color(ansicolor.CYAN)
-COLOR_FIVE  = ansicolor.get_color(ansicolor.LIGHTCYAN)
-COLOR_RED   = ansicolor.get_color(ansicolor.LIGHTRED)
-COLOR_MAGENTA = ansicolor.get_color(ansicolor.MAGENTA)
-COLOR_GREEN = ansicolor.get_color(ansicolor.GREEN)
-COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-
-column_color = { }
+COLOR_RED   = ""
+COLOR_MAGENTA = ""
+COLOR_GREEN = ""
+COLOR_RESET = ""
 
 def set_color_table(no_pipe):
-    global COLOR_ONE, COLOR_TWO, COLOR_THREE
-    global COLOR_FOUR, COLOR_FIVE
-    global COLOR_RED, COLOR_MAGENTA, COLOR_GREEN
-    global COLOR_RESET
-    global column_color
+    global COLOR_RED, COLOR_MAGENTA, COLOR_GREEN, COLOR_RESET
 
     if no_pipe:
-        COLOR_ONE   = ansicolor.get_color(ansicolor.YELLOW)
-        COLOR_TWO   = ansicolor.get_color(ansicolor.GREEN)
-        COLOR_THREE = ansicolor.get_color(ansicolor.RED)
-        COLOR_FOUR  = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_FIVE  = ansicolor.get_color(ansicolor.LIGHTCYAN)
         COLOR_RED   = ansicolor.get_color(ansicolor.LIGHTRED)
         COLOR_MAGENTA = ansicolor.get_color(ansicolor.MAGENTA)
         COLOR_GREEN = ansicolor.get_color(ansicolor.GREEN)
         COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-
-        column_color = {
-                1 : COLOR_ONE,
-                2 : COLOR_TWO,
-                3 : COLOR_TWO,
-                4 : COLOR_TWO,
-                5 : COLOR_FOUR,
-                6 : COLOR_THREE,
-                11: COLOR_FIVE,
-        }
     else:
-        COLOR_ONE = COLOR_TWO = COLOR_THREE = ""
-        COLOR_FOUR = COLOR_FIVE = ""
         COLOR_RED = COLOR_MAGENTA = COLOR_GREEN = COLOR_RESET = ""
-        column_color = {}
 
 
 total_vsz = 0
@@ -92,19 +63,7 @@ def get_colored_line(line):
     if words[1] == "-": # Don't need to help empty process
         return ""
 
-    count = 1
-    result_str = ""
-    for word in words:
-        colored_word = word
-        if count in column_color:
-            colored_word = column_color[count] + word + COLOR_RESET
-        line = line.replace(word, colored_word, 1)
-        mod_idx = line.find(colored_word) + len(colored_word)
-        result_str = result_str + line[:mod_idx]
-        line = line[mod_idx:]
-        count = count + 1
-
-    return result_str
+    return screen.get_colored_line(line)
 
 
 def get_size_str(size, coloring = False):
@@ -158,6 +117,19 @@ def read_ps_basic(ps_path, no_pipe, options):
     global total_rss
 
     set_color_table(no_pipe)
+    screen.init_data(no_pipe, 1, is_cmd_stopped)
+
+    # Custom column colors for psinfo
+    if no_pipe:
+        screen.column_color = {
+            1: screen.COLOR_3,   # YELLOW
+            2: screen.COLOR_2,   # GREEN
+            3: screen.COLOR_2,   # GREEN
+            4: screen.COLOR_2,   # GREEN
+            5: screen.COLOR_4,   # BLUE
+            6: screen.COLOR_1,   # RED
+            11: screen.COLOR_5,  # MAGENTA
+        }
 
     result_str = ""
     with open(ps_path) as f:
