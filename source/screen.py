@@ -17,30 +17,29 @@ def init_data(l_no_pipe, l_header_start_idx, l_is_cmd_stopped):
     set_color_table()
 
 
-
-COLOR_1  = ansicolor.get_color(ansicolor.RED)
-COLOR_2  = ansicolor.get_color(ansicolor.GREEN)
-COLOR_3  = ansicolor.get_color(ansicolor.YELLOW)
-COLOR_4  = ansicolor.get_color(ansicolor.BLUE)
-COLOR_5  = ansicolor.get_color(ansicolor.MAGENTA)
-COLOR_6  = ansicolor.get_color(ansicolor.CYAN)
-COLOR_7  = ansicolor.get_color(ansicolor.YELLOW)
-COLOR_8  = ansicolor.get_color(ansicolor.BLUE)
-COLOR_9  = ansicolor.get_color(ansicolor.LIGHTRED)
-COLOR_10 = ansicolor.get_color(ansicolor.LIGHTGREEN)
-COLOR_11 = ansicolor.get_color(ansicolor.LIGHTYELLOW)
-COLOR_12 = ansicolor.get_color(ansicolor.LIGHTBLUE)
-COLOR_13 = ansicolor.get_color(ansicolor.LIGHTMAGENTA)
-COLOR_14 = ansicolor.get_color(ansicolor.LIGHTCYAN)
-COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
+# Color variables - initialized by set_color_table()
+COLOR_1 = ""
+COLOR_2 = ""
+COLOR_3 = ""
+COLOR_4 = ""
+COLOR_5 = ""
+COLOR_6 = ""
+COLOR_7 = ""
+COLOR_8 = ""
+COLOR_9 = ""
+COLOR_10 = ""
+COLOR_11 = ""
+COLOR_12 = ""
+COLOR_13 = ""
+COLOR_14 = ""
+COLOR_RESET = ""
 
 column_color = { }
 
 def set_color_table():
-    global COLOR_ONE, COLOR_TWO, COLOR_THREE
-    global COLOR_FOUR, COLOR_FIVE
-    global COLOR_RED, COLOR_MAGENTA, COLOR_GREEN
-    global COLOR_RESET
+    global COLOR_1, COLOR_2, COLOR_3, COLOR_4, COLOR_5, COLOR_6
+    global COLOR_7, COLOR_8, COLOR_9, COLOR_10, COLOR_11, COLOR_12
+    global COLOR_13, COLOR_14, COLOR_RESET
     global column_color
     global no_pipe
 
@@ -87,32 +86,54 @@ def set_color_table():
 
 
 def get_colored_line(line):
-    global header_start_idx
-    global is_cmd_stopped
-    global no_pipe
+    global header_start_idx, is_cmd_stopped, no_pipe, column_color, COLOR_RESET
+
+    if not column_color or not line.strip():
+        return line
 
     words = line.split()
+    if not words:
+        return line
 
+    # Build result using list accumulation (O(n) instead of O(n²))
+    result_parts = []
+    pos = 0
     count = 1
     start_idx_count = header_start_idx - 1
-    result_str = ""
+
     for word in words:
         if is_cmd_stopped():
-            return result_str
+            return ''.join(result_parts)
 
-        colored_word = word
-        if count in column_color:
-            colored_word = column_color[count] + word + COLOR_RESET
-        line = line.replace(word, colored_word, 1)
-        mod_idx = line.find(colored_word) + len(colored_word)
-        result_str = result_str + line[:mod_idx]
-        line = line[mod_idx:]
+        # Find word position from current position
+        word_start = line.find(word, pos)
+        if word_start == -1:
+            break
+
+        # Preserve whitespace before word
+        if word_start > pos:
+            result_parts.append(line[pos:word_start])
+
+        # Apply color or keep plain
         if start_idx_count > 0:
-            start_idx_count = start_idx_count - 1
+            result_parts.append(word)
+            start_idx_count -= 1
+        elif count in column_color:
+            result_parts.append(column_color[count])
+            result_parts.append(word)
+            result_parts.append(COLOR_RESET)
+            count += 1
         else:
-            count = count + 1
+            result_parts.append(word)
+            count += 1
 
-    return result_str
+        pos = word_start + len(word)
+
+    # Append trailing content
+    if pos < len(line):
+        result_parts.append(line[pos:])
+
+    return ''.join(result_parts)
 
 
 def get_pipe_aware_line(line):
