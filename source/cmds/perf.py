@@ -40,7 +40,7 @@ def run_perf_report(perf_cmd_str, no_pipe, options):
     total_lines = len(lines)
     result_str = ""
 
-    line = get_colored_line(perf_cmd_str + "\n" + "=" * 78)
+    line = screen.get_colored_line(perf_cmd_str + "\n" + "=" * 78)
     if no_pipe:
         print(line)
     else:
@@ -54,7 +54,7 @@ def run_perf_report(perf_cmd_str, no_pipe, options):
     for line in lines:
         if print_count == 0:
             break
-        line = get_colored_line(line)
+        line = screen.get_colored_line(line)
         if line != "":
             print_count = print_count - 1
             if no_pipe:

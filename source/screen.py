@@ -88,6 +88,7 @@ def set_color_table():
 def get_colored_line(line):
     global header_start_idx, is_cmd_stopped, no_pipe, column_color, COLOR_RESET
 
+    line = line.rstrip()
     if not column_color or not line.strip():
         return line
 
@@ -133,7 +134,7 @@ def get_colored_line(line):
     if pos < len(line):
         result_parts.append(line[pos:])
 
-    return ''.join(result_parts)
+    return ''.join(result_parts).rstrip()
 
 
 def get_pipe_aware_line(line):
