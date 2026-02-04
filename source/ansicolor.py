@@ -105,6 +105,9 @@ color_list = {
     INVERT : u"\u001b[7m",
 }
 
+# Cache for color codes to avoid redundant lookups
+_color_cache = {}
+
 
 def set_bg_color(color):
     if not sys.stdout.isatty():
@@ -139,8 +142,16 @@ def set_color(color_mix):
 def get_color(color):
     if not sys.stdout.isatty():
         return ""
+
+    # Check cache first
+    if color in _color_cache:
+        return _color_cache[color]
+
+    # Generate and cache
     if color in color_list:
-        return color_list[color]
+        result = color_list[color]
+        _color_cache[color] = result
+        return result
 
     return ""
 
