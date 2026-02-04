@@ -7,6 +7,7 @@ from os.path import isfile, join
 from io import StringIO
 
 import ansicolor
+import screen
 
 
 def description():
@@ -21,20 +22,18 @@ def get_command_info():
     return { "audit": run_auditinfo }
 
 
-COLOR_ONE   = ansicolor.get_color(ansicolor.YELLOW)
-COLOR_TWO   = ansicolor.get_color(ansicolor.GREEN)
-COLOR_THREE = ansicolor.get_color(ansicolor.RED)
-COLOR_FOUR  = ansicolor.get_color(ansicolor.CYAN)
-COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
+COLOR_ONE   = ""
+COLOR_TWO   = ""
+COLOR_THREE = ""
+COLOR_FOUR  = ""
+COLOR_RESET = ""
 
 keyword_color = { }
-column_color = { }
 
 def set_color_table(no_pipe):
     global COLOR_ONE, COLOR_TWO, COLOR_THREE
     global COLOR_FOUR, COLOR_RESET
     global keyword_color
-    global column_color
 
     if no_pipe:
         COLOR_ONE   = ansicolor.get_color(ansicolor.YELLOW)
@@ -51,18 +50,10 @@ def set_color_table(no_pipe):
                 "key=" : COLOR_THREE,
                 "comm=" : COLOR_FOUR,
         }
-
-        column_color = {
-                1 : COLOR_ONE,
-                2 : COLOR_TWO,
-                3 : COLOR_THREE,
-                4 : COLOR_FOUR,
-        }
     else:
         COLOR_ONE = COLOR_TWO = COLOR_THREE = ""
         COLOR_FOUR = COLOR_RESET = ""
         keyword_color = {}
-        column_color = {}
 
 
 def get_colored_line(line):
@@ -83,24 +74,12 @@ def get_colored_line(line):
 
 
 def get_colored_line_per_column(line):
-    words = line.split()
-    result_str = ""
-    count = 1
-    for word in words:
-        colored_word = word
-        if count in column_color:
-            colored_word = column_color[count] + word + COLOR_RESET
-        line = line.replace(word, colored_word, 1)
-        mod_idx = line.find(colored_word) + len(colored_word)
-        result_str = result_str + line[:mod_idx]
-        line = line[mod_idx:]
-        count = count + 1
-
-    return result_str
+    return screen.get_colored_line(line)
 
 
 def read_audit_file(audit_path, no_pipe, is_log=True, show_path=False, sos_home=""):
     set_color_table(no_pipe)
+    screen.init_data(no_pipe, 1, is_cmd_stopped)
     result_str = ""
     if show_path:
         file_name = audit_path.replace(sos_home, "")
