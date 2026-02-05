@@ -93,6 +93,14 @@ def show_oom_meminfo(op, no_pipe, meminfo_dict):
 
     result_str = ""
     page_size = get_main().page_size
+
+    # Set up semantic column coloring for memory info table
+    if no_pipe:
+        screen.column_color = {
+            1: screen.COLOR_3,   # Category - YELLOW (identifier)
+            2: screen.COLOR_1,   # Size - RED (critical memory value)
+        }
+
     result_str = result_str + screen.get_pipe_aware_line("\n%s" % ('#' * 46))
     result_str = result_str +\
             screen.get_pipe_aware_line("%-30s %15s" %
@@ -127,6 +135,13 @@ def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
     if (op.all):
         min_number = len(sorted_slab_dict) - 1
 
+    # Set up semantic column coloring for SLAB usage table
+    if no_pipe:
+        screen.column_color = {
+            1: screen.COLOR_3,   # SLAB name - YELLOW (identifier)
+            2: screen.COLOR_1,   # Memory usage - RED (critical resource)
+        }
+
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
     result_str = result_str +\
             screen.get_pipe_aware_line("%-42s %15s" %
@@ -160,6 +175,13 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
     min_number = 10
     if (op.all):
         min_number = len(sorted_oom_dict) - 1
+
+    # Set up semantic column coloring for process memory usage table
+    if no_pipe:
+        screen.column_color = {
+            1: screen.COLOR_3,   # Process name - YELLOW (identifier)
+            2: screen.COLOR_1,   # Memory usage - RED (critical resource)
+        }
 
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
     result_str = result_str +\
@@ -497,6 +519,13 @@ def show_swap_usage(op, no_pipe):
     if (op.all):
         min_number = len(sorted_swap_usage) - 1
 
+    # Set up semantic column coloring for swap usage table
+    if no_pipe:
+        screen.column_color = {
+            1: screen.COLOR_3,   # Process name - YELLOW (identifier)
+            2: screen.COLOR_1,   # Swap usage - RED (critical resource)
+        }
+
     result_str = result_str + screen.get_pipe_aware_line("=" * 58)
     result_str = result_str +\
             screen.get_pipe_aware_line("%-42s %15s" %
@@ -568,6 +597,14 @@ def show_slabtop(op, no_pipe):
     min_number = 10
     if (op.all):
         min_number = len(sorted_slabtop) - 1
+
+    # Set up semantic column coloring for slabtop table
+    if no_pipe:
+        screen.column_color = {
+            1: screen.COLOR_3,   # SLAB name - YELLOW (identifier)
+            2: screen.COLOR_1,   # Total size - RED (critical memory usage)
+            3: screen.COLOR_4,   # Object size - BLUE (metadata)
+        }
 
     result_str = result_str + screen.get_pipe_aware_line("=" * 51)
     result_str = result_str +\

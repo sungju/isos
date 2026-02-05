@@ -80,6 +80,17 @@ def get_colored_line_per_column(line):
 def read_audit_file(audit_path, no_pipe, is_log=True, show_path=False, sos_home=""):
     set_color_table(no_pipe)
     screen.init_data(no_pipe, 1, is_cmd_stopped)
+
+    # Set up semantic column coloring for audit log output
+    if no_pipe:
+        screen.column_color = {
+            1: screen.COLOR_3,   # Type/event - YELLOW (identifier)
+            2: screen.COLOR_6,   # Timestamp - CYAN (temporal info)
+            3: screen.COLOR_4,   # PID/UID - BLUE (process identifier)
+            4: screen.COLOR_2,   # Success/status - GREEN (status)
+            5: screen.COLOR_5,   # Additional fields - MAGENTA (metadata)
+        }
+
     result_str = ""
     if show_path:
         file_name = audit_path.replace(sos_home, "")

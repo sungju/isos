@@ -53,6 +53,19 @@ def show_shmem(op, no_pipe):
     shmem_total_usage = 0
     ipc_mode = IPC_NONE
     ipc_title = ""
+
+    # Set up semantic column coloring for shared memory table
+    if no_pipe:
+        screen.column_color = {
+            1: screen.COLOR_4,   # key - BLUE (identifier)
+            2: screen.COLOR_4,   # shmid - BLUE (identifier)
+            3: screen.COLOR_3,   # owner - YELLOW (user info)
+            4: screen.COLOR_5,   # perms - MAGENTA (permission bits)
+            5: screen.COLOR_1,   # bytes/size - RED (critical memory allocation)
+            6: screen.COLOR_2,   # nattch - GREEN (attachment count)
+            7: screen.COLOR_2,   # status - GREEN (status field)
+        }
+
     try:
         with open(sos_home + '/sos_commands/sysvipc/ipcs') as f:
             result_lines = f.readlines()
