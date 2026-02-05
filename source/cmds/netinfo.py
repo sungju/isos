@@ -465,7 +465,7 @@ def show_summary(sos_home, no_pipe):
 
     # Display interface table header
     header = "%-12s %-6s %-18s %-12s %-12s %-12s %s" % (
-        "DEVICE", "STATE", "IP ADDRESS", "SPEED", "RX PACKETS", "TX PACKETS", "ERRORS"
+        "DEVICE", "STATE", "IP_ADDRESS", "SPEED", "RX_PACKETS", "TX_PACKETS", "ERRORS"
     )
 
     line = screen.get_colored_line(header)
@@ -1583,7 +1583,7 @@ def show_arp(sos_home, no_pipe):
 
             if entries:
                 # Display table header
-                table_header = "\n%-18s %-20s %-12s %s" % ("IP Address", "MAC Address", "State", "Device")
+                table_header = "\n%-18s %-20s %-12s %s" % ("IP_ADDRESS", "MAC_ADDRESS", "STATE", "DEVICE")
                 if no_pipe:
                     print(ansicolor.get_color(screen.COLOR_6) + table_header + ansicolor.get_color(screen.COLOR_RESET))
                     print("-" * 70)
@@ -1693,7 +1693,7 @@ def show_neighbor(sos_home, no_pipe):
 
             if entries:
                 # Display table header
-                table_header = "\n%-40s %-20s %-12s %-10s %s" % ("IP Address", "MAC Address", "State", "Device", "Ref")
+                table_header = "\n%-40s %-20s %-12s %-10s %s" % ("IP_ADDRESS", "MAC_ADDRESS", "STATE", "DEVICE", "REF")
                 if no_pipe:
                     print(ansicolor.get_color(screen.COLOR_6) + table_header + ansicolor.get_color(screen.COLOR_RESET))
                     print("-" * 90)
@@ -1790,7 +1790,7 @@ def show_interface_list(sos_home, no_pipe):
     stats_info = parse_ip_link_stats(sos_home)
 
     if ip_info:
-        table_header = "\n%-12s %-8s %-18s %-15s %s" % ("Interface", "State", "IP Address", "MAC Address", "MTU")
+        table_header = "\n%-12s %-8s %-18s %-15s %s" % ("INTERFACE", "STATE", "IP_ADDRESS", "MAC_ADDRESS", "MTU")
         if no_pipe:
             print(ansicolor.get_color(screen.COLOR_6) + table_header + ansicolor.get_color(screen.COLOR_RESET))
             print("-" * 70)
