@@ -58,7 +58,7 @@ def run_loginfo(input_str, env_vars, is_cmd_stopped_func,\
             help="Shows journalctl --no-pager --boot")
     op.add_option("-c", "--cron", dest="cron_log", default=0,
             action="store_true",
-            help="Shows cron log")
+            help="Shows cron log (deprecated: use 'cron -l' instead)")
     op.add_option("-d", "--disk", dest="journalctl_disk", default=0,
             action="store_true",
             help="Shows journalctl --disk-usage")
