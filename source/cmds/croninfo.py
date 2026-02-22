@@ -148,6 +148,14 @@ def show_cron_stats(sos_home, no_pipe):
     if not exists(log_path):
         return "Cron log not found\n"
 
+    # Set up colors
+    if no_pipe:
+        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
+        COLOR_YELLOW = ansicolor.get_color(ansicolor.YELLOW)
+        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
+    else:
+        COLOR_CYAN = COLOR_YELLOW = COLOR_RESET = ""
+
     result_str = ""
     job_counts = defaultdict(int)
     user_counts = defaultdict(int)
@@ -180,22 +188,22 @@ def show_cron_stats(sos_home, no_pipe):
         return "Error reading cron log\n"
 
     # Build output
-    result_str += ansicolor.get_color_text("=== Cron Execution Statistics ===\n", "cyan")
+    result_str += COLOR_CYAN + "=== Cron Execution Statistics ===" + COLOR_RESET + "\n"
     result_str += "\nTotal log lines: %d\n" % total_lines
 
     if user_counts:
-        result_str += ansicolor.get_color_text("\n--- Jobs by User ---\n", "yellow")
+        result_str += COLOR_YELLOW + "\n--- Jobs by User ---\n" + COLOR_RESET
         for user in sorted(user_counts.keys()):
             result_str += "  %s: %d executions\n" % (user, user_counts[user])
 
     if job_counts:
-        result_str += ansicolor.get_color_text("\n--- Most Frequent Cron Jobs ---\n", "yellow")
+        result_str += COLOR_YELLOW + "\n--- Most Frequent Cron Jobs ---\n" + COLOR_RESET
         sorted_jobs = sorted(job_counts.items(), key=lambda x: x[1], reverse=True)
         for cmd, count in sorted_jobs[:10]:  # Top 10
             result_str += "  [%d] %s\n" % (count, cmd)
 
     if anacron_jobs:
-        result_str += ansicolor.get_color_text("\n--- Anacron Jobs ---\n", "yellow")
+        result_str += COLOR_YELLOW + "\n--- Anacron Jobs ---\n" + COLOR_RESET
         for job in sorted(anacron_jobs.keys()):
             result_str += "  %s: %d executions\n" % (job, anacron_jobs[job])
 
@@ -211,7 +219,14 @@ def show_systemd_timers(sos_home, no_pipe):
     if not exists(timer_path):
         return "Systemd timer information not found\n"
 
-    result_str = ansicolor.get_color_text("=== Systemd Timers (Modern Alternative to Cron) ===\n\n", "cyan")
+    # Set up colors
+    if no_pipe:
+        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
+        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
+    else:
+        COLOR_CYAN = COLOR_RESET = ""
+
+    result_str = COLOR_CYAN + "=== Systemd Timers (Modern Alternative to Cron) ===" + COLOR_RESET + "\n\n"
 
     if no_pipe:
         print(result_str)
@@ -222,6 +237,13 @@ def show_systemd_timers(sos_home, no_pipe):
 
 
 def show_cron_config(sos_home, no_pipe):
+    # Set up colors
+    if no_pipe:
+        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
+        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
+    else:
+        COLOR_CYAN = COLOR_RESET = ""
+
     result_str = ""
     config_files = [
         (sos_home + "/etc/anacrontab", "Anacron Configuration"),
@@ -235,7 +257,7 @@ def show_cron_config(sos_home, no_pipe):
 
     for file_path, title in config_files:
         if exists(file_path):
-            header = ansicolor.get_color_text("=== %s ===\n" % title, "cyan")
+            header = COLOR_CYAN + ("=== %s ===" % title) + COLOR_RESET + "\n"
             if no_pipe:
                 print(header)
             else:
