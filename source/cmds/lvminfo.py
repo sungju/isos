@@ -96,13 +96,15 @@ def show_overview(sos_home, no_pipe):
                         break
                     if line.strip() and not line.startswith("VG") and not line.startswith("WARNING") and not line.startswith("Reloading"):
                         parts = line.split()
-                        if len(parts) >= 7:
+                        # VG format: VG Attr Ext #PV #LV #SN VSize VFree ...
+                        if len(parts) >= 8:
                             vg_name = parts[0]
-                            num_pv = parts[2]
-                            num_lv = parts[3]
-                            num_sn = parts[4]
-                            vsize = parts[5]
-                            vfree = parts[6]
+                            # parts[1] = Attr, parts[2] = Ext (skip these)
+                            num_pv = parts[3]
+                            num_lv = parts[4]
+                            num_sn = parts[5]
+                            vsize = parts[6]
+                            vfree = parts[7]
 
                             # Color code based on free space
                             vsize_bytes = parse_size_string(vsize)
@@ -126,8 +128,8 @@ def show_overview(sos_home, no_pipe):
                             else:
                                 result_str += "%-12s %-8s %-6s %-6s %-12s %-12s\n" % (
                                     vg_name, num_pv, num_lv, num_sn, vsize, vfree)
-        except:
-            result_str += "Error reading VG information\n"
+        except Exception as e:
+            result_str += "Error reading VG information: %s\n" % str(e)
 
         result_str += "\n"
 
@@ -146,7 +148,7 @@ def show_overview(sos_home, no_pipe):
                         break
                     if line.strip() and not line.startswith("PV") and not line.startswith("WARNING") and not line.startswith("Reloading"):
                         parts = line.split()
-                        if len(parts) >= 5:
+                        if len(parts) >= 6:
                             pv = parts[0]
                             vg = parts[1] if parts[1] else "N/A"
                             fmt = parts[2] if parts[2] else "---"
@@ -154,8 +156,8 @@ def show_overview(sos_home, no_pipe):
                             pfree = parts[5]
 
                             result_str += "%-12s %-12s %-8s %-12s %-12s\n" % (pv, vg, fmt, psize, pfree)
-        except:
-            result_str += "Error reading PV information\n"
+        except Exception as e:
+            result_str += "Error reading PV information: %s\n" % str(e)
 
         result_str += "\n"
 
