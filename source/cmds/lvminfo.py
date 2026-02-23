@@ -1,3 +1,15 @@
+"""
+LVM Information Command
+
+Displays LVM (Logical Volume Manager) information from sosreports including:
+- Volume Group overview and details
+- Physical Volume information
+- Logical Volume details
+- Filesystem usage on LVM volumes
+- Device mapper status
+- Thin pools and snapshots
+"""
+
 import sys
 import os
 from os.path import exists, join
@@ -7,6 +19,11 @@ import re
 
 import ansicolor
 import screen
+from cmd_helpers import (
+    ColorManager, OutputBuilder, format_bytes,
+    parse_lvm_size, calculate_percentage, get_sos_file_path,
+    THRESHOLD_VG_CRITICAL, THRESHOLD_VG_WARNING
+)
 
 
 def description():
@@ -18,79 +35,37 @@ def add_command():
 
 
 def get_command_info():
-    return { "lvminfo": run_lvminfo }
+    return {"lvminfo": run_lvminfo}
 
 
-def format_bytes(bytes_val):
-    """Format bytes into human readable format"""
-    try:
-        bytes_val = float(bytes_val)
-        if bytes_val >= 1099511627776:  # 1TB
-            return "%.2f TB" % (bytes_val / 1099511627776.0)
-        elif bytes_val >= 1073741824:  # 1GB
-            return "%.2f GB" % (bytes_val / 1073741824.0)
-        elif bytes_val >= 1048576:  # 1MB
-            return "%.2f MB" % (bytes_val / 1048576.0)
-        elif bytes_val >= 1024:  # 1KB
-            return "%.2f KB" % (bytes_val / 1024.0)
-        else:
-            return "%.0f B" % bytes_val
-    except:
-        return "N/A"
+# Global state
+is_cmd_stopped = None
 
 
-def parse_size_string(size_str):
-    """Parse LVM size string like '3.47t', '99.00g', etc to bytes"""
-    if not size_str:
-        return 0
+def show_overview(sos_home, colors, output):
+    """
+    Show LVM overview with VG, PV, LV summary.
 
-    size_str = size_str.strip().lower().replace('<', '')
-
-    multipliers = {
-        'b': 1,
-        'k': 1024,
-        'm': 1048576,
-        'g': 1073741824,
-        't': 1099511627776,
-        'p': 1125899906842624
-    }
-
-    try:
-        # Extract number and unit
-        match = re.match(r'([\d.]+)\s*([bkmgtp])?', size_str)
-        if match:
-            num = float(match.group(1))
-            unit = match.group(2) or 'b'
-            return int(num * multipliers.get(unit, 1))
-    except:
-        pass
-
-    return 0
-
-
-def show_overview(sos_home, no_pipe):
-    """Show LVM overview with VG, PV, LV summary"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_YELLOW = ansicolor.get_color(ansicolor.YELLOW)
-        COLOR_GREEN = ansicolor.get_color(ansicolor.GREEN)
-        COLOR_RED = ansicolor.get_color(ansicolor.RED)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_YELLOW = COLOR_GREEN = COLOR_RED = COLOR_RESET = ""
-
-    result_str = COLOR_CYAN + "=== LVM Overview ===" + COLOR_RESET + "\n\n"
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+    """
+    output.add_colored_line("=== LVM Overview ===", colors.cyan, colors.reset)
+    output.add_line("")
 
     # Parse VG information
-    vgs_file = sos_home + "/sos_commands/lvm2/vgs_-v_-o_vg_mda_count_vg_mda_free_vg_mda_size_vg_mda_used_count_vg_tags_systemid_lock_type_--config_global_metadata_read_only_1_--nolocking_--foreign"
+    vgs_file = get_sos_file_path(sos_home, "sos_commands", "lvm2",
+        "vgs_-v_-o_vg_mda_count_vg_mda_free_vg_mda_size_vg_mda_used_count_vg_tags_systemid_lock_type_--config_global_metadata_read_only_1_--nolocking_--foreign")
 
     if exists(vgs_file):
-        result_str += COLOR_YELLOW + "Volume Groups:" + COLOR_RESET + "\n"
-        result_str += "%-12s %-8s %-6s %-6s %-12s %-12s\n" % ("VG", "#PV", "#LV", "#SN", "VSize", "VFree")
-        result_str += "-" * 70 + "\n"
+        output.add_colored_line("Volume Groups:", colors.yellow, colors.reset)
+        output.add_line("%-12s %-8s %-6s %-6s %-12s %-12s" %
+                       ("VG", "#PV", "#LV", "#SN", "VSize", "VFree"))
+        output.add_line("-" * 70)
 
         try:
-            with open(vgs_file) as f:
+            with open(vgs_file, 'r') as f:
                 for line in f:
                     if is_cmd_stopped():
                         break
@@ -99,7 +74,6 @@ def show_overview(sos_home, no_pipe):
                         # VG format: VG Attr Ext #PV #LV #SN VSize VFree ...
                         if len(parts) >= 8:
                             vg_name = parts[0]
-                            # parts[1] = Attr, parts[2] = Ext (skip these)
                             num_pv = parts[3]
                             num_lv = parts[4]
                             num_sn = parts[5]
@@ -107,42 +81,46 @@ def show_overview(sos_home, no_pipe):
                             vfree = parts[7]
 
                             # Color code based on free space
-                            vsize_bytes = parse_size_string(vsize)
-                            vfree_bytes = parse_size_string(vfree)
+                            vsize_bytes = parse_lvm_size(vsize)
+                            vfree_bytes = parse_lvm_size(vfree)
+                            free_pct = calculate_percentage(vfree_bytes, vsize_bytes)
 
-                            if vsize_bytes > 0:
-                                free_pct = (vfree_bytes * 100.0) / vsize_bytes
-                                if free_pct < 10 and no_pipe:
-                                    color = COLOR_RED
-                                elif free_pct < 20 and no_pipe:
-                                    color = COLOR_YELLOW
+                            if output.no_pipe and free_pct > 0:
+                                # Note: VG warning is reversed - low free % is bad
+                                if free_pct < THRESHOLD_VG_CRITICAL:
+                                    color = colors.red
+                                elif free_pct < THRESHOLD_VG_WARNING:
+                                    color = colors.yellow
                                 else:
                                     color = ""
-                            else:
-                                color = ""
-                                free_pct = 0
 
-                            if color:
-                                result_str += "%-12s %-8s %-6s %-6s %-12s %s%-12s (%.1f%% free)%s\n" % (
-                                    vg_name, num_pv, num_lv, num_sn, vsize, color, vfree, free_pct, COLOR_RESET)
+                                if color:
+                                    output.add_line("%-12s %-8s %-6s %-6s %-12s %s%-12s (%.1f%% free)%s" % (
+                                        vg_name, num_pv, num_lv, num_sn, vsize,
+                                        color, vfree, free_pct, colors.reset))
+                                else:
+                                    output.add_line("%-12s %-8s %-6s %-6s %-12s %-12s" % (
+                                        vg_name, num_pv, num_lv, num_sn, vsize, vfree))
                             else:
-                                result_str += "%-12s %-8s %-6s %-6s %-12s %-12s\n" % (
-                                    vg_name, num_pv, num_lv, num_sn, vsize, vfree)
-        except Exception as e:
-            result_str += "Error reading VG information: %s\n" % str(e)
+                                output.add_line("%-12s %-8s %-6s %-6s %-12s %-12s" % (
+                                    vg_name, num_pv, num_lv, num_sn, vsize, vfree))
+        except (IOError, OSError) as e:
+            output.add_line("Error reading VG information: %s" % str(e))
 
-        result_str += "\n"
+        output.add_line("")
 
     # Parse PV information
-    pvs_file = sos_home + "/sos_commands/lvm2/pvs_-a_-v_-o_pv_mda_free_pv_mda_size_pv_mda_count_pv_mda_used_count_pe_start_--config_global_metadata_read_only_1_--nolocking_--foreign"
+    pvs_file = get_sos_file_path(sos_home, "sos_commands", "lvm2",
+        "pvs_-a_-v_-o_pv_mda_free_pv_mda_size_pv_mda_count_pv_mda_used_count_pe_start_--config_global_metadata_read_only_1_--nolocking_--foreign")
 
     if exists(pvs_file):
-        result_str += COLOR_YELLOW + "Physical Volumes:" + COLOR_RESET + "\n"
-        result_str += "%-12s %-12s %-8s %-12s %-12s\n" % ("PV", "VG", "Fmt", "PSize", "PFree")
-        result_str += "-" * 60 + "\n"
+        output.add_colored_line("Physical Volumes:", colors.yellow, colors.reset)
+        output.add_line("%-12s %-12s %-8s %-12s %-12s" %
+                       ("PV", "VG", "Fmt", "PSize", "PFree"))
+        output.add_line("-" * 60)
 
         try:
-            with open(pvs_file) as f:
+            with open(pvs_file, 'r') as f:
                 for line in f:
                     if is_cmd_stopped():
                         break
@@ -155,60 +133,63 @@ def show_overview(sos_home, no_pipe):
                             psize = parts[4]
                             pfree = parts[5]
 
-                            result_str += "%-12s %-12s %-8s %-12s %-12s\n" % (pv, vg, fmt, psize, pfree)
-        except Exception as e:
-            result_str += "Error reading PV information: %s\n" % str(e)
+                            output.add_line("%-12s %-12s %-8s %-12s %-12s" %
+                                          (pv, vg, fmt, psize, pfree))
+        except (IOError, OSError) as e:
+            output.add_line("Error reading PV information: %s" % str(e))
 
-        result_str += "\n"
+        output.add_line("")
 
     # Count logical volumes
-    lvs_file = sos_home + "/sos_commands/lvm2/lvs_-a_-o_lv_tags_devices_lv_kernel_read_ahead_lv_read_ahead_stripes_stripesize_--config_global_metadata_read_only_1_--nolocking_--foreign"
+    lvs_file = get_sos_file_path(sos_home, "sos_commands", "lvm2",
+        "lvs_-a_-o_lv_tags_devices_lv_kernel_read_ahead_lv_read_ahead_stripes_stripesize_--config_global_metadata_read_only_1_--nolocking_--foreign")
 
     if exists(lvs_file):
         lv_count = 0
         try:
-            with open(lvs_file) as f:
+            with open(lvs_file, 'r') as f:
                 for line in f:
                     if line.strip() and not line.startswith("LV") and not line.startswith("WARNING") and not line.startswith("Reloading"):
                         lv_count += 1
-        except:
+        except (IOError, OSError):
             pass
 
-        result_str += COLOR_YELLOW + "Logical Volumes: " + COLOR_RESET + "%d total\n" % lv_count
-
-    if no_pipe:
-        print(result_str)
-        return ""
-    else:
-        return result_str
+        output.add_line("%sLogical Volumes:%s %d total" %
+                       (colors.yellow, colors.reset, lv_count) if output.no_pipe
+                       else "Logical Volumes: %d total" % lv_count)
 
 
-def show_pvs(sos_home, no_pipe, verbose=False):
-    """Show Physical Volume details"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_RESET = ""
+def show_pvs(sos_home, colors, output, verbose=False):
+    """
+    Show Physical Volume details.
 
-    pvs_file = sos_home + "/sos_commands/lvm2/pvs_-a_-v_-o_pv_mda_free_pv_mda_size_pv_mda_count_pv_mda_used_count_pe_start_--config_global_metadata_read_only_1_--nolocking_--foreign"
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+        verbose: Show verbose information
+    """
+    pvs_file = get_sos_file_path(sos_home, "sos_commands", "lvm2",
+        "pvs_-a_-v_-o_pv_mda_free_pv_mda_size_pv_mda_count_pv_mda_used_count_pe_start_--config_global_metadata_read_only_1_--nolocking_--foreign")
 
     if not exists(pvs_file):
-        return "PV information not found\n"
+        output.add_line("PV information not found")
+        return
 
-    result_str = COLOR_CYAN + "=== Physical Volume Details ===" + COLOR_RESET + "\n\n"
+    output.add_colored_line("=== Physical Volume Details ===", colors.cyan, colors.reset)
+    output.add_line("")
 
     if verbose:
-        result_str += "%-12s %-12s %-8s %-12s %-12s %-12s %-10s %-10s %-8s\n" % (
-            "PV", "VG", "Fmt", "PSize", "PFree", "DevSize", "PMdaFree", "PMdaSize", "#PMda")
-        result_str += "-" * 110 + "\n"
+        output.add_line("%-12s %-12s %-8s %-12s %-12s %-12s %-10s %-10s %-8s" % (
+            "PV", "VG", "Fmt", "PSize", "PFree", "DevSize", "PMdaFree", "PMdaSize", "#PMda"))
+        output.add_line("-" * 110)
     else:
-        result_str += "%-12s %-12s %-8s %-12s %-12s %-12s\n" % (
-            "PV", "VG", "Fmt", "PSize", "PFree", "UUID")
-        result_str += "-" * 80 + "\n"
+        output.add_line("%-12s %-12s %-8s %-12s %-12s %-12s" % (
+            "PV", "VG", "Fmt", "PSize", "PFree", "UUID"))
+        output.add_line("-" * 80)
 
     try:
-        with open(pvs_file) as f:
+        with open(pvs_file, 'r') as f:
             for line in f:
                 if is_cmd_stopped():
                     break
@@ -227,44 +208,39 @@ def show_pvs(sos_home, no_pipe, verbose=False):
                             pmda_free = parts[8]
                             pmda_size = parts[9]
                             pmda_count = parts[10]
-                            result_str += "%-12s %-12s %-8s %-12s %-12s %-12s %-10s %-10s %-8s\n" % (
-                                pv, vg, fmt, psize, pfree, devsize, pmda_free, pmda_size, pmda_count)
+                            output.add_line("%-12s %-12s %-8s %-12s %-12s %-12s %-10s %-10s %-8s" % (
+                                pv, vg, fmt, psize, pfree, devsize, pmda_free, pmda_size, pmda_count))
                         else:
-                            result_str += "%-12s %-12s %-8s %-12s %-12s %-12s\n" % (
-                                pv, vg, fmt, psize, pfree, uuid)
-    except:
-        return "Error reading PV information\n"
-
-    if no_pipe:
-        print(result_str)
-        return ""
-    else:
-        return result_str
+                            output.add_line("%-12s %-12s %-8s %-12s %-12s %-12s" % (
+                                pv, vg, fmt, psize, pfree, uuid))
+    except (IOError, OSError):
+        output.add_line("Error reading PV information")
 
 
-def show_vgs(sos_home, no_pipe, verbose=False):
-    """Show Volume Group details"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_RESET = ""
+def show_vgs(sos_home, colors, output, verbose=False):
+    """
+    Show Volume Group details.
 
-    vgdisplay_file = sos_home + "/sos_commands/lvm2/vgdisplay_-vv_--config_global_metadata_read_only_1_--nolocking_--foreign"
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+        verbose: Show verbose debug output
+    """
+    vgdisplay_file = get_sos_file_path(sos_home, "sos_commands", "lvm2",
+        "vgdisplay_-vv_--config_global_metadata_read_only_1_--nolocking_--foreign")
 
     if not exists(vgdisplay_file):
-        return "VG information not found\n"
+        output.add_line("VG information not found")
+        return
 
-    screen.init_data(no_pipe, 1, is_cmd_stopped)
+    output.add_colored_line("=== Volume Group Details ===", colors.cyan, colors.reset)
+    output.add_line("")
 
-    result_str = COLOR_CYAN + "=== Volume Group Details ===" + COLOR_RESET + "\n\n"
-
-    if no_pipe:
-        print(result_str)
-        result_str = ""
+    screen.init_data(output.no_pipe, 1, is_cmd_stopped)
 
     try:
-        with open(vgdisplay_file) as f:
+        with open(vgdisplay_file, 'r') as f:
             for line in f:
                 if is_cmd_stopped():
                     break
@@ -277,44 +253,41 @@ def show_vgs(sos_home, no_pipe, verbose=False):
                     continue
 
                 line = screen.get_colored_line(line.rstrip())
-                if no_pipe:
-                    print(line)
-                else:
-                    result_str += line + "\n"
-    except:
-        return "Error reading VG information\n"
-
-    if no_pipe:
-        return ""
-    else:
-        return result_str
+                output.add_line(line)
+    except (IOError, OSError):
+        output.add_line("Error reading VG information")
 
 
-def show_lvs(sos_home, no_pipe, verbose=False):
-    """Show Logical Volume details"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_RESET = ""
+def show_lvs(sos_home, colors, output, verbose=False):
+    """
+    Show Logical Volume details.
 
-    lvs_file = sos_home + "/sos_commands/lvm2/lvs_-a_-o_lv_tags_devices_lv_kernel_read_ahead_lv_read_ahead_stripes_stripesize_--config_global_metadata_read_only_1_--nolocking_--foreign"
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+        verbose: Show verbose information
+    """
+    lvs_file = get_sos_file_path(sos_home, "sos_commands", "lvm2",
+        "lvs_-a_-o_lv_tags_devices_lv_kernel_read_ahead_lv_read_ahead_stripes_stripesize_--config_global_metadata_read_only_1_--nolocking_--foreign")
 
     if not exists(lvs_file):
-        return "LV information not found\n"
+        output.add_line("LV information not found")
+        return
 
-    result_str = COLOR_CYAN + "=== Logical Volume Details ===" + COLOR_RESET + "\n\n"
+    output.add_colored_line("=== Logical Volume Details ===", colors.cyan, colors.reset)
+    output.add_line("")
 
     if verbose:
-        result_str += "%-32s %-12s %-10s %-12s %-30s %-8s\n" % (
-            "LV", "VG", "Attr", "LSize", "Devices", "#Str")
-        result_str += "-" * 110 + "\n"
+        output.add_line("%-32s %-12s %-10s %-12s %-30s %-8s" % (
+            "LV", "VG", "Attr", "LSize", "Devices", "#Str"))
+        output.add_line("-" * 110)
     else:
-        result_str += "%-32s %-12s %-10s %-12s\n" % ("LV", "VG", "Attr", "LSize")
-        result_str += "-" * 70 + "\n"
+        output.add_line("%-32s %-12s %-10s %-12s" % ("LV", "VG", "Attr", "LSize"))
+        output.add_line("-" * 70)
 
     try:
-        with open(lvs_file) as f:
+        with open(lvs_file, 'r') as f:
             for line in f:
                 if is_cmd_stopped():
                     break
@@ -329,45 +302,40 @@ def show_lvs(sos_home, no_pipe, verbose=False):
                         if verbose and len(parts) >= 8:
                             devices = parts[6]
                             stripes = parts[8]
-                            result_str += "%-32s %-12s %-10s %-12s %-30s %-8s\n" % (
-                                lv, vg, attr, lsize, devices, stripes)
+                            output.add_line("%-32s %-12s %-10s %-12s %-30s %-8s" % (
+                                lv, vg, attr, lsize, devices, stripes))
                         else:
-                            result_str += "%-32s %-12s %-10s %-12s\n" % (lv, vg, attr, lsize)
-    except:
-        return "Error reading LV information\n"
-
-    if no_pipe:
-        print(result_str)
-        return ""
-    else:
-        return result_str
+                            output.add_line("%-32s %-12s %-10s %-12s" % (lv, vg, attr, lsize))
+    except (IOError, OSError):
+        output.add_line("Error reading LV information")
 
 
-def show_filesystem_usage(sos_home, no_pipe):
-    """Show filesystem usage for LVM volumes"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_YELLOW = ansicolor.get_color(ansicolor.YELLOW)
-        COLOR_RED = ansicolor.get_color(ansicolor.RED)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_YELLOW = COLOR_RED = COLOR_RESET = ""
+def show_filesystem_usage(sos_home, colors, output):
+    """
+    Show filesystem usage for LVM volumes.
 
-    df_file = sos_home + "/sos_commands/filesys/df_-aliT_-x_autofs"
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+    """
+    df_file = get_sos_file_path(sos_home, "sos_commands", "filesys", "df_-aliT_-x_autofs")
 
     if not exists(df_file):
-        df_file = sos_home + "/sos_commands/filesys/df_-al_-x_autofs"
+        df_file = get_sos_file_path(sos_home, "sos_commands", "filesys", "df_-al_-x_autofs")
 
     if not exists(df_file):
-        return "Filesystem information not found\n"
+        output.add_line("Filesystem information not found")
+        return
 
-    result_str = COLOR_CYAN + "=== Filesystem Usage (LVM Volumes) ===" + COLOR_RESET + "\n\n"
-    result_str += "%-40s %-8s %12s %12s %12s %6s %s\n" % (
-        "Filesystem", "Type", "Size(1K)", "Used", "Available", "Use%", "Mounted on")
-    result_str += "-" * 120 + "\n"
+    output.add_colored_line("=== Filesystem Usage (LVM Volumes) ===", colors.cyan, colors.reset)
+    output.add_line("")
+    output.add_line("%-40s %-8s %12s %12s %12s %6s %s" % (
+        "Filesystem", "Type", "Size(1K)", "Used", "Available", "Use%", "Mounted on"))
+    output.add_line("-" * 120)
 
     try:
-        with open(df_file) as f:
+        with open(df_file, 'r') as f:
             for line in f:
                 if is_cmd_stopped():
                     break
@@ -396,135 +364,108 @@ def show_filesystem_usage(sos_home, no_pipe):
                         # Color code based on usage
                         try:
                             pct = int(use_pct.replace('%', ''))
-                            if pct >= 90 and no_pipe:
-                                color = COLOR_RED
-                            elif pct >= 80 and no_pipe:
-                                color = COLOR_YELLOW
-                            else:
-                                color = ""
-                        except:
+                            color = colors.get_threshold_color(pct) if output.no_pipe else ""
+                        except ValueError:
                             color = ""
-                            pct = 0
 
-                        if color:
-                            result_str += "%-40s %-8s %12s %12s %12s %s%6s%s %s\n" % (
-                                filesystem, fs_type, size, used, avail, color, use_pct, COLOR_RESET, mount)
+                        if color and output.no_pipe:
+                            output.add_line("%-40s %-8s %12s %12s %12s %s%6s%s %s" % (
+                                filesystem, fs_type, size, used, avail, color, use_pct, colors.reset, mount))
                         else:
-                            result_str += "%-40s %-8s %12s %12s %12s %6s %s\n" % (
-                                filesystem, fs_type, size, used, avail, use_pct, mount)
-    except:
-        return "Error reading filesystem information\n"
-
-    if no_pipe:
-        print(result_str)
-        return ""
-    else:
-        return result_str
+                            output.add_line("%-40s %-8s %12s %12s %12s %6s %s" % (
+                                filesystem, fs_type, size, used, avail, use_pct, mount))
+    except (IOError, OSError):
+        output.add_line("Error reading filesystem information")
 
 
-def show_dmsetup_info(sos_home, no_pipe):
-    """Show device mapper information"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_RESET = ""
+def show_dmsetup_info(sos_home, colors, output):
+    """
+    Show device mapper information.
 
-    dmsetup_file = sos_home + "/sos_commands/devicemapper/dmsetup_info_-c"
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+    """
+    dmsetup_file = get_sos_file_path(sos_home, "sos_commands", "devicemapper", "dmsetup_info_-c")
 
     if not exists(dmsetup_file):
-        return "Device mapper information not found\n"
+        output.add_line("Device mapper information not found")
+        return
 
-    screen.init_data(no_pipe, 1, is_cmd_stopped)
+    output.add_colored_line("=== Device Mapper Status ===", colors.cyan, colors.reset)
+    output.add_line("")
 
-    result_str = COLOR_CYAN + "=== Device Mapper Status ===" + COLOR_RESET + "\n\n"
-
-    if no_pipe:
-        print(result_str)
-        result_str = ""
+    screen.init_data(output.no_pipe, 1, is_cmd_stopped)
 
     try:
-        with open(dmsetup_file) as f:
+        with open(dmsetup_file, 'r') as f:
             for line in f:
                 if is_cmd_stopped():
                     break
 
                 line = screen.get_colored_line(line.rstrip())
-                if no_pipe:
-                    print(line)
-                else:
-                    result_str += line + "\n"
-    except:
-        return "Error reading device mapper information\n"
-
-    if no_pipe:
-        return ""
-    else:
-        return result_str
+                output.add_line(line)
+    except (IOError, OSError):
+        output.add_line("Error reading device mapper information")
 
 
-def show_lvm_config(sos_home, no_pipe):
-    """Show LVM configuration"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_RESET = ""
+def show_lvm_config(sos_home, colors, output):
+    """
+    Show LVM configuration.
 
-    config_file = sos_home + "/etc/lvm/lvm.conf"
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+    """
+    config_file = get_sos_file_path(sos_home, "etc", "lvm", "lvm.conf")
 
     if not exists(config_file):
-        return "LVM configuration not found\n"
+        output.add_line("LVM configuration not found")
+        return
 
-    screen.init_data(no_pipe, 1, is_cmd_stopped)
+    output.add_colored_line("=== LVM Configuration (/etc/lvm/lvm.conf) ===", colors.cyan, colors.reset)
+    output.add_line("")
 
-    result_str = COLOR_CYAN + "=== LVM Configuration (/etc/lvm/lvm.conf) ===" + COLOR_RESET + "\n\n"
-
-    if no_pipe:
-        print(result_str)
-        result_str = ""
+    screen.init_data(output.no_pipe, 1, is_cmd_stopped)
 
     try:
-        with open(config_file) as f:
+        with open(config_file, 'r') as f:
             for line in f:
                 if is_cmd_stopped():
                     break
 
                 line = screen.get_colored_line(line.rstrip())
-                if no_pipe:
-                    print(line)
-                else:
-                    result_str += line + "\n"
-    except:
-        return "Error reading LVM configuration\n"
-
-    if no_pipe:
-        return ""
-    else:
-        return result_str
+                output.add_line(line)
+    except (IOError, OSError):
+        output.add_line("Error reading LVM configuration")
 
 
-def show_thin_pools(sos_home, no_pipe):
-    """Show thin pool and snapshot information if any"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_YELLOW = ansicolor.get_color(ansicolor.YELLOW)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_YELLOW = COLOR_RESET = ""
+def show_thin_pools(sos_home, colors, output):
+    """
+    Show thin pool and snapshot information if any.
 
-    lvs_file = sos_home + "/sos_commands/lvm2/lvs_-a_-o_lv_tags_devices_lv_kernel_read_ahead_lv_read_ahead_stripes_stripesize_--config_global_metadata_read_only_1_--nolocking_--foreign"
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+    """
+    lvs_file = get_sos_file_path(sos_home, "sos_commands", "lvm2",
+        "lvs_-a_-o_lv_tags_devices_lv_kernel_read_ahead_lv_read_ahead_stripes_stripesize_--config_global_metadata_read_only_1_--nolocking_--foreign")
 
     if not exists(lvs_file):
-        return "LV information not found\n"
+        output.add_line("LV information not found")
+        return
 
-    result_str = COLOR_CYAN + "=== Thin Pools and Snapshots ===" + COLOR_RESET + "\n\n"
+    output.add_colored_line("=== Thin Pools and Snapshots ===", colors.cyan, colors.reset)
+    output.add_line("")
 
     thin_found = False
     snapshot_found = False
 
     try:
-        with open(lvs_file) as f:
+        with open(lvs_file, 'r') as f:
             for line in f:
                 if is_cmd_stopped():
                     break
@@ -538,22 +479,22 @@ def show_thin_pools(sos_home, no_pipe):
                             vol_type = attr[0]
                             if vol_type in ['t', 'V']:
                                 thin_found = True
-                                result_str += line
+                                output.add_line(line.rstrip())
                             elif vol_type == 's':
                                 snapshot_found = True
-                                result_str += line
-    except:
-        return "Error reading LV information\n"
+                                output.add_line(line.rstrip())
+    except (IOError, OSError):
+        output.add_line("Error reading LV information")
+        return
 
     if not thin_found and not snapshot_found:
-        result_str += "No thin pools or snapshots found.\n"
-        result_str += "\n" + COLOR_YELLOW + "Note:" + COLOR_RESET + " This system uses traditional thick-provisioned logical volumes.\n"
-
-    if no_pipe:
-        print(result_str)
-        return ""
-    else:
-        return result_str
+        output.add_line("No thin pools or snapshots found.")
+        output.add_line("")
+        if output.no_pipe:
+            output.add_line("%sNote:%s This system uses traditional thick-provisioned logical volumes." %
+                          (colors.yellow, colors.reset))
+        else:
+            output.add_line("Note: This system uses traditional thick-provisioned logical volumes.")
 
 
 def print_help_msg(op, no_pipe):
@@ -596,10 +537,21 @@ LVM Components:
         return ""
 
 
-is_cmd_stopped = None
-
 def run_lvminfo(input_str, env_vars, is_cmd_stopped_func,
-        show_help=False, no_pipe=True):
+                show_help=False, no_pipe=True):
+    """
+    Main entry point for lvminfo command.
+
+    Args:
+        input_str: Command arguments
+        env_vars: Environment variables dict
+        is_cmd_stopped_func: Function to check if command should stop
+        show_help: Show help message
+        no_pipe: True if output goes to terminal
+
+    Returns:
+        Result string (empty if output went to terminal)
+    """
     global is_cmd_stopped
     is_cmd_stopped = is_cmd_stopped_func
 
@@ -628,52 +580,52 @@ def run_lvminfo(input_str, env_vars, is_cmd_stopped_func,
     op.add_option('-a', '--all', dest='show_all', action='store_true',
                   help='show all LVM information')
 
-    o = args = None
     try:
         (o, args) = op.parse_args(input_str.split())
     except:
         return ""
 
-    if o.help or show_help == True:
+    if o.help or show_help:
         return print_help_msg(op, no_pipe)
 
+    # Initialize helpers
     sos_home = env_vars["sos_home"]
-    result_str = ""
+    colors = ColorManager(no_pipe)
+    output = OutputBuilder(no_pipe)
 
-    # Handle specific options
-    if o.show_all:
-        result_str += show_overview(sos_home, no_pipe)
-        if not no_pipe:
-            result_str += "\n"
-        result_str += show_pvs(sos_home, no_pipe, verbose=True)
-        if not no_pipe:
-            result_str += "\n"
-        result_str += show_vgs(sos_home, no_pipe, verbose=False)
-        if not no_pipe:
-            result_str += "\n"
-        result_str += show_lvs(sos_home, no_pipe, verbose=True)
-        if not no_pipe:
-            result_str += "\n"
-        result_str += show_filesystem_usage(sos_home, no_pipe)
-        if not no_pipe:
-            result_str += "\n"
-        result_str += show_thin_pools(sos_home, no_pipe)
-    elif o.show_pv:
-        result_str = show_pvs(sos_home, no_pipe, verbose=o.verbose)
-    elif o.show_vg:
-        result_str = show_vgs(sos_home, no_pipe, verbose=o.verbose)
-    elif o.show_lv:
-        result_str = show_lvs(sos_home, no_pipe, verbose=o.verbose)
-    elif o.show_usage:
-        result_str = show_filesystem_usage(sos_home, no_pipe)
-    elif o.show_dm:
-        result_str = show_dmsetup_info(sos_home, no_pipe)
-    elif o.show_thin:
-        result_str = show_thin_pools(sos_home, no_pipe)
-    elif o.show_config:
-        result_str = show_lvm_config(sos_home, no_pipe)
-    else:
-        # Default: show overview
-        result_str = show_overview(sos_home, no_pipe)
+    # Execute requested operation
+    try:
+        if o.show_all:
+            show_overview(sos_home, colors, output)
+            output.add_line("")
+            show_pvs(sos_home, colors, output, verbose=True)
+            output.add_line("")
+            show_vgs(sos_home, colors, output, verbose=False)
+            output.add_line("")
+            show_lvs(sos_home, colors, output, verbose=True)
+            output.add_line("")
+            show_filesystem_usage(sos_home, colors, output)
+            output.add_line("")
+            show_thin_pools(sos_home, colors, output)
+        elif o.show_pv:
+            show_pvs(sos_home, colors, output, verbose=o.verbose)
+        elif o.show_vg:
+            show_vgs(sos_home, colors, output, verbose=o.verbose)
+        elif o.show_lv:
+            show_lvs(sos_home, colors, output, verbose=o.verbose)
+        elif o.show_usage:
+            show_filesystem_usage(sos_home, colors, output)
+        elif o.show_dm:
+            show_dmsetup_info(sos_home, colors, output)
+        elif o.show_thin:
+            show_thin_pools(sos_home, colors, output)
+        elif o.show_config:
+            show_lvm_config(sos_home, colors, output)
+        else:
+            # Default: show overview
+            show_overview(sos_home, colors, output)
 
-    return result_str
+    except Exception as e:
+        output.add_line("Unexpected error: %s" % str(e))
+
+    return output.get_result()

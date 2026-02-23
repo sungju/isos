@@ -1,3 +1,14 @@
+"""
+Cgroup Information Command
+
+Displays cgroup (control groups) information from sosreports including:
+- Cgroup version detection (v1, v2, hybrid)
+- Memory usage and limits per cgroup
+- CPU quotas and throttling
+- OOM events and statistics
+- Systemd cgroup hierarchy
+"""
+
 import sys
 import os
 from os.path import isfile, isdir, exists, join
@@ -8,6 +19,10 @@ from collections import defaultdict
 
 import ansicolor
 import screen
+from cmd_helpers import (
+    ColorManager, OutputBuilder, format_bytes,
+    calculate_percentage, get_sos_file_path
+)
 
 
 def description():
@@ -19,24 +34,37 @@ def add_command():
 
 
 def get_command_info():
-    return { "cginfo": run_cginfo }
+    return {"cginfo": run_cginfo}
+
+
+# Constants
+CGROUP_V2_MAX_LIMIT = 9223372036854771712
+SIZE_1MB = 1048576
 
 
 def detect_cgroup_version(sos_home):
-    """Detect if system uses cgroup v1, v2, or hybrid"""
-    mounts_path = sos_home + "/proc/mounts"
+    """
+    Detect if system uses cgroup v1, v2, or hybrid.
+
+    Args:
+        sos_home: Root of sosreport
+
+    Returns:
+        String: "v1", "v2", "hybrid", or "unknown"
+    """
+    mounts_path = get_sos_file_path(sos_home, "proc", "mounts")
 
     has_cgroup_v1 = False
     has_cgroup_v2 = False
 
     try:
-        with open(mounts_path) as f:
+        with open(mounts_path, 'r') as f:
             for line in f:
                 if "cgroup2" in line or "cgroup /sys/fs/cgroup cgroup2" in line:
                     has_cgroup_v2 = True
                 elif "cgroup " in line and "/sys/fs/cgroup/" in line:
                     has_cgroup_v1 = True
-    except:
+    except (IOError, OSError):
         pass
 
     if has_cgroup_v2 and has_cgroup_v1:
@@ -50,132 +78,114 @@ def detect_cgroup_version(sos_home):
 
 
 def get_cgroup_controllers(sos_home):
-    """Get list of cgroup controllers from /proc/cgroups"""
-    cgroups_path = sos_home + "/proc/cgroups"
+    """
+    Get list of cgroup controllers from /proc/cgroups.
+
+    Args:
+        sos_home: Root of sosreport
+
+    Returns:
+        List of dicts with controller information
+    """
+    cgroups_path = get_sos_file_path(sos_home, "proc", "cgroups")
     controllers = []
 
     try:
-        with open(cgroups_path) as f:
+        with open(cgroups_path, 'r') as f:
             for line in f:
                 if line.startswith("#"):
                     continue
                 parts = line.split()
                 if len(parts) >= 4:
-                    name = parts[0]
-                    hierarchy = parts[1]
-                    num_cgroups = parts[2]
-                    enabled = parts[3]
                     controllers.append({
-                        'name': name,
-                        'hierarchy': hierarchy,
-                        'num_cgroups': num_cgroups,
-                        'enabled': enabled == '1'
+                        'name': parts[0],
+                        'hierarchy': parts[1],
+                        'num_cgroups': parts[2],
+                        'enabled': parts[3] == '1'
                     })
-    except:
+    except (IOError, OSError):
         pass
 
     return controllers
 
 
-def format_bytes(bytes_val):
-    """Format bytes into human readable format"""
-    try:
-        bytes_val = int(bytes_val)
-        if bytes_val >= 1099511627776:  # 1TB
-            return "%.2f TB" % (bytes_val / 1099511627776.0)
-        elif bytes_val >= 1073741824:  # 1GB
-            return "%.2f GB" % (bytes_val / 1073741824.0)
-        elif bytes_val >= 1048576:  # 1MB
-            return "%.2f MB" % (bytes_val / 1048576.0)
-        elif bytes_val >= 1024:  # 1KB
-            return "%.2f KB" % (bytes_val / 1024.0)
-        else:
-            return "%d B" % bytes_val
-    except:
-        return "N/A"
+def show_cgroup_version(sos_home, colors, output):
+    """
+    Show cgroup version and controllers.
 
-
-def show_cgroup_version(sos_home, no_pipe):
-    """Show cgroup version and controllers"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_YELLOW = ansicolor.get_color(ansicolor.YELLOW)
-        COLOR_GREEN = ansicolor.get_color(ansicolor.GREEN)
-        COLOR_RED = ansicolor.get_color(ansicolor.RED)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_YELLOW = COLOR_GREEN = COLOR_RED = COLOR_RESET = ""
-
-    result_str = ""
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+    """
     version = detect_cgroup_version(sos_home)
 
-    result_str += COLOR_CYAN + "=== Cgroup Version ===" + COLOR_RESET + "\n"
-    result_str += "Version: %s\n" % version.upper()
+    output.add_colored_line("=== Cgroup Version ===", colors.cyan, colors.reset)
+    output.add_line("Version: %s" % version.upper())
 
     # Show controllers
     controllers = get_cgroup_controllers(sos_home)
     if controllers:
-        result_str += "\n" + COLOR_YELLOW + "=== Controllers ===" + COLOR_RESET + "\n"
-        result_str += "%-15s %-10s %-12s %s\n" % ("Name", "Hierarchy", "Num CGroups", "Enabled")
-        result_str += "-" * 50 + "\n"
+        output.add_line("")
+        output.add_colored_line("=== Controllers ===", colors.yellow, colors.reset)
+        output.add_line("%-15s %-10s %-12s %s" %
+                       ("Name", "Hierarchy", "Num CGroups", "Enabled"))
+        output.add_line("-" * 50)
 
         for ctrl in controllers:
-            enabled_str = COLOR_GREEN + "Yes" + COLOR_RESET if ctrl['enabled'] else COLOR_RED + "No" + COLOR_RESET
-            if no_pipe:
-                result_str += "%-15s %-10s %-12s %s\n" % (
-                    ctrl['name'], ctrl['hierarchy'], ctrl['num_cgroups'], enabled_str)
+            if output.no_pipe:
+                enabled_str = (colors.green + "Yes" + colors.reset if ctrl['enabled']
+                             else colors.red + "No" + colors.reset)
             else:
-                result_str += "%-15s %-10s %-12s %s\n" % (
-                    ctrl['name'], ctrl['hierarchy'], ctrl['num_cgroups'],
-                    "Yes" if ctrl['enabled'] else "No")
+                enabled_str = "Yes" if ctrl['enabled'] else "No"
 
-    if no_pipe:
-        print(result_str)
-        return ""
-    else:
-        return result_str
+            output.add_line("%-15s %-10s %-12s %s" % (
+                ctrl['name'], ctrl['hierarchy'], ctrl['num_cgroups'], enabled_str))
 
 
-def show_systemd_hierarchy(sos_home, no_pipe):
-    """Show systemd cgroup hierarchy"""
-    cgls_path = sos_home + "/sos_commands/cgroups/systemd-cgls"
+def show_systemd_hierarchy(sos_home, colors, output):
+    """
+    Show systemd cgroup hierarchy.
+
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+    """
+    cgls_path = get_sos_file_path(sos_home, "sos_commands", "cgroups", "systemd-cgls")
 
     if not exists(cgls_path):
-        return "systemd-cgls output not found\n"
+        output.add_line("systemd-cgls output not found")
+        return
 
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_RESET = ""
+    output.add_colored_line("=== Systemd Cgroup Hierarchy ===", colors.cyan, colors.reset)
+    output.add_line("")
 
-    result_str = COLOR_CYAN + "=== Systemd Cgroup Hierarchy ===" + COLOR_RESET + "\n\n"
-
-    screen.init_data(no_pipe, 1, is_cmd_stopped)
+    screen.init_data(output.no_pipe, 1, is_cmd_stopped)
 
     try:
-        with open(cgls_path) as f:
+        with open(cgls_path, 'r') as f:
             for line in f:
                 if is_cmd_stopped():
-                    return result_str
+                    return
 
                 line = screen.get_colored_line(line.rstrip())
-                if no_pipe:
-                    print(line)
-                else:
-                    result_str += line + "\n"
-    except:
-        return "Error reading systemd-cgls output\n"
-
-    if no_pipe:
-        return ""
-    else:
-        return result_str
+                output.add_line(line)
+    except (IOError, OSError):
+        output.add_line("Error reading systemd-cgls output")
 
 
 def get_memory_cgroups(sos_home):
-    """Get memory usage for all cgroups"""
-    memory_base = sos_home + "/sys/fs/cgroup/memory"
+    """
+    Get memory usage for all cgroups.
+
+    Args:
+        sos_home: Root of sosreport
+
+    Returns:
+        List of dicts with path, usage, limit, percentage
+    """
+    memory_base = get_sos_file_path(sos_home, "sys", "fs", "cgroup", "memory")
 
     if not isdir(memory_base):
         return []
@@ -189,23 +199,20 @@ def get_memory_cgroups(sos_home):
 
         if exists(usage_file) and exists(limit_file):
             try:
-                with open(usage_file) as f:
+                with open(usage_file, 'r') as f:
                     usage = int(f.read().strip())
-                with open(limit_file) as f:
+                with open(limit_file, 'r') as f:
                     limit = int(f.read().strip())
 
-                # Skip if usage is negligible
-                if usage < 1048576:  # Less than 1MB
+                # Skip if usage is negligible (< 1MB)
+                if usage < SIZE_1MB:
                     continue
 
                 # Get relative path
                 rel_path = root.replace(memory_base, "") or "/"
 
                 # Calculate percentage
-                if limit < 9223372036854771712:  # Not max limit
-                    percentage = (usage * 100.0) / limit
-                else:
-                    percentage = 0.0
+                percentage = calculate_percentage(usage, limit) if limit < CGROUP_V2_MAX_LIMIT else 0.0
 
                 cgroups.append({
                     'path': rel_path,
@@ -213,76 +220,77 @@ def get_memory_cgroups(sos_home):
                     'limit': limit,
                     'percentage': percentage
                 })
-            except:
+            except (ValueError, IOError, OSError):
                 pass
 
     return cgroups
 
 
-def show_memory_cgroups(sos_home, no_pipe, top_only=False):
-    """Show memory usage for cgroups"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_YELLOW = ansicolor.get_color(ansicolor.YELLOW)
-        COLOR_RED = ansicolor.get_color(ansicolor.RED)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_YELLOW = COLOR_RED = COLOR_RESET = ""
+def show_memory_cgroups(sos_home, colors, output, top_only=False):
+    """
+    Show memory usage for cgroups.
 
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+        top_only: Show only top 20 consumers
+    """
     cgroups = get_memory_cgroups(sos_home)
 
     if not cgroups:
-        return "No memory cgroup information found\n"
+        output.add_line("No memory cgroup information found")
+        return
 
     # Sort by usage
     cgroups.sort(key=lambda x: x['usage'], reverse=True)
 
     if top_only:
-        cgroups = cgroups[:20]  # Top 20
+        cgroups = cgroups[:20]
 
-    result_str = COLOR_CYAN + "=== Memory Cgroup Usage ===" + COLOR_RESET + "\n\n"
-    result_str += "%-60s %12s %12s %8s\n" % ("Path", "Usage", "Limit", "Percent")
-    result_str += "-" * 95 + "\n"
+    output.add_colored_line("=== Memory Cgroup Usage ===", colors.cyan, colors.reset)
+    output.add_line("")
+    output.add_line("%-60s %12s %12s %8s" %
+                   ("Path", "Usage", "Limit", "Percent"))
+    output.add_line("-" * 95)
 
     for cg in cgroups:
         if is_cmd_stopped():
             break
 
-        limit_str = format_bytes(cg['limit'])
-        if cg['limit'] >= 9223372036854771712:
-            limit_str = "unlimited"
-
+        limit_str = ("unlimited" if cg['limit'] >= CGROUP_V2_MAX_LIMIT
+                    else format_bytes(cg['limit']))
         percent_str = "%.1f%%" % cg['percentage'] if cg['percentage'] > 0 else "N/A"
 
-        # Color code based on usage
-        if cg['percentage'] > 90:
-            color = COLOR_RED
-        elif cg['percentage'] > 70:
-            color = COLOR_YELLOW
+        # Color code based on usage threshold
+        if output.no_pipe:
+            color = colors.get_threshold_color(cg['percentage'], critical=90, warning=70)
+            if color:
+                output.add_line("%-60s %12s %12s %s%8s%s" % (
+                    cg['path'], format_bytes(cg['usage']), limit_str,
+                    color, percent_str, colors.reset))
+            else:
+                output.add_line("%-60s %12s %12s %8s" % (
+                    cg['path'], format_bytes(cg['usage']), limit_str, percent_str))
         else:
-            color = ""
-
-        if no_pipe and color:
-            result_str += "%-60s %12s %12s %s%8s%s\n" % (
-                cg['path'], format_bytes(cg['usage']), limit_str,
-                color, percent_str, COLOR_RESET)
-        else:
-            result_str += "%-60s %12s %12s %8s\n" % (
-                cg['path'], format_bytes(cg['usage']), limit_str, percent_str)
-
-    if no_pipe:
-        print(result_str)
-        return ""
-    else:
-        return result_str
+            output.add_line("%-60s %12s %12s %8s" % (
+                cg['path'], format_bytes(cg['usage']), limit_str, percent_str))
 
 
 def get_cpu_cgroups(sos_home):
-    """Get CPU quota information for cgroups"""
-    cpu_base = sos_home + "/sys/fs/cgroup/cpu,cpuacct"
+    """
+    Get CPU quota information for cgroups.
+
+    Args:
+        sos_home: Root of sosreport
+
+    Returns:
+        List of dicts with CPU quota information
+    """
+    cpu_base = get_sos_file_path(sos_home, "sys", "fs", "cgroup", "cpu,cpuacct")
 
     if not isdir(cpu_base):
-        cpu_base = sos_home + "/sys/fs/cgroup/cpu"
+        cpu_base = get_sos_file_path(sos_home, "sys", "fs", "cgroup", "cpu")
 
     if not isdir(cpu_base):
         return []
@@ -292,100 +300,93 @@ def get_cpu_cgroups(sos_home):
     for root, dirs, files in os.walk(cpu_base):
         quota_file = join(root, "cpu.cfs_quota_us")
         period_file = join(root, "cpu.cfs_period_us")
-        shares_file = join(root, "cpu.shares")
 
         if exists(quota_file) and exists(period_file):
             try:
-                with open(quota_file) as f:
+                with open(quota_file, 'r') as f:
                     quota = int(f.read().strip())
-                with open(period_file) as f:
+                with open(period_file, 'r') as f:
                     period = int(f.read().strip())
-
-                shares = None
-                if exists(shares_file):
-                    with open(shares_file) as f:
-                        shares = int(f.read().strip())
 
                 # Skip if no quota set
                 if quota == -1:
                     continue
 
                 rel_path = root.replace(cpu_base, "") or "/"
-
-                # Calculate CPU cores
                 cpu_cores = float(quota) / float(period)
 
                 cgroups.append({
                     'path': rel_path,
                     'quota': quota,
                     'period': period,
-                    'cores': cpu_cores,
-                    'shares': shares
+                    'cores': cpu_cores
                 })
-            except:
+            except (ValueError, IOError, OSError, ZeroDivisionError):
                 pass
 
     return cgroups
 
 
-def show_cpu_cgroups(sos_home, no_pipe):
-    """Show CPU quota information for cgroups"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_RESET = ""
+def show_cpu_cgroups(sos_home, colors, output):
+    """
+    Show CPU quota information for cgroups.
 
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+    """
     cgroups = get_cpu_cgroups(sos_home)
 
     if not cgroups:
-        return "No CPU quotas found (all cgroups have unlimited CPU)\n"
+        output.add_line("No CPU quotas found (all cgroups have unlimited CPU)")
+        return
 
-    result_str = COLOR_CYAN + "=== CPU Cgroup Quotas ===" + COLOR_RESET + "\n\n"
-    result_str += "%-60s %12s %12s %10s\n" % ("Path", "Quota (us)", "Period (us)", "CPU Cores")
-    result_str += "-" * 95 + "\n"
+    output.add_colored_line("=== CPU Cgroup Quotas ===", colors.cyan, colors.reset)
+    output.add_line("")
+    output.add_line("%-60s %12s %12s %10s" %
+                   ("Path", "Quota (us)", "Period (us)", "CPU Cores"))
+    output.add_line("-" * 95)
 
     for cg in cgroups:
         if is_cmd_stopped():
             break
 
-        result_str += "%-60s %12d %12d %10.2f\n" % (
-            cg['path'], cg['quota'], cg['period'], cg['cores'])
-
-    if no_pipe:
-        print(result_str)
-        return ""
-    else:
-        return result_str
+        output.add_line("%-60s %12d %12d %10.2f" % (
+            cg['path'], cg['quota'], cg['period'], cg['cores']))
 
 
-def show_oom_events(sos_home, no_pipe):
-    """Show OOM events from memory cgroups"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_RED = ansicolor.get_color(ansicolor.RED)
-        COLOR_YELLOW = ansicolor.get_color(ansicolor.YELLOW)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_RED = COLOR_YELLOW = COLOR_RESET = ""
+def show_oom_events(sos_home, colors, output):
+    """
+    Show OOM events from memory cgroups.
 
-    memory_base = sos_home + "/sys/fs/cgroup/memory"
+    Args:
+        sos_home: Root of sosreport
+        colors: ColorManager instance
+        output: OutputBuilder instance
+    """
+    memory_base = get_sos_file_path(sos_home, "sys", "fs", "cgroup", "memory")
 
     if not isdir(memory_base):
-        return "Memory cgroup not found\n"
+        output.add_line("Memory cgroup not found")
+        return
 
-    result_str = COLOR_CYAN + "=== OOM Events in Cgroups ===" + COLOR_RESET + "\n\n"
-    result_str += "%-60s %15s %12s\n" % ("Path", "Under OOM", "OOM Kills")
-    result_str += "-" * 90 + "\n"
+    output.add_colored_line("=== OOM Events in Cgroups ===", colors.cyan, colors.reset)
+    output.add_line("")
+    output.add_line("%-60s %15s %12s" % ("Path", "Under OOM", "OOM Kills"))
+    output.add_line("-" * 90)
 
     found_oom = False
 
     for root, dirs, files in os.walk(memory_base):
+        if is_cmd_stopped():
+            break
+
         oom_control = join(root, "memory.oom_control")
 
         if exists(oom_control):
             try:
-                with open(oom_control) as f:
+                with open(oom_control, 'r') as f:
                     content = f.read()
 
                 under_oom = "0"
@@ -401,54 +402,52 @@ def show_oom_events(sos_home, no_pipe):
                 if oom_kill != "0" or under_oom != "0":
                     rel_path = root.replace(memory_base, "") or "/"
 
-                    under_oom_str = under_oom
-                    oom_kill_str = oom_kill
+                    if output.no_pipe:
+                        under_oom_str = (colors.red + under_oom + colors.reset
+                                       if under_oom != "0" else under_oom)
+                        oom_kill_str = (colors.yellow + oom_kill + colors.reset
+                                      if oom_kill != "0" else oom_kill)
+                    else:
+                        under_oom_str = under_oom
+                        oom_kill_str = oom_kill
 
-                    if no_pipe:
-                        if under_oom != "0":
-                            under_oom_str = COLOR_RED + under_oom + COLOR_RESET
-                        if oom_kill != "0":
-                            oom_kill_str = COLOR_YELLOW + oom_kill + COLOR_RESET
-
-                    result_str += "%-60s %15s %12s\n" % (rel_path, under_oom_str, oom_kill_str)
+                    output.add_line("%-60s %15s %12s" % (rel_path, under_oom_str, oom_kill_str))
                     found_oom = True
-            except:
+
+            except (IOError, OSError):
                 pass
 
-        if is_cmd_stopped():
-            break
-
     if not found_oom:
-        result_str += "\nNo OOM events detected in any cgroup.\n"
-
-    if no_pipe:
-        print(result_str)
-        return ""
-    else:
-        return result_str
+        output.add_line("")
+        output.add_line("No OOM events detected in any cgroup.")
 
 
-def show_memory_stats(sos_home, cgroup_path, no_pipe):
-    """Show detailed memory statistics for a specific cgroup"""
-    if no_pipe:
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_YELLOW = ansicolor.get_color(ansicolor.YELLOW)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_CYAN = COLOR_YELLOW = COLOR_RESET = ""
+def show_memory_stats(sos_home, cgroup_path, colors, output):
+    """
+    Show detailed memory statistics for a specific cgroup.
 
+    Args:
+        sos_home: Root of sosreport
+        cgroup_path: Relative path to cgroup
+        colors: ColorManager instance
+        output: OutputBuilder instance
+    """
     if not cgroup_path.startswith("/"):
         cgroup_path = "/" + cgroup_path
 
-    memory_stat = sos_home + "/sys/fs/cgroup/memory" + cgroup_path + "/memory.stat"
+    memory_stat = get_sos_file_path(sos_home, "sys", "fs", "cgroup", "memory",
+                                    cgroup_path.lstrip('/'), "memory.stat")
 
     if not exists(memory_stat):
-        return "Cgroup path not found: %s\n" % cgroup_path
+        output.add_line("Cgroup path not found: %s" % cgroup_path)
+        return
 
-    result_str = COLOR_CYAN + ("=== Memory Statistics for %s ===" % cgroup_path) + COLOR_RESET + "\n\n"
+    output.add_colored_line("=== Memory Statistics for %s ===" % cgroup_path,
+                           colors.cyan, colors.reset)
+    output.add_line("")
 
     try:
-        with open(memory_stat) as f:
+        with open(memory_stat, 'r') as f:
             for line in f:
                 if is_cmd_stopped():
                     break
@@ -457,32 +456,26 @@ def show_memory_stats(sos_home, cgroup_path, no_pipe):
                 if len(parts) == 2:
                     key, value = parts
 
-                    # Format hierarchical stats differently
-                    if key.startswith("total_") or key.startswith("hierarchical_"):
-                        if no_pipe:
-                            result_str += COLOR_YELLOW + "%-35s" % key + COLOR_RESET
-                        else:
-                            result_str += "%-35s" % key
+                    # Format hierarchical stats with color
+                    if output.no_pipe and (key.startswith("total_") or
+                                          key.startswith("hierarchical_")):
+                        formatted_key = colors.yellow + "%-35s" % key + colors.reset
                     else:
-                        result_str += "%-35s" % key
+                        formatted_key = "%-35s" % key
 
                     # Format byte values
                     try:
                         val_int = int(value)
                         if val_int > 1024:
-                            result_str += " %15s (%s)\n" % (value, format_bytes(val_int))
+                            output.add_line("%s %15s (%s)" %
+                                          (formatted_key, value, format_bytes(val_int)))
                         else:
-                            result_str += " %15s\n" % value
-                    except:
-                        result_str += " %15s\n" % value
-    except:
-        return "Error reading memory statistics\n"
+                            output.add_line("%s %15s" % (formatted_key, value))
+                    except ValueError:
+                        output.add_line("%s %15s" % (formatted_key, value))
 
-    if no_pipe:
-        print(result_str)
-        return ""
-    else:
-        return result_str
+    except (IOError, OSError):
+        output.add_line("Error reading memory statistics")
 
 
 def print_help_msg(op, no_pipe):
@@ -519,10 +512,25 @@ Cgroup Info:
         return ""
 
 
+# Global state
 is_cmd_stopped = None
 
+
 def run_cginfo(input_str, env_vars, is_cmd_stopped_func,
-        show_help=False, no_pipe=True):
+               show_help=False, no_pipe=True):
+    """
+    Main entry point for cginfo command.
+
+    Args:
+        input_str: Command arguments
+        env_vars: Environment variables dict
+        is_cmd_stopped_func: Function to check if command should stop
+        show_help: Show help message
+        no_pipe: True if output goes to terminal
+
+    Returns:
+        Result string (empty if output went to terminal)
+    """
     global is_cmd_stopped
     is_cmd_stopped = is_cmd_stopped_func
 
@@ -547,46 +555,48 @@ def run_cginfo(input_str, env_vars, is_cmd_stopped_func,
     op.add_option('-a', '--all', dest='show_all', action='store_true',
                   help='show all cgroup information')
 
-    o = args = None
     try:
         (o, args) = op.parse_args(input_str.split())
     except:
         return ""
 
-    if o.help or show_help == True:
+    if o.help or show_help:
         return print_help_msg(op, no_pipe)
 
+    # Initialize helpers
     sos_home = env_vars["sos_home"]
-    result_str = ""
+    colors = ColorManager(no_pipe)
+    output = OutputBuilder(no_pipe)
 
-    # Handle specific options
-    if o.show_all:
-        result_str += show_cgroup_version(sos_home, no_pipe)
-        if not no_pipe:
-            result_str += "\n"
-        result_str += show_memory_cgroups(sos_home, no_pipe, top_only=False)
-        if not no_pipe:
-            result_str += "\n"
-        result_str += show_cpu_cgroups(sos_home, no_pipe)
-        if not no_pipe:
-            result_str += "\n"
-        result_str += show_oom_events(sos_home, no_pipe)
-    elif o.show_list:
-        result_str = show_systemd_hierarchy(sos_home, no_pipe)
-    elif o.show_memory:
-        result_str = show_memory_cgroups(sos_home, no_pipe, top_only=False)
-    elif o.show_cpu:
-        result_str = show_cpu_cgroups(sos_home, no_pipe)
-    elif o.show_oom:
-        result_str = show_oom_events(sos_home, no_pipe)
-    elif o.show_top:
-        result_str = show_memory_cgroups(sos_home, no_pipe, top_only=True)
-    elif o.cgroup_path:
-        result_str = show_memory_stats(sos_home, o.cgroup_path, no_pipe)
-    elif o.show_version:
-        result_str = show_cgroup_version(sos_home, no_pipe)
-    else:
-        # Default: show version and controllers
-        result_str = show_cgroup_version(sos_home, no_pipe)
+    # Execute requested operation
+    try:
+        if o.show_all:
+            show_cgroup_version(sos_home, colors, output)
+            output.add_line("")
+            show_memory_cgroups(sos_home, colors, output, top_only=False)
+            output.add_line("")
+            show_cpu_cgroups(sos_home, colors, output)
+            output.add_line("")
+            show_oom_events(sos_home, colors, output)
+        elif o.show_list:
+            show_systemd_hierarchy(sos_home, colors, output)
+        elif o.show_memory:
+            show_memory_cgroups(sos_home, colors, output, top_only=False)
+        elif o.show_cpu:
+            show_cpu_cgroups(sos_home, colors, output)
+        elif o.show_oom:
+            show_oom_events(sos_home, colors, output)
+        elif o.show_top:
+            show_memory_cgroups(sos_home, colors, output, top_only=True)
+        elif o.cgroup_path:
+            show_memory_stats(sos_home, o.cgroup_path, colors, output)
+        elif o.show_version:
+            show_cgroup_version(sos_home, colors, output)
+        else:
+            # Default: show version and controllers
+            show_cgroup_version(sos_home, colors, output)
 
-    return result_str
+    except Exception as e:
+        output.add_line("Unexpected error: %s" % str(e))
+
+    return output.get_result()
