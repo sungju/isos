@@ -19,7 +19,7 @@ import re
 
 import ansicolor
 import screen
-from cmd_helpers import (
+from .cmd_helpers import (
     ColorManager, OutputBuilder, format_bytes,
     parse_lvm_size, calculate_percentage, get_sos_file_path,
     THRESHOLD_VG_CRITICAL, THRESHOLD_VG_WARNING

@@ -19,7 +19,7 @@ from collections import defaultdict
 
 import ansicolor
 import screen
-from cmd_helpers import (
+from .cmd_helpers import (
     ColorManager, OutputBuilder, format_bytes,
     calculate_percentage, get_sos_file_path
 )
