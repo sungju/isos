@@ -104,6 +104,41 @@ from shell_completer import ShellCompleter
 
 
 # ====================================================================
+# Clear Python Cache on Startup
+# ====================================================================
+
+def clear_module_cache():
+    """
+    Clear Python bytecode cache for cmds directory.
+
+    Ensures fresh imports after code updates. Only clears cache for
+    command modules, not for the venv libraries.
+    """
+    try:
+        import shutil
+        from pathlib import Path
+
+        source_dir = Path(__file__).parent
+        cmds_dir = source_dir / 'cmds'
+
+        # Clear cmds/__pycache__
+        cmds_pycache = cmds_dir / '__pycache__'
+        if cmds_pycache.exists():
+            shutil.rmtree(cmds_pycache, ignore_errors=True)
+
+        # Clear any .pyc files in cmds
+        for pyc_file in cmds_dir.glob('*.pyc'):
+            pyc_file.unlink(missing_ok=True)
+
+    except Exception:
+        # Silently ignore cache clearing errors
+        pass
+
+# Clear cache on startup to ensure fresh imports
+clear_module_cache()
+
+
+# ====================================================================
 # Constants
 # ====================================================================
 
