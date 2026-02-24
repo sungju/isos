@@ -35,11 +35,15 @@ def get_terminal_width():
     """
     Get terminal width from prompt_toolkit/shutil.
 
+    This function always queries the terminal fresh (no caching) to detect
+    terminal resizes that happen during command execution.
+
     Returns:
         int: Terminal width in columns, or 80 if unable to determine
     """
     try:
-        # Try to get terminal size from shutil (works in most cases)
+        # Always get fresh terminal size (no caching) to catch resizes
+        # shutil.get_terminal_size() makes a system call each time
         terminal_size = shutil.get_terminal_size()
         return terminal_size.columns
     except:
@@ -331,6 +335,7 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
     show_graph = getattr(op, 'graph', False)
 
     # Calculate optimal column width based on terminal width and longest process name
+    initial_terminal_width = get_terminal_width()
     max_widths = get_optimal_max_widths(show_graph)
     max_pname_len = max(len(sorted_oom_dict[i][0]) for i in range(0, print_count)) if print_count > 0 else 20
     pname_width = max(20, min(max_widths['process_name'], max_pname_len + 2))
@@ -342,7 +347,46 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
         table.add_column("Usage_Percent", width=24, align='left', color='cyan')
     table.add_column("Usage", width=15, align='right', color='red')
 
+    rows_added_since_check = 0
     for i in range(0, print_count):
+        # Check for terminal resize every 10 rows (to avoid excessive system calls)
+        if show_graph and i > 0 and rows_added_since_check >= 10:
+            current_width = get_terminal_width()
+            if abs(current_width - initial_terminal_width) > 5:
+                # Terminal resized significantly - output current table and start new one
+                # Format and output current table first
+                formatted_table = table.format()
+                separator_width = pname_width + 15 + 4
+                if show_graph:
+                    separator_width += 24 + 2
+
+                if no_pipe:
+                    table_lines = formatted_table.split('\n')
+                    print("=" * separator_width)
+                    if len(table_lines) > 0:
+                        print(table_lines[0])
+                        print("-" * separator_width)
+                        for line in table_lines[1:]:
+                            if line.strip():
+                                print(line)
+                    print("=" * separator_width)
+
+                    # Print resize notice
+                    print(colored("\n[Terminal resized - adjusting table width]\n", 'yellow'))
+
+                # Recalculate widths and create new table
+                initial_terminal_width = current_width
+                max_widths = get_optimal_max_widths(show_graph)
+                pname_width = max(20, min(max_widths['process_name'], max_pname_len + 2))
+
+                table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
+                table.add_column("Process_Name", width=pname_width, align='left', color='yellow')
+                if show_graph:
+                    table.add_column("Usage_Percent", width=24, align='left', color='cyan')
+                table.add_column("Usage", width=15, align='right', color='red')
+
+                rows_added_since_check = 0
+
         pname = sorted_oom_dict[i][0]
         # Truncate process name to fit column width
         if len(pname) > pname_width:
@@ -354,6 +398,8 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
             table.add_row(pname, bar, get_size_str(mem_usage))
         else:
             table.add_row(pname, get_size_str(mem_usage))
+
+        rows_added_since_check += 1
 
     # Format and output table
     formatted_table = table.format()
@@ -1265,6 +1311,7 @@ def show_slabtop(op, no_pipe):
     show_graph = getattr(op, 'graph', False)
 
     # Calculate optimal column width based on terminal width and longest SLAB name
+    initial_terminal_width = get_terminal_width()
     max_widths = get_optimal_max_widths(show_graph)
     max_slab_len = max(len(sorted_slabtop[i][0]) for i in range(0, print_count)) if print_count > 0 else 20
     slab_width = max(20, min(max_widths['slab_name'], max_slab_len + 2))
@@ -1278,7 +1325,47 @@ def show_slabtop(op, no_pipe):
     table.add_column("OBJSIZE", width=8, align='right', color='blue')
 
     page_size = get_main().page_size
+    rows_added_since_check = 0
     for i in range(0, print_count):
+        # Check for terminal resize every 10 rows (to avoid excessive system calls)
+        if show_graph and i > 0 and rows_added_since_check >= 10:
+            current_width = get_terminal_width()
+            if abs(current_width - initial_terminal_width) > 5:
+                # Terminal resized significantly - output current table and start new one
+                # Format and output current table first
+                formatted_table = table.format()
+                separator_width = slab_width + 12 + 8 + 6
+                if show_graph:
+                    separator_width += 24 + 2
+
+                if no_pipe:
+                    table_lines = formatted_table.split('\n')
+                    print("=" * separator_width)
+                    if len(table_lines) > 0:
+                        print(table_lines[0])
+                        print("-" * separator_width)
+                        for line in table_lines[1:]:
+                            if line.strip():
+                                print(line)
+                    print("=" * separator_width)
+
+                    # Print resize notice
+                    print(colored("\n[Terminal resized - adjusting table width]\n", 'yellow'))
+
+                # Recalculate widths and create new table
+                initial_terminal_width = current_width
+                max_widths = get_optimal_max_widths(show_graph)
+                slab_width = max(20, min(max_widths['slab_name'], max_slab_len + 2))
+
+                table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
+                table.add_column("NAME", width=slab_width, align='left', color='yellow')
+                if show_graph:
+                    table.add_column("Usage_Percent", width=24, align='left', color='cyan')
+                table.add_column("TOTAL", width=12, align='right', color='red')
+                table.add_column("OBJSIZE", width=8, align='right', color='blue')
+
+                rows_added_since_check = 0
+
         slab_name = sorted_slabtop[i][0]
         # Truncate SLAB name to fit column width
         if len(slab_name) > slab_width:
@@ -1296,6 +1383,8 @@ def show_slabtop(op, no_pipe):
             table.add_row(slab_name,
                          get_size_str(slab_pages * page_size),
                          str(obj_size))
+
+        rows_added_since_check += 1
 
     # Format and output table
     formatted_table = table.format()
@@ -1411,6 +1500,7 @@ def show_ps_memusage(op, no_pipe):
     show_graph = getattr(op, 'graph', False)
 
     # Calculate optimal column width based on terminal width and longest process name
+    initial_terminal_width = get_terminal_width()
     max_widths = get_optimal_max_widths(show_graph)
     max_pname_len = max(len(sorted_usage[i][0]) for i in range(0, print_count))
     pname_width = max(20, min(max_widths['process_name'], max_pname_len + 2))
@@ -1422,7 +1512,46 @@ def show_ps_memusage(op, no_pipe):
         table.add_column("Usage_Percent", width=24, align='left', color='cyan')
     table.add_column("RSS_Usage", width=15, align='right', color='red')
 
+    rows_added_since_check = 0
     for i in range(0, print_count):
+        # Check for terminal resize every 10 rows (to avoid excessive system calls)
+        if show_graph and i > 0 and rows_added_since_check >= 10:
+            current_width = get_terminal_width()
+            if abs(current_width - initial_terminal_width) > 5:
+                # Terminal resized significantly - output current table and start new one
+                # Format and output current table first
+                formatted_table = table.format()
+                separator_width = pname_width + 15 + 4
+                if show_graph:
+                    separator_width += 24 + 2
+
+                if no_pipe:
+                    table_lines = formatted_table.split('\n')
+                    print("=" * separator_width)
+                    if len(table_lines) > 0:
+                        print(table_lines[0])
+                        print("-" * separator_width)
+                        for line in table_lines[1:]:
+                            if line.strip():
+                                print(line)
+                    print("=" * separator_width)
+
+                    # Print resize notice
+                    print(colored("\n[Terminal resized - adjusting table width]\n", 'yellow'))
+
+                # Recalculate widths and create new table
+                initial_terminal_width = current_width
+                max_widths = get_optimal_max_widths(show_graph)
+                pname_width = max(20, min(max_widths['process_name'], max_pname_len + 2))
+
+                table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
+                table.add_column("Process_Name", width=pname_width, align='left', color='yellow')
+                if show_graph:
+                    table.add_column("Usage_Percent", width=24, align='left', color='cyan')
+                table.add_column("RSS_Usage", width=15, align='right', color='red')
+
+                rows_added_since_check = 0
+
         pname = sorted_usage[i][0]
         # Truncate process name to fit column width
         if len(pname) > pname_width:
@@ -1434,6 +1563,8 @@ def show_ps_memusage(op, no_pipe):
             table.add_row(pname, bar, get_size_str(rss_kb * 1024))
         else:
             table.add_row(pname, get_size_str(rss_kb * 1024))
+
+        rows_added_since_check += 1
 
     # Format and output table
     formatted_table = table.format()
