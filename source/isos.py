@@ -325,6 +325,9 @@ def reload_commands(input_str, env_str, is_cmd_stopped=None,
     """
     Reload all extension modules without restarting application.
 
+    Usage:
+        /reload
+
     Useful for development - allows testing changes to command modules
     without exiting and restarting isos.
 
@@ -341,7 +344,7 @@ def reload_commands(input_str, env_str, is_cmd_stopped=None,
     global modules
 
     if show_help:
-        return "[For developers only]\nReloading isos extension modules"
+        return "Usage) /reload\n\n[For developers only]\nReloading isos extension modules"
 
     for module in modules:
         try:
@@ -360,6 +363,9 @@ def show_commands(input_str, env_var, is_cmd_stopped=None,
     """
     Display list of loaded extension modules and their functions.
 
+    Usage:
+        /list
+
     Args:
         input_str: Command arguments (unused)
         env_var: Environment variables (unused)
@@ -371,7 +377,7 @@ def show_commands(input_str, env_var, is_cmd_stopped=None,
         String with command -> function mappings, one per line
     """
     if show_help:
-        return "[For developers only]\nShow the extension module list"
+        return "Usage) /list\n\n[For developers only]\nShow the extension module list"
 
     result_str = ""
     for comm in mod_command_set:
@@ -456,11 +462,26 @@ def show_usage(input_str, env_vars, is_cmd_stopped,
         result_str = ""
 
     # Show all commands
+    # Sort with regular commands first, then '/' commands at the end
     result_str = result_str + ("Help\n%s\n" % ("-" * 30))
     count = 0
     combined_dict = command_set | mod_command_set
-    combined_dict = dict(sorted(combined_dict.items(), key=lambda item: item[0]))
+    # Custom sort: (0, name) for regular commands, (1, name) for '/' commands
+    combined_dict = dict(sorted(combined_dict.items(),
+                                key=lambda item: (1 if item[0].startswith('/') else 0, item[0])))
+
+    slash_section_started = False
     for key in combined_dict:
+        # Add blank line before first '/' command
+        if key.startswith('/') and not slash_section_started:
+            # End current line if needed
+            if (count % 4) != 0:
+                result_str = result_str + "\n"
+            # Add blank line separator
+            result_str = result_str + "\n"
+            slash_section_started = True
+            count = 0  # Reset count for new section
+
         result_str = result_str + ("%-10s " % (key))
         count = count + 1
         if ((count % 4) == 0):
@@ -477,6 +498,9 @@ def exit_app(input_str, env_vars, is_cmd_stopped=None,
     """
     Exit the isos application.
 
+    Usage:
+        /exit
+
     Args:
         input_str: Command arguments (unused)
         env_vars: Environment variables (unused)
@@ -488,7 +512,7 @@ def exit_app(input_str, env_vars, is_cmd_stopped=None,
         Help text if show_help=True, otherwise exits
     """
     if show_help:
-        return "Exit the isos application"
+        return "Usage) /exit\n\nExit the isos application"
 
     sys.exit(0)
 
@@ -563,10 +587,13 @@ def change_dir(input_str, env_vars, is_cmd_stopped,
 def set_home(input_str, env_vars, is_cmd_stopped,
              show_help=False, no_pipe=True):
     """
-    Set sosreport root directory (shortcut for 'set sos_home').
+    Set sosreport root directory (shortcut for '/set sos_home').
+
+    Usage:
+        /sethome [path]
 
     Args:
-        input_str: Command string (e.g., "sethome /path")
+        input_str: Command string (e.g., "/sethome /path")
         env_vars: Environment variables dict
         is_cmd_stopped: Function to check for Ctrl-C
         show_help: If True, return help text
@@ -577,13 +604,13 @@ def set_home(input_str, env_vars, is_cmd_stopped,
     """
     words = input_str.split()
     if show_help:
-        result_str = "Usage) sethome [path]\n\nChange sosreport root directory"
+        result_str = "Usage) /sethome [path]\n\nChange sosreport root directory"
         return result_str
 
     new_path = "."
     if len(words) > 1:
         new_path = words[1]
-    input_str = "set sos_home %s" % new_path
+    input_str = "/set sos_home %s" % new_path
 
     return set_env(input_str, env_vars, is_cmd_stopped, show_help, no_pipe)
 
@@ -594,10 +621,10 @@ def set_env(input_str, env_vars, is_cmd_stopped,
     Set or display environment variables.
 
     Usage:
-        set                     # Show all variables
-        set var value           # Set variable
-        set var value dir       # Set variable and cd to value
-        set var                 # Delete variable
+        /set                     # Show all variables
+        /set var value           # Set variable
+        /set var value dir       # Set variable and cd to value
+        /set var                 # Delete variable
 
     Args:
         input_str: Command string
@@ -615,7 +642,7 @@ def set_env(input_str, env_vars, is_cmd_stopped,
     """
     words = input_str.split()
     if show_help or len(words) == 1:
-        result_str = "Setting variables\n================="
+        result_str = "Usage) /set [var] [value] [dir]\n\nSetting variables\n================="
         for key in env_vars:
             result_str = result_str + ("\n%-15s : %s" % (key, env_vars[key]))
         return result_str
@@ -702,12 +729,12 @@ command_set = {
     "man" : show_usage,
     "cd"   : change_dir,
     "eval" : eval_expr,
-    "set"  : set_env,
-    "sethome" : set_home,
+    "/set"  : set_env,
+    "/sethome" : set_home,
     "xsos" : xsos_run,
-    "reload" : reload_commands,
-    "list" : show_commands,
-    "exit" : exit_app,
+    "/reload" : reload_commands,
+    "/list" : show_commands,
+    "/exit" : exit_app,
 }
 
 

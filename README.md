@@ -53,11 +53,13 @@ xsos
 host0.example.com> help
 Help
 ------------------------------
-help       man        cd         eval       
-set        xsos       reload     list       
-exit       psinfo     cron       cat        
-perf       mods       trace      audit      
-powner     log        sarinfo
+audit      cat        cd         cron
+eval       help       log        man
+mods       perf       powner     psinfo
+sarinfo    trace      xsos
+
+/exit      /list      /reload    /set
+/sethome
 ```
 
 - Some commands are very simple and gives you a single line help.
