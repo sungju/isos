@@ -81,11 +81,13 @@ def get_optimal_max_widths(show_graph=False):
 
     # SLAB names: slightly smaller to account for additional columns
     if show_graph:
-        # SLAB table has: kmem_cache(18) + NAME + Percent(24) + TOTAL(12) + OBJSIZE(8) + padding
-        slab_reserved = 18 + 24 + 12 + 8 + 12
+        # SLAB table has: NAME + Percent(24) + TOTAL(12) + OBJSIZE(8) + padding(8)
+        # This matches separator_width formula: slab_width + 24 + 2 + 12 + 8 + 6 = slab_width + 52
+        slab_reserved = 24 + 12 + 8 + 8
     else:
-        # SLAB table has: kmem_cache(18) + NAME + TOTAL(12) + OBJSIZE(8) + padding
-        slab_reserved = 18 + 12 + 8 + 10
+        # SLAB table has: NAME + TOTAL(12) + OBJSIZE(8) + padding(6)
+        # This matches separator_width formula: slab_width + 12 + 8 + 6 = slab_width + 26
+        slab_reserved = 12 + 8 + 6
 
     slab_available = terminal_width - slab_reserved
     slab_max = max(20, min(80, slab_available))
@@ -338,7 +340,7 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
     initial_terminal_width = get_terminal_width()
     max_widths = get_optimal_max_widths(show_graph)
     max_pname_len = max(len(sorted_oom_dict[i][0]) for i in range(0, print_count)) if print_count > 0 else 20
-    pname_width = max(20, min(max_widths['process_name'], max_pname_len + 2))
+    pname_width = max(20, min(max_widths['process_name'], max_pname_len + 1))
     # Disable Rich when using graphs to avoid ANSI code conflicts
     use_rich = not show_graph
     table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
@@ -377,7 +379,7 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
                 # Recalculate widths and create new table
                 initial_terminal_width = current_width
                 max_widths = get_optimal_max_widths(show_graph)
-                pname_width = max(20, min(max_widths['process_name'], max_pname_len + 2))
+                pname_width = max(20, min(max_widths['process_name'], max_pname_len + 1))
 
                 table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
                 table.add_column("Process_Name", width=pname_width, align='left', color='yellow')
@@ -1195,7 +1197,7 @@ def show_swap_usage(op, no_pipe):
     # Calculate optimal column width based on terminal width and longest process name
     max_widths = get_optimal_max_widths(show_graph)
     max_pname_len = max(len(sorted_swap_usage[i][0]) for i in range(0, print_count)) if print_count > 0 else 20
-    pname_width = max(20, min(max_widths['process_name'], max_pname_len + 2))
+    pname_width = max(20, min(max_widths['process_name'], max_pname_len + 1))
     # Disable Rich when using graphs to avoid ANSI code conflicts
     use_rich = not show_graph
     table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
@@ -1314,7 +1316,7 @@ def show_slabtop(op, no_pipe):
     initial_terminal_width = get_terminal_width()
     max_widths = get_optimal_max_widths(show_graph)
     max_slab_len = max(len(sorted_slabtop[i][0]) for i in range(0, print_count)) if print_count > 0 else 20
-    slab_width = max(20, min(max_widths['slab_name'], max_slab_len + 2))
+    slab_width = max(20, min(max_widths['slab_name'], max_slab_len + 1))
     # Disable Rich when using graphs to avoid ANSI code conflicts
     use_rich = not show_graph
     table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
@@ -1355,7 +1357,7 @@ def show_slabtop(op, no_pipe):
                 # Recalculate widths and create new table
                 initial_terminal_width = current_width
                 max_widths = get_optimal_max_widths(show_graph)
-                slab_width = max(20, min(max_widths['slab_name'], max_slab_len + 2))
+                slab_width = max(20, min(max_widths['slab_name'], max_slab_len + 1))
 
                 table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
                 table.add_column("NAME", width=slab_width, align='left', color='yellow')
@@ -1503,7 +1505,7 @@ def show_ps_memusage(op, no_pipe):
     initial_terminal_width = get_terminal_width()
     max_widths = get_optimal_max_widths(show_graph)
     max_pname_len = max(len(sorted_usage[i][0]) for i in range(0, print_count))
-    pname_width = max(20, min(max_widths['process_name'], max_pname_len + 2))
+    pname_width = max(20, min(max_widths['process_name'], max_pname_len + 1))
     # Disable Rich when using graphs to avoid ANSI code conflicts
     use_rich = not show_graph
     table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
@@ -1542,7 +1544,7 @@ def show_ps_memusage(op, no_pipe):
                 # Recalculate widths and create new table
                 initial_terminal_width = current_width
                 max_widths = get_optimal_max_widths(show_graph)
-                pname_width = max(20, min(max_widths['process_name'], max_pname_len + 2))
+                pname_width = max(20, min(max_widths['process_name'], max_pname_len + 1))
 
                 table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
                 table.add_column("Process_Name", width=pname_width, align='left', color='yellow')
