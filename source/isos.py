@@ -89,6 +89,7 @@ import time
 import signal
 import glob
 import shlex
+import traceback
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory, FileHistory
@@ -1249,6 +1250,7 @@ def run_one_line(input_str, path):
     try:
         handle_input(input_str)
     except Exception as e:
+        traceback.print_exc()
         print("Error executing command: %s" % str(e))
     end_input_handling()
 

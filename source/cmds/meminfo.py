@@ -8,6 +8,9 @@ import operator
 from os.path import expanduser, isfile, isdir, join
 import traceback
 from itertools import chain
+import re
+from datetime import datetime
+from collections import defaultdict
 
 
 from isos import run_shell_command, column_strings
@@ -72,6 +75,49 @@ def get_size_str(size):
 
     return size_str
 
+
+def get_memory_bar(percentage, width=20, no_pipe=True):
+    """
+    Generate ASCII bar chart for memory usage percentage
+
+    Args:
+        percentage: Usage percentage (0-100)
+        width: Total width of bar in characters
+        no_pipe: Whether colors are enabled
+
+    Returns:
+        String representation of bar chart like: [████████░░░░] 45.2%
+    """
+    if percentage < 0:
+        percentage = 0
+    if percentage > 100:
+        percentage = 100
+
+    filled_width = int((percentage / 100.0) * width)
+    empty_width = width - filled_width
+
+    # Use block characters for visual appeal
+    filled_char = '█'
+    empty_char = '░'
+
+    bar = '[' + (filled_char * filled_width) + (empty_char * empty_width) + ']'
+
+    # Add color coding based on usage level
+    if no_pipe:
+        import ansicolor
+        if percentage >= 90:
+            color = ansicolor.get_color(ansicolor.RED)
+        elif percentage >= 70:
+            color = ansicolor.get_color(ansicolor.YELLOW)
+        elif percentage >= 50:
+            color = ansicolor.get_color(ansicolor.CYAN)
+        else:
+            color = ansicolor.get_color(ansicolor.GREEN)
+        reset = ansicolor.get_color(ansicolor.RESET)
+        bar = color + bar + reset
+
+    return bar
+
 def get_file_list(filename, checkdir=True):
     result_list = []
 
@@ -135,37 +181,55 @@ def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
     result_str = ""
     sorted_slab_dict = sorted(slab_dict.items(),
                             key=operator.itemgetter(1), reverse=True)
-    min_number = 10
+    min_number = getattr(op, 'oom_top', 10)
     if (op.all):
         min_number = len(sorted_slab_dict) - 1
 
     # Create table with TableFormatter
-    table = TableFormatter(no_pipe=no_pipe, show_header=True, padding=1)
+    show_graph = getattr(op, 'graph', False)
+    # Disable Rich when using graphs to avoid ANSI code conflicts
+    use_rich = not show_graph
+    table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
     table.add_column("SLAB_Name", width=42, align='left', color='yellow')
+    if show_graph:
+        table.add_column("Percent", width=24, align='left', color='cyan')
     table.add_column("Usage", width=15, align='right', color='red')
 
     print_count = min(len(sorted_slab_dict) - 1, min_number)
 
     for i in range(0, print_count):
         pname = sorted_slab_dict[i][0]
+        # Truncate SLAB name to fit column width
+        if len(pname) > 42:
+            pname = pname[:39] + "..."
         mem_usage = sorted_slab_dict[i][1]
-        table.add_row(pname, get_size_str(mem_usage))
+        if show_graph:
+            percentage = (mem_usage * 100.0 / total_usage) if total_usage > 0 else 0
+            bar = get_memory_bar(percentage, width=20, no_pipe=no_pipe)
+            table.add_row(pname, bar, get_size_str(mem_usage))
+        else:
+            table.add_row(pname, get_size_str(mem_usage))
 
     # Format and output table
     formatted_table = table.format()
+    # SLAB_Name(42) + Usage(15) + padding
+    separator_width = 42 + 15 + 4
+    if show_graph:
+        separator_width += 24 + 2
+
     if no_pipe:
-        print("=" * 58)
+        print("=" * separator_width)
         print(formatted_table)
         if print_count < len(sorted_slab_dict) - 1:
             print("\t<...>")
-        print("=" * 58)
+        print("=" * separator_width)
         print("Total memory usage from SLABs = %s" % get_size_str(total_usage))
     else:
-        result_str = "=" * 58 + "\n"
+        result_str = "=" * separator_width + "\n"
         result_str += formatted_table + "\n"
         if print_count < len(sorted_slab_dict) - 1:
             result_str += "\t<...>\n"
-        result_str += "=" * 58 + "\n"
+        result_str += "=" * separator_width + "\n"
         result_str += "Total memory usage from SLABs = %s\n" % get_size_str(total_usage)
 
     return result_str
@@ -177,37 +241,55 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
     result_str = ""
     sorted_oom_dict = sorted(oom_dict.items(),
                             key=operator.itemgetter(1), reverse=True)
-    min_number = 10
+    min_number = getattr(op, 'oom_top', 10)
     if (op.all):
         min_number = len(sorted_oom_dict) - 1
 
     # Create table with TableFormatter
-    table = TableFormatter(no_pipe=no_pipe, show_header=True, padding=1)
+    show_graph = getattr(op, 'graph', False)
+    # Disable Rich when using graphs to avoid ANSI code conflicts
+    use_rich = not show_graph
+    table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
     table.add_column("Process_Name", width=42, align='left', color='yellow')
+    if show_graph:
+        table.add_column("Percent", width=24, align='left', color='cyan')
     table.add_column("Usage", width=15, align='right', color='red')
 
     print_count = min(len(sorted_oom_dict) - 1, min_number)
 
     for i in range(0, print_count):
         pname = sorted_oom_dict[i][0]
+        # Truncate process name to fit column width
+        if len(pname) > 42:
+            pname = pname[:39] + "..."
         mem_usage = sorted_oom_dict[i][1]
-        table.add_row(pname, get_size_str(mem_usage))
+        if show_graph:
+            percentage = (mem_usage * 100.0 / total_usage) if total_usage > 0 else 0
+            bar = get_memory_bar(percentage, width=20, no_pipe=no_pipe)
+            table.add_row(pname, bar, get_size_str(mem_usage))
+        else:
+            table.add_row(pname, get_size_str(mem_usage))
 
     # Format and output table
     formatted_table = table.format()
+    # Process_Name(42) + Usage(15) + padding
+    separator_width = 42 + 15 + 4
+    if show_graph:
+        separator_width += 24 + 2
+
     if no_pipe:
-        print("=" * 58)
+        print("=" * separator_width)
         print(formatted_table)
         if print_count < len(sorted_oom_dict) - 1:
             print("\t<...>")
-        print("=" * 58)
+        print("=" * separator_width)
         print("Total memory usage from processes = %s" % get_size_str(total_usage))
     else:
-        result_str = "=" * 58 + "\n"
+        result_str = "=" * separator_width + "\n"
         result_str += formatted_table + "\n"
         if print_count < len(sorted_oom_dict) - 1:
             result_str += "\t<...>\n"
-        result_str += "=" * 58 + "\n"
+        result_str += "=" * separator_width + "\n"
         result_str += "Total memory usage from processes = %s\n" % get_size_str(total_usage)
 
     return result_str
@@ -233,6 +315,393 @@ def get_sos_relative_name(path):
     return path
 
 
+def build_process_filter_pattern(filter_str):
+    """
+    Build regex pattern from filter string.
+    Supports:
+    - Comma-separated: "java,python,VM" -> regex: (java|python|VM)
+    - Direct regex: "java.*" -> regex: java.*
+
+    Returns compiled regex pattern or None if invalid
+    """
+    if not filter_str:
+        return None
+
+    try:
+        # Check if it contains commas (comma-separated list)
+        if ',' in filter_str:
+            # Split by comma and build OR pattern
+            processes = [p.strip() for p in filter_str.split(',')]
+            # Escape special regex characters in each process name
+            processes = [re.escape(p) for p in processes if p]
+            regex_str = '|'.join(processes)
+            # Wrap in parentheses for clarity
+            regex_str = '(' + regex_str + ')'
+        else:
+            # Treat as direct regex pattern
+            regex_str = filter_str
+
+        return re.compile(regex_str, re.IGNORECASE)
+    except re.error:
+        return None
+
+
+def parse_oom_timestamp(line):
+    """Extract timestamp from log line"""
+    try:
+        # Try standard syslog format: "Feb 22 10:15:30"
+        match = re.match(r'(\w+\s+\d+\s+\d+:\d+:\d+)', line)
+        if match:
+            timestamp_str = match.group(1)
+            # Add current year for parsing
+            current_year = datetime.now().year
+            timestamp = datetime.strptime(timestamp_str + " " + str(current_year), "%b %d %H:%M:%S %Y")
+            return timestamp
+    except:
+        pass
+    return None
+
+
+def extract_invoker_process(line):
+    """Extract the process name that invoked OOM killer"""
+    try:
+        # Pattern: "processname invoked oom-killer:"
+        match = re.search(r'(\S+)\s+invoked oom-killer:', line)
+        if match:
+            return match.group(1)
+    except:
+        pass
+    return "unknown"
+
+
+def collect_oom_events(file_list, op):
+    """Collect all OOM events with metadata for analysis"""
+    oom_events = []
+    page_size = get_main().page_size
+
+    for file in file_list:
+        if not isfile(file):
+            continue
+
+        try:
+            with open(file) as f:
+                oom_data = None
+                oom_ps_started = False
+                rss_index = -1
+                pid_index = -1
+                pname_index = -1
+
+                trim_word = ' kernel: '
+                if op.trim_word != "":
+                    trim_word = op.trim_word
+
+                for line in chain(f, [""]):
+                    if op.trim_idx != 0:
+                        try:
+                            trim_word = line.split()[op.trim_idx + 1]
+                        except:
+                            pass
+                    if trim_word not in line:
+                        trim_word = '] '
+                    trim_ends_idx = line.find(trim_word) + len(trim_word)
+
+                    # Detect OOM event start
+                    if "invoked oom-killer:" in line:
+                        oom_data = {
+                            'timestamp': parse_oom_timestamp(line),
+                            'invoker': extract_invoker_process(line),
+                            'file': file,
+                            'line': line.strip(),
+                            'processes': {},
+                            'total_rss': 0,
+                            'killed_process': None,
+                            'killed_pid': None
+                        }
+                        continue
+
+                    # Capture killed process
+                    if oom_data and "Out of memory: Killed process" in line:
+                        try:
+                            match = re.search(r'Killed process (\d+) \(([^)]+)\)', line)
+                            if match:
+                                oom_data['killed_pid'] = match.group(1)
+                                oom_data['killed_process'] = match.group(2)
+                        except:
+                            pass
+                        continue
+
+                    # Parse process table header
+                    if oom_data and "uid" in line and "total_vm" in line:
+                        oom_ps_started = True
+                        line = line[trim_ends_idx:]
+                        line = line.replace("[", "").replace("]", "")
+                        words = line.split()
+                        for i in range(0, len(words)):
+                            if words[i] == "rss":
+                                rss_index = i
+                            elif words[i] == "pid":
+                                pid_index = i
+                            elif words[i] == "name":
+                                pname_index = i
+                        continue
+
+                    # Parse process entries
+                    if oom_ps_started and "[" not in line[trim_ends_idx:]:
+                        # End of process table - save event
+                        if oom_data:
+                            oom_events.append(oom_data)
+                            oom_data = None
+                        oom_ps_started = False
+                        rss_index = -1
+                        pid_index = -1
+                        pname_index = -1
+                        continue
+
+                    if oom_ps_started and oom_data:
+                        line = line[trim_ends_idx:]
+                        line = line.replace("[", "").replace("]", "")
+                        words = line.split()
+                        if len(words) <= pname_index:
+                            continue
+                        pid = words[pid_index]
+                        pname = words[pname_index]
+                        try:
+                            rss = int(words[rss_index]) * page_size
+                            oom_data['total_rss'] += rss
+                            oom_data['processes'][pname] = oom_data['processes'].get(pname, 0) + rss
+                        except:
+                            pass
+
+        except Exception as e:
+            pass
+
+    return oom_events
+
+
+def show_oom_summary_dashboard(oom_events, no_pipe):
+    """Display OOM summary dashboard"""
+    from table_formatter import TableFormatter
+
+    if not oom_events:
+        return screen.get_pipe_aware_line("No OOM events found.\n")
+
+    result_str = ""
+
+    # Header
+    if no_pipe:
+        print("\n" + "=" * 80)
+        print("OOM KILLER SUMMARY DASHBOARD".center(80))
+        print("=" * 80)
+    else:
+        result_str += "\n" + "=" * 80 + "\n"
+        result_str += "OOM KILLER SUMMARY DASHBOARD".center(80) + "\n"
+        result_str += "=" * 80 + "\n"
+
+    # Basic statistics
+    total_events = len(oom_events)
+    timestamps = [e['timestamp'] for e in oom_events if e['timestamp']]
+
+    if timestamps:
+        first_oom = min(timestamps)
+        last_oom = max(timestamps)
+        duration = (last_oom - first_oom).total_seconds() / 3600.0  # hours
+        date_range = "%s to %s (%.1f hours)" % (
+            first_oom.strftime("%b %d %H:%M"),
+            last_oom.strftime("%b %d %H:%M"),
+            duration
+        )
+    else:
+        date_range = "Unknown"
+
+    # Count invokers
+    invoker_count = defaultdict(int)
+    for event in oom_events:
+        invoker_count[event['invoker']] += 1
+
+    top_invokers = sorted(invoker_count.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    # Display basic stats
+    stats_output = ""
+    stats_output += "  Total OOM Events: %d\n" % total_events
+    stats_output += "  Date Range: %s\n" % date_range
+    stats_output += "\n"
+
+    if no_pipe:
+        print(stats_output)
+    else:
+        result_str += stats_output
+
+    # Top invokers table
+    table = TableFormatter(no_pipe=no_pipe, show_header=True, padding=1)
+    table.add_column("TOP INVOKING PROCESSES", width=40, align='left', color='yellow')
+    table.add_column("COUNT", width=10, align='right', color='red')
+    table.add_column("PERCENTAGE", width=12, align='right', color='cyan')
+
+    for invoker, count in top_invokers:
+        percentage = (count * 100.0 / total_events)
+        table.add_row(invoker, str(count), "%.1f%%" % percentage)
+
+    formatted_table = table.format()
+    if no_pipe:
+        print(formatted_table)
+        print("")
+    else:
+        result_str += formatted_table + "\n\n"
+
+    return result_str
+
+
+def analyze_oom_patterns(oom_events, no_pipe):
+    """Analyze OOM patterns and detect issues"""
+    result_str = ""
+
+    if not oom_events:
+        return result_str
+
+    # Header
+    if no_pipe:
+        print("=" * 80)
+        print("OOM PATTERN ANALYSIS".center(80))
+        print("=" * 80)
+    else:
+        result_str += "=" * 80 + "\n"
+        result_str += "OOM PATTERN ANALYSIS".center(80) + "\n"
+        result_str += "=" * 80 + "\n"
+
+    patterns = []
+
+    # Detect OOM storms (multiple OOMs in short time)
+    timestamps = sorted([e['timestamp'] for e in oom_events if e['timestamp']])
+    if len(timestamps) >= 3:
+        for i in range(len(timestamps) - 2):
+            time_diff = (timestamps[i+2] - timestamps[i]).total_seconds() / 60.0  # minutes
+            if time_diff < 5:  # 3 OOMs within 5 minutes
+                patterns.append("⚠ OOM STORM: 3+ OOM events within 5 minutes detected around %s" %
+                              timestamps[i].strftime("%b %d %H:%M"))
+                break
+
+    # Detect recurring invokers (same process repeatedly triggering OOM)
+    invoker_count = defaultdict(int)
+    for event in oom_events:
+        invoker_count[event['invoker']] += 1
+
+    for invoker, count in invoker_count.items():
+        if count >= 5 and invoker != "unknown":
+            percentage = (count * 100.0 / len(oom_events))
+            patterns.append("⚠ RECURRING INVOKER: '%s' triggered OOM %d times (%.1f%%)" %
+                          (invoker, count, percentage))
+
+    # Detect potential memory leaks (same process killed multiple times)
+    killed_count = defaultdict(int)
+    for event in oom_events:
+        if event['killed_process']:
+            killed_count[event['killed_process']] += 1
+
+    for process, count in killed_count.items():
+        if count >= 3:
+            patterns.append("⚠ POTENTIAL LEAK: '%s' was killed %d times by OOM killer" %
+                          (process, count))
+
+    # Display patterns
+    if patterns:
+        for pattern in patterns:
+            if no_pipe:
+                print("  " + pattern)
+            else:
+                result_str += "  " + pattern + "\n"
+    else:
+        msg = "  No concerning patterns detected."
+        if no_pipe:
+            print(msg)
+        else:
+            result_str += msg + "\n"
+
+    if no_pipe:
+        print("")
+    else:
+        result_str += "\n"
+
+    return result_str
+
+
+def show_oom_recommendations(oom_events, no_pipe):
+    """Provide actionable recommendations based on OOM analysis"""
+    result_str = ""
+
+    if not oom_events:
+        return result_str
+
+    # Header
+    if no_pipe:
+        print("=" * 80)
+        print("RECOMMENDATIONS".center(80))
+        print("=" * 80)
+    else:
+        result_str += "=" * 80 + "\n"
+        result_str += "RECOMMENDATIONS".center(80) + "\n"
+        result_str += "=" * 80 + "\n"
+
+    recommendations = []
+
+    # Check if system has swap
+    total_events = len(oom_events)
+    if total_events >= 10:
+        recommendations.append("1. CRITICAL: %d OOM events detected. System is severely memory constrained." % total_events)
+        recommendations.append("   → Consider adding more physical RAM")
+        recommendations.append("   → Enable or increase swap space size")
+
+    # Check for recurring processes
+    invoker_count = defaultdict(int)
+    for event in oom_events:
+        invoker_count[event['invoker']] += 1
+
+    top_invoker = max(invoker_count.items(), key=lambda x: x[1]) if invoker_count else None
+    if top_invoker and top_invoker[1] >= 5:
+        recommendations.append("2. Process '%s' is frequently triggering OOM (%d times):" %
+                             (top_invoker[0], top_invoker[1]))
+        recommendations.append("   → Investigate memory usage of this process")
+        recommendations.append("   → Check for memory leaks or excessive memory allocation")
+        recommendations.append("   → Consider tuning application memory limits")
+
+    # Check for killed processes
+    killed_count = defaultdict(int)
+    for event in oom_events:
+        if event['killed_process']:
+            killed_count[event['killed_process']] += 1
+
+    if killed_count:
+        top_killed = max(killed_count.items(), key=lambda x: x[1])
+        if top_killed[1] >= 3:
+            recommendations.append("3. Process '%s' was killed %d times by OOM killer:" %
+                                 (top_killed[0], top_killed[1]))
+            recommendations.append("   → This process may have a memory leak")
+            recommendations.append("   → Review application logs for errors")
+            recommendations.append("   → Consider memory profiling or heap dumps")
+
+    # General recommendations
+    if total_events >= 1:
+        recommendations.append("4. General Actions:")
+        recommendations.append("   → Review vm.overcommit_memory and vm.overcommit_ratio settings")
+        recommendations.append("   → Check for runaway processes or memory-intensive workloads")
+        recommendations.append("   → Monitor memory trends over time")
+        recommendations.append("   → Consider implementing cgroup memory limits")
+
+    # Display recommendations
+    if recommendations:
+        for rec in recommendations:
+            if no_pipe:
+                print("  " + rec)
+            else:
+                result_str += "  " + rec + "\n"
+
+    if no_pipe:
+        print("")
+    else:
+        result_str += "\n"
+
+    return result_str
+
+
 def show_oom_events(op, args, no_pipe):
     global hugepages_size
 
@@ -240,14 +709,50 @@ def show_oom_events(op, args, no_pipe):
     file_list = []
     for file in args[1:]:
         file_list = file_list + get_file_list(file, True)
-        
+
     if len(file_list) == 0:
         file_list = get_file_list(sos_home + "/var/log/messages*", False)
         file_list = file_list + \
                 get_file_list(sos_home + "/sos_commands/logs/journalctl*", False)
 
+    # If summary mode is requested, collect all OOM events and show dashboard
+    if op.oom_summary:
+        oom_events = collect_oom_events(file_list, op)
+
+        # Apply process filter if specified
+        if op.process_filter:
+            pattern = build_process_filter_pattern(op.process_filter)
+            if pattern is None:
+                result_str += screen.get_pipe_aware_line("Invalid filter pattern: %s\n" % op.process_filter)
+                return result_str
+            oom_events = [e for e in oom_events if pattern.search(e['invoker']) or
+                         (e['killed_process'] and pattern.search(e['killed_process']))]
+
+        # Apply count limit if specified
+        if op.oom_count > 0 and len(oom_events) > op.oom_count:
+            oom_events = oom_events[:op.oom_count]
+
+        # Show summary dashboard
+        result_str += show_oom_summary_dashboard(oom_events, no_pipe)
+
+        # Show pattern analysis
+        result_str += analyze_oom_patterns(oom_events, no_pipe)
+
+        # Show recommendations
+        result_str += show_oom_recommendations(oom_events, no_pipe)
+
+        return result_str
+
     is_first_oom = True
     page_size = get_main().page_size
+    oom_event_counter = 0
+    process_filter_pattern = None
+    if op.process_filter:
+        process_filter_pattern = build_process_filter_pattern(op.process_filter)
+        if process_filter_pattern is None:
+            result_str = result_str + screen.get_pipe_aware_line("Invalid filter pattern: %s\n" % op.process_filter)
+            return result_str
+
     for file in file_list:
         if not isfile(file):
             print("Not a file : '%s'" % (file))
@@ -284,7 +789,19 @@ def show_oom_events(op, args, no_pipe):
                         trim_word = '] '
                     trim_ends_idx = line.find(trim_word) + len(trim_word)
                     if "invoked oom-killer:" in line:
+                        # Check if we've hit the count limit
+                        if op.oom_count > 0 and oom_event_counter >= op.oom_count:
+                            break
+
+                        # Check process filter
+                        if process_filter_pattern:
+                            invoker = extract_invoker_process(line)
+                            if not process_filter_pattern.search(invoker):
+                                # Skip this OOM event - wrong process
+                                continue
+
                         oom_invoked = True
+                        oom_event_counter += 1
                         if not is_first_oom:
                             line = "\n\n" + line
                         result_str = result_str + \
@@ -526,32 +1043,51 @@ def show_swap_usage(op, no_pipe):
     # Create table with TableFormatter
     from table_formatter import TableFormatter
 
-    table = TableFormatter(no_pipe=no_pipe, show_header=True, padding=1)
+    show_graph = getattr(op, 'graph', False)
+    # Disable Rich when using graphs to avoid ANSI code conflicts
+    use_rich = not show_graph
+    table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
     table.add_column("NAME", width=42, align='left', color='yellow')
+    if show_graph:
+        table.add_column("Percent", width=24, align='left', color='cyan')
     table.add_column("Usage", width=15, align='right', color='red')
 
     print_count = min(len(sorted_swap_usage) - 1, min_number)
 
     for i in range(0, print_count):
         pname = sorted_swap_usage[i][0]
-        table.add_row(pname, get_size_str(sorted_swap_usage[i][1] * 1024))
+        # Truncate process name to fit column width
+        if len(pname) > 42:
+            pname = pname[:39] + "..."
+        swap_size = sorted_swap_usage[i][1] * 1024
+        if show_graph:
+            percentage = (sorted_swap_usage[i][1] * 100.0 / total_swap) if total_swap > 0 else 0
+            bar = get_memory_bar(percentage, width=20, no_pipe=no_pipe)
+            table.add_row(pname, bar, get_size_str(swap_size))
+        else:
+            table.add_row(pname, get_size_str(swap_size))
 
     # Format and output table
     formatted_table = table.format()
+    # NAME(42) + Usage(15) + padding
+    separator_width = 42 + 15 + 4
+    if show_graph:
+        separator_width += 24 + 2
+
     if no_pipe:
-        print("=" * 58)
+        print("=" * separator_width)
         print(formatted_table)
         if print_count < len(sorted_swap_usage) - 1:
             print("\t<...>")
-        print("=" * 58)
+        print("=" * separator_width)
         print("Total memory usage from swap = %s" % get_size_str(total_swap * 1024))
         print("Notes) The total can be bigger than actual usage due to the shared memory")
     else:
-        result_str = "=" * 58 + "\n"
+        result_str = "=" * separator_width + "\n"
         result_str += formatted_table + "\n"
         if print_count < len(sorted_swap_usage) - 1:
             result_str += "\t<...>\n"
-        result_str += "=" * 58 + "\n"
+        result_str += "=" * separator_width + "\n"
         result_str += "Total memory usage from swap = %s\n" % get_size_str(total_swap * 1024)
         result_str += "Notes) The total can be bigger than actual usage due to the shared memory\n"
 
@@ -606,8 +1142,13 @@ def show_slabtop(op, no_pipe):
     # Create table with TableFormatter
     from table_formatter import TableFormatter
 
-    table = TableFormatter(no_pipe=no_pipe, show_header=True, padding=1)
+    show_graph = getattr(op, 'graph', False)
+    # Disable Rich when using graphs to avoid ANSI code conflicts
+    use_rich = not show_graph
+    table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
     table.add_column("NAME", width=29, align='left', color='yellow')
+    if show_graph:
+        table.add_column("Percent", width=24, align='left', color='cyan')
     table.add_column("TOTAL", width=12, align='right', color='red')
     table.add_column("OBJSIZE", width=8, align='right', color='blue')
 
@@ -616,100 +1157,188 @@ def show_slabtop(op, no_pipe):
     page_size = get_main().page_size
     for i in range(0, print_count):
         slab_name = sorted_slabtop[i][0]
-        obj_size = slab_objsize[slab_name]
-        table.add_row(slab_name,
-                     get_size_str(sorted_slabtop[i][1] * page_size),
-                     str(obj_size))
+        # Truncate SLAB name to fit column width
+        if len(slab_name) > 29:
+            slab_name = slab_name[:26] + "..."
+        obj_size = slab_objsize[sorted_slabtop[i][0]]  # Use original name for lookup
+        slab_pages = sorted_slabtop[i][1]
+        if show_graph:
+            percentage = (slab_pages * 100.0 / total_slab) if total_slab > 0 else 0
+            bar = get_memory_bar(percentage, width=20, no_pipe=no_pipe)
+            table.add_row(slab_name,
+                         bar,
+                         get_size_str(slab_pages * page_size),
+                         str(obj_size))
+        else:
+            table.add_row(slab_name,
+                         get_size_str(slab_pages * page_size),
+                         str(obj_size))
 
     # Format and output table
     formatted_table = table.format()
+    # NAME(29) + TOTAL(12) + OBJSIZE(8) + padding
+    separator_width = 29 + 12 + 8 + 6
+    if show_graph:
+        separator_width += 24 + 2
+
     if no_pipe:
-        print("=" * 51)
+        print("=" * separator_width)
         print(formatted_table)
         if print_count < len(sorted_slabtop) - 1:
             print("\t<...>")
-        print("=" * 51)
+        print("=" * separator_width)
         print("Total memory usage from SLAB = %s" % get_size_str(total_slab * page_size))
     else:
-        result_str = "=" * 51 + "\n"
+        result_str = "=" * separator_width + "\n"
         result_str += formatted_table + "\n"
         if print_count < len(sorted_slabtop) - 1:
             result_str += "\t<...>\n"
-        result_str += "=" * 51 + "\n"
+        result_str += "=" * separator_width + "\n"
         result_str += "Total memory usage from SLAB = %s\n" % get_size_str(total_slab * page_size)
 
     return result_str
 
 
 def show_ps_memusage(op, no_pipe):
+    from table_formatter import TableFormatter
+    import sys
+
     result_str = ''
     mem_usage_dict = {}
     total_rss = 0
-    try:
-        with open(sos_home + '/ps') as f:
-            result_lines = f.readlines()
-            for i in range(1, len(result_lines)):
-                result_line = result_lines[i].split()
-                if result_line[5] == "-":
-                    continue
-                if len(result_line) < 11:
-                    continue
-                pid = result_line[1]
-                if op.all:
-                    pname = "%s (%s)" % (result_line[10], pid)
-                else:
-                    pname = result_line[10]
-                rss = int(result_line[5])
-                total_rss = total_rss + rss
-                if pname in mem_usage_dict:
-                    rss = mem_usage_dict[pname] + rss
 
-                if rss != 0:
-                    mem_usage_dict[pname] = rss
+    # Check if ps file exists
+    ps_file = sos_home + '/ps'
+    if not isfile(ps_file):
+        if no_pipe:
+            print("ps file not found: %s" % ps_file)
+        return ""
+
+    try:
+        with open(ps_file) as f:
+            result_lines = f.readlines()
+
+        if len(result_lines) < 2:
+            if no_pipe:
+                print("ps file is empty or has no data")
+            return ""
+
+        for i in range(1, len(result_lines)):
+            result_line = result_lines[i].split()
+            # Check length first before accessing elements
+            if len(result_line) < 11:
+                continue
+            if result_line[5] == "-":
+                continue
+            pid = result_line[1]
+            if op.all:
+                pname = "%s (%s)" % (result_line[10], pid)
+            else:
+                pname = result_line[10]
+            try:
+                rss = int(result_line[5])
+            except ValueError:
+                continue
+            total_rss = total_rss + rss
+            if pname in mem_usage_dict:
+                rss = mem_usage_dict[pname] + rss
+
+            if rss != 0:
+                mem_usage_dict[pname] = rss
 
     except Exception as e:
-        print(e)
+        print("Error reading ps file: %s" % str(e))
+        return ""
+
+    # Check if we have any data
+    if not mem_usage_dict:
+        if no_pipe:
+            print("No valid process data found in ps file")
         return ""
 
     sorted_usage = sorted(mem_usage_dict.items(),
             key=operator.itemgetter(1), reverse=True)
 
-    result_str = result_str + screen.get_pipe_aware_line("=" * 70)
-    result_str = result_str + screen.get_pipe_aware_line("%24s          %-s" % (" [ RSS usage ]", "[ Process name ]"))
-    result_str = result_str + screen.get_pipe_aware_line("=" * 70)
     min_number = 10
     if (op.all):
         min_number = len(sorted_usage) - 1
 
     print_count = min(len(sorted_usage) - 1, min_number)
 
+    if print_count <= 0:
+        if no_pipe:
+            print("No processes to display")
+        return ""
+
+    # Create table with TableFormatter
+    show_graph = getattr(op, 'graph', False)
+    # Disable Rich when using graphs to avoid ANSI code conflicts
+    use_rich = not show_graph
+    table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
+    table.add_column("Process_Name", width=42, align='left', color='yellow')
+    if show_graph:
+        table.add_column("Percent", width=24, align='left', color='cyan')
+    table.add_column("RSS_Usage", width=15, align='right', color='red')
+
     for i in range(0, print_count):
-        result_str = result_str +\
-                screen.get_pipe_aware_line("%14s (%10.2f KiB)   %-s" %
-                (get_size_str(sorted_usage[i][1] * 1024),
-                 sorted_usage[i][1],
-                 sorted_usage[i][0]))
+        pname = sorted_usage[i][0]
+        # Truncate process name to fit column width
+        if len(pname) > 42:
+            pname = pname[:39] + "..."
+        rss_kb = sorted_usage[i][1]
+        if show_graph:
+            percentage = (rss_kb * 100.0 / total_rss) if total_rss > 0 else 0
+            bar = get_memory_bar(percentage, width=20, no_pipe=no_pipe)
+            table.add_row(pname, bar, get_size_str(rss_kb * 1024))
+        else:
+            table.add_row(pname, get_size_str(rss_kb * 1024))
 
-    if print_count < len(sorted_usage) - 1:
-        result_str = result_str + screen.get_pipe_aware_line("\t<...>")
-    result_str = result_str + screen.get_pipe_aware_line("=" * 70)
-    result_str = result_str +\
-            screen.get_pipe_aware_line("Total memory usage from user-space = %s" %
-          (get_size_str(total_rss * 1024)))
+    # Format and output table
+    formatted_table = table.format()
+    # Calculate separator width based on columns
+    # Process_Name(42) + Graph(24 if shown) + RSS_Usage(15) + padding between columns
+    separator_width = 42 + 15 + 4  # 4 = 2 spaces padding on each side
+    if show_graph:
+        separator_width += 24 + 2  # Graph column + padding
 
-    try:
-        total_mem = 0
-        with open(sos_home + "/proc/meminfo") as f:
-            for line in f:
-                if "MemTotal:" in line:
-                    total_mem = int(line.split()[1])
-                    result_str = result_str +\
-                            screen.get_pipe_aware_line("\tNotes) %.2f percent from total system memory(%s)" % \
-                            (total_rss * 100 / total_mem, get_size_str(total_mem * 1024)))
-                    break
-    except:
-        pass
-
+    if no_pipe:
+        print("=" * separator_width)
+        print(formatted_table)
+        if print_count < len(sorted_usage) - 1:
+            print("\t<...>")
+        print("=" * separator_width)
+        print("Total memory usage from user-space = %s" % get_size_str(total_rss * 1024))
+        try:
+            total_mem = 0
+            with open(sos_home + "/proc/meminfo") as f:
+                for line in f:
+                    if "MemTotal:" in line:
+                        total_mem = int(line.split()[1])
+                        print("\tNotes) %.2f percent from total system memory(%s)" % \
+                                (total_rss * 100 / total_mem, get_size_str(total_mem * 1024)))
+                        break
+        except:
+            pass
+        sys.stdout.flush()
+        result_str = ""
+    else:
+        result_str = "=" * separator_width + "\n"
+        result_str += formatted_table + "\n"
+        if print_count < len(sorted_usage) - 1:
+            result_str += "\t<...>\n"
+        result_str += "=" * separator_width + "\n"
+        result_str += "Total memory usage from user-space = %s\n" % get_size_str(total_rss * 1024)
+        try:
+            total_mem = 0
+            with open(sos_home + "/proc/meminfo") as f:
+                for line in f:
+                    if "MemTotal:" in line:
+                        total_mem = int(line.split()[1])
+                        result_str += "\tNotes) %.2f percent from total system memory(%s)\n" % \
+                                (total_rss * 100 / total_mem, get_size_str(total_mem * 1024))
+                        break
+        except:
+            pass
 
     return result_str
 
@@ -718,7 +1347,12 @@ def print_help_msg(op, no_pipe):
     cmd_examples = '''
     It shows memory usage from process / slab.
 
-Example)
+Examples)
+    To see process memory usage with bar chart visualization:
+
+    example.com> meminfo -g
+    example.com> meminfo -ag
+
     To see oom events, you can specify log name or default file (/var/log/messages)
     will be used.
 
@@ -733,6 +1367,48 @@ Example)
         <...>
     ==========================================================
     Total memory usage from processes = 14.0 GiB
+
+    To see OOM summary dashboard with pattern analysis:
+
+    example.com> meminfo -O --oom-summary
+    ================================================================================
+                           OOM KILLER SUMMARY DASHBOARD
+    ================================================================================
+      Total OOM Events: 524
+      Date Range: Feb 22 10:15 to Feb 24 14:30 (52.3 hours)
+
+    TOP INVOKING PROCESSES                           COUNT  PERCENTAGE
+    ========================================================================
+    apache                                              178       34.0%
+    java                                               145       27.7%
+    ...
+
+    To filter OOM events by process name (comma-separated for multiple):
+
+    example.com> meminfo -O --process-filter "apache"
+    example.com> meminfo -O --process-filter "java,python,VM"
+
+    Advanced regex patterns also work:
+
+    example.com> meminfo -O --process-filter "java.*"
+
+    To limit the number of events shown:
+
+    example.com> meminfo -O --oom-count 5
+    example.com> meminfo -O --oom-summary --oom-count 100
+
+    To control how many top memory consumers are shown per event:
+
+    example.com> meminfo -O --oom-top 20
+
+    To show OOM events with bar chart visualization:
+
+    example.com> meminfo -Og
+    example.com> meminfo -Oag --oom-count 5
+
+    To show SLAB memory usage with bar chart:
+
+    example.com> meminfo -sg
     '''
 
     if no_pipe == False:
@@ -770,8 +1446,27 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-d', '--details', dest='details', action='store_true',
                   help='Show further details')
 
+    op.add_option('-g', '--graph', dest='graph', action='store_true',
+                  default=False,
+                  help='Show bar chart for memory usage visualization')
+
     op.add_option('-O', '--oom', dest='oom', action='store_true',
                   help='Shows OOM events')
+
+    op.add_option('--oom-summary', dest='oom_summary', action='store_true',
+                  help='Show OOM summary dashboard with pattern analysis')
+
+    op.add_option('--process-filter', dest='process_filter', default="",
+                  action='store', type="string",
+                  help='Filter OOM events by process name (comma-separated or regex)')
+
+    op.add_option('--oom-count', dest='oom_count', default=0,
+                  action='store', type="int",
+                  help='Limit number of OOM events to display')
+
+    op.add_option('--oom-top', dest='oom_top', default=10,
+                  action='store', type="int",
+                  help='Show top N memory consumers (default: 10)')
 
     op.add_option('-p', '--process', dest='process', action='store_true',
                   help='Shows process memory usage (default)')
