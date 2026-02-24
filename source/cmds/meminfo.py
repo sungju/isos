@@ -11,6 +11,7 @@ from itertools import chain
 import re
 from datetime import datetime
 from collections import defaultdict
+import shutil
 
 
 from isos import run_shell_command, column_strings
@@ -29,6 +30,66 @@ cmd_name = "meminfo"
 def get_command_info():
     return { cmd_name : run_meminfo }
 
+
+def get_terminal_width():
+    """
+    Get terminal width from prompt_toolkit/shutil.
+
+    Returns:
+        int: Terminal width in columns, or 80 if unable to determine
+    """
+    try:
+        # Try to get terminal size from shutil (works in most cases)
+        terminal_size = shutil.get_terminal_size()
+        return terminal_size.columns
+    except:
+        # Fallback to 80 columns if unable to determine
+        return 80
+
+
+def get_optimal_max_widths(show_graph=False):
+    """
+    Calculate optimal maximum column widths based on terminal width.
+
+    Args:
+        show_graph: If True, account for graph column in calculations
+
+    Returns:
+        dict: Maximum widths for different column types
+            - 'process_name': Max width for process names
+            - 'slab_name': Max width for SLAB names
+    """
+    terminal_width = get_terminal_width()
+
+    # Reserve space for other columns and padding
+    if show_graph:
+        # With graph: Process_Name + Percent(24) + Usage(15) + padding(~10)
+        reserved_space = 24 + 15 + 10
+    else:
+        # Without graph: Process_Name + Usage(15) + padding(~10)
+        reserved_space = 15 + 10
+
+    available_width = terminal_width - reserved_space
+
+    # Set reasonable bounds
+    # Process names: minimum 20, maximum based on available space (but cap at 100)
+    process_max = max(20, min(100, available_width))
+
+    # SLAB names: slightly smaller to account for additional columns
+    if show_graph:
+        # SLAB table has: kmem_cache(18) + NAME + Percent(24) + TOTAL(12) + OBJSIZE(8) + padding
+        slab_reserved = 18 + 24 + 12 + 8 + 12
+    else:
+        # SLAB table has: kmem_cache(18) + NAME + TOTAL(12) + OBJSIZE(8) + padding
+        slab_reserved = 18 + 12 + 8 + 10
+
+    slab_available = terminal_width - slab_reserved
+    slab_max = max(20, min(80, slab_available))
+
+    return {
+        'process_name': process_max,
+        'slab_name': slab_max
+    }
 
 
 def show_mem_balloon(op, no_pipe):
@@ -185,23 +246,28 @@ def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
     if (op.all):
         min_number = len(sorted_slab_dict) - 1
 
+    print_count = min(len(sorted_slab_dict) - 1, min_number)
+
     # Create table with TableFormatter
     show_graph = getattr(op, 'graph', False)
+
+    # Calculate optimal column width based on terminal width and longest SLAB name
+    max_widths = get_optimal_max_widths(show_graph)
+    max_slab_len = max(len(sorted_slab_dict[i][0]) for i in range(0, print_count)) if print_count > 0 else 20
+    slab_width = max(20, min(max_widths['slab_name'], max_slab_len + 2))
     # Disable Rich when using graphs to avoid ANSI code conflicts
     use_rich = not show_graph
     table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
-    table.add_column("SLAB_Name", width=42, align='left', color='yellow')
+    table.add_column("SLAB_Name", width=slab_width, align='left', color='yellow')
     if show_graph:
-        table.add_column("Percent", width=24, align='left', color='cyan')
+        table.add_column("Usage_Percent", width=24, align='left', color='cyan')
     table.add_column("Usage", width=15, align='right', color='red')
-
-    print_count = min(len(sorted_slab_dict) - 1, min_number)
 
     for i in range(0, print_count):
         pname = sorted_slab_dict[i][0]
         # Truncate SLAB name to fit column width
-        if len(pname) > 42:
-            pname = pname[:39] + "..."
+        if len(pname) > slab_width:
+            pname = pname[:slab_width-3] + "..."
         mem_usage = sorted_slab_dict[i][1]
         if show_graph:
             percentage = (mem_usage * 100.0 / total_usage) if total_usage > 0 else 0
@@ -212,21 +278,35 @@ def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
 
     # Format and output table
     formatted_table = table.format()
-    # SLAB_Name(42) + Usage(15) + padding
-    separator_width = 42 + 15 + 4
+    # SLAB_Name(dynamic) + Usage(15) + padding
+    separator_width = slab_width + 15 + 4
     if show_graph:
         separator_width += 24 + 2
 
     if no_pipe:
+        # Split table into header and data rows
+        table_lines = formatted_table.split('\n')
         print("=" * separator_width)
-        print(formatted_table)
+        if len(table_lines) > 0:
+            print(table_lines[0])  # Print header
+            print("-" * separator_width)  # Add separator line
+            for line in table_lines[1:]:  # Print data rows
+                if line.strip():  # Skip empty lines
+                    print(line)
         if print_count < len(sorted_slab_dict) - 1:
             print("\t<...>")
         print("=" * separator_width)
         print("Total memory usage from SLABs = %s" % get_size_str(total_usage))
     else:
+        # Split table into header and data rows for piped output
+        table_lines = formatted_table.split('\n')
         result_str = "=" * separator_width + "\n"
-        result_str += formatted_table + "\n"
+        if len(table_lines) > 0:
+            result_str += table_lines[0] + "\n"  # Header
+            result_str += "-" * separator_width + "\n"  # Separator
+            for line in table_lines[1:]:  # Data rows
+                if line.strip():
+                    result_str += line + "\n"
         if print_count < len(sorted_slab_dict) - 1:
             result_str += "\t<...>\n"
         result_str += "=" * separator_width + "\n"
@@ -245,23 +325,28 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
     if (op.all):
         min_number = len(sorted_oom_dict) - 1
 
+    print_count = min(len(sorted_oom_dict) - 1, min_number)
+
     # Create table with TableFormatter
     show_graph = getattr(op, 'graph', False)
+
+    # Calculate optimal column width based on terminal width and longest process name
+    max_widths = get_optimal_max_widths(show_graph)
+    max_pname_len = max(len(sorted_oom_dict[i][0]) for i in range(0, print_count)) if print_count > 0 else 20
+    pname_width = max(20, min(max_widths['process_name'], max_pname_len + 2))
     # Disable Rich when using graphs to avoid ANSI code conflicts
     use_rich = not show_graph
     table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
-    table.add_column("Process_Name", width=42, align='left', color='yellow')
+    table.add_column("Process_Name", width=pname_width, align='left', color='yellow')
     if show_graph:
-        table.add_column("Percent", width=24, align='left', color='cyan')
+        table.add_column("Usage_Percent", width=24, align='left', color='cyan')
     table.add_column("Usage", width=15, align='right', color='red')
-
-    print_count = min(len(sorted_oom_dict) - 1, min_number)
 
     for i in range(0, print_count):
         pname = sorted_oom_dict[i][0]
         # Truncate process name to fit column width
-        if len(pname) > 42:
-            pname = pname[:39] + "..."
+        if len(pname) > pname_width:
+            pname = pname[:pname_width-3] + "..."
         mem_usage = sorted_oom_dict[i][1]
         if show_graph:
             percentage = (mem_usage * 100.0 / total_usage) if total_usage > 0 else 0
@@ -272,21 +357,35 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
 
     # Format and output table
     formatted_table = table.format()
-    # Process_Name(42) + Usage(15) + padding
-    separator_width = 42 + 15 + 4
+    # Process_Name(dynamic) + Usage(15) + padding
+    separator_width = pname_width + 15 + 4
     if show_graph:
         separator_width += 24 + 2
 
     if no_pipe:
+        # Split table into header and data rows
+        table_lines = formatted_table.split('\n')
         print("=" * separator_width)
-        print(formatted_table)
+        if len(table_lines) > 0:
+            print(table_lines[0])  # Print header
+            print("-" * separator_width)  # Add separator line
+            for line in table_lines[1:]:  # Print data rows
+                if line.strip():  # Skip empty lines
+                    print(line)
         if print_count < len(sorted_oom_dict) - 1:
             print("\t<...>")
         print("=" * separator_width)
         print("Total memory usage from processes = %s" % get_size_str(total_usage))
     else:
+        # Split table into header and data rows for piped output
+        table_lines = formatted_table.split('\n')
         result_str = "=" * separator_width + "\n"
-        result_str += formatted_table + "\n"
+        if len(table_lines) > 0:
+            result_str += table_lines[0] + "\n"  # Header
+            result_str += "-" * separator_width + "\n"  # Separator
+            for line in table_lines[1:]:  # Data rows
+                if line.strip():
+                    result_str += line + "\n"
         if print_count < len(sorted_oom_dict) - 1:
             result_str += "\t<...>\n"
         result_str += "=" * separator_width + "\n"
@@ -1040,25 +1139,30 @@ def show_swap_usage(op, no_pipe):
     if (op.all):
         min_number = len(sorted_swap_usage) - 1
 
+    print_count = min(len(sorted_swap_usage) - 1, min_number)
+
     # Create table with TableFormatter
     from table_formatter import TableFormatter
 
     show_graph = getattr(op, 'graph', False)
+
+    # Calculate optimal column width based on terminal width and longest process name
+    max_widths = get_optimal_max_widths(show_graph)
+    max_pname_len = max(len(sorted_swap_usage[i][0]) for i in range(0, print_count)) if print_count > 0 else 20
+    pname_width = max(20, min(max_widths['process_name'], max_pname_len + 2))
     # Disable Rich when using graphs to avoid ANSI code conflicts
     use_rich = not show_graph
     table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
-    table.add_column("NAME", width=42, align='left', color='yellow')
+    table.add_column("NAME", width=pname_width, align='left', color='yellow')
     if show_graph:
-        table.add_column("Percent", width=24, align='left', color='cyan')
+        table.add_column("Usage_Percent", width=24, align='left', color='cyan')
     table.add_column("Usage", width=15, align='right', color='red')
-
-    print_count = min(len(sorted_swap_usage) - 1, min_number)
 
     for i in range(0, print_count):
         pname = sorted_swap_usage[i][0]
         # Truncate process name to fit column width
-        if len(pname) > 42:
-            pname = pname[:39] + "..."
+        if len(pname) > pname_width:
+            pname = pname[:pname_width-3] + "..."
         swap_size = sorted_swap_usage[i][1] * 1024
         if show_graph:
             percentage = (sorted_swap_usage[i][1] * 100.0 / total_swap) if total_swap > 0 else 0
@@ -1069,22 +1173,36 @@ def show_swap_usage(op, no_pipe):
 
     # Format and output table
     formatted_table = table.format()
-    # NAME(42) + Usage(15) + padding
-    separator_width = 42 + 15 + 4
+    # NAME(dynamic) + Usage(15) + padding
+    separator_width = pname_width + 15 + 4
     if show_graph:
         separator_width += 24 + 2
 
     if no_pipe:
+        # Split table into header and data rows
+        table_lines = formatted_table.split('\n')
         print("=" * separator_width)
-        print(formatted_table)
+        if len(table_lines) > 0:
+            print(table_lines[0])  # Print header
+            print("-" * separator_width)  # Add separator line
+            for line in table_lines[1:]:  # Print data rows
+                if line.strip():  # Skip empty lines
+                    print(line)
         if print_count < len(sorted_swap_usage) - 1:
             print("\t<...>")
         print("=" * separator_width)
         print("Total memory usage from swap = %s" % get_size_str(total_swap * 1024))
         print("Notes) The total can be bigger than actual usage due to the shared memory")
     else:
+        # Split table into header and data rows for piped output
+        table_lines = formatted_table.split('\n')
         result_str = "=" * separator_width + "\n"
-        result_str += formatted_table + "\n"
+        if len(table_lines) > 0:
+            result_str += table_lines[0] + "\n"  # Header
+            result_str += "-" * separator_width + "\n"  # Separator
+            for line in table_lines[1:]:  # Data rows
+                if line.strip():
+                    result_str += line + "\n"
         if print_count < len(sorted_swap_usage) - 1:
             result_str += "\t<...>\n"
         result_str += "=" * separator_width + "\n"
@@ -1139,27 +1257,32 @@ def show_slabtop(op, no_pipe):
     if (op.all):
         min_number = len(sorted_slabtop) - 1
 
+    print_count = min(len(sorted_slabtop) - 1, min_number)
+
     # Create table with TableFormatter
     from table_formatter import TableFormatter
 
     show_graph = getattr(op, 'graph', False)
+
+    # Calculate optimal column width based on terminal width and longest SLAB name
+    max_widths = get_optimal_max_widths(show_graph)
+    max_slab_len = max(len(sorted_slabtop[i][0]) for i in range(0, print_count)) if print_count > 0 else 20
+    slab_width = max(20, min(max_widths['slab_name'], max_slab_len + 2))
     # Disable Rich when using graphs to avoid ANSI code conflicts
     use_rich = not show_graph
     table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
-    table.add_column("NAME", width=29, align='left', color='yellow')
+    table.add_column("NAME", width=slab_width, align='left', color='yellow')
     if show_graph:
-        table.add_column("Percent", width=24, align='left', color='cyan')
+        table.add_column("Usage_Percent", width=24, align='left', color='cyan')
     table.add_column("TOTAL", width=12, align='right', color='red')
     table.add_column("OBJSIZE", width=8, align='right', color='blue')
-
-    print_count = min(len(sorted_slabtop) - 1, min_number)
 
     page_size = get_main().page_size
     for i in range(0, print_count):
         slab_name = sorted_slabtop[i][0]
         # Truncate SLAB name to fit column width
-        if len(slab_name) > 29:
-            slab_name = slab_name[:26] + "..."
+        if len(slab_name) > slab_width:
+            slab_name = slab_name[:slab_width-3] + "..."
         obj_size = slab_objsize[sorted_slabtop[i][0]]  # Use original name for lookup
         slab_pages = sorted_slabtop[i][1]
         if show_graph:
@@ -1176,21 +1299,35 @@ def show_slabtop(op, no_pipe):
 
     # Format and output table
     formatted_table = table.format()
-    # NAME(29) + TOTAL(12) + OBJSIZE(8) + padding
-    separator_width = 29 + 12 + 8 + 6
+    # NAME(dynamic) + TOTAL(12) + OBJSIZE(8) + padding
+    separator_width = slab_width + 12 + 8 + 6
     if show_graph:
         separator_width += 24 + 2
 
     if no_pipe:
+        # Split table into header and data rows
+        table_lines = formatted_table.split('\n')
         print("=" * separator_width)
-        print(formatted_table)
+        if len(table_lines) > 0:
+            print(table_lines[0])  # Print header
+            print("-" * separator_width)  # Add separator line
+            for line in table_lines[1:]:  # Print data rows
+                if line.strip():  # Skip empty lines
+                    print(line)
         if print_count < len(sorted_slabtop) - 1:
             print("\t<...>")
         print("=" * separator_width)
         print("Total memory usage from SLAB = %s" % get_size_str(total_slab * page_size))
     else:
+        # Split table into header and data rows for piped output
+        table_lines = formatted_table.split('\n')
         result_str = "=" * separator_width + "\n"
-        result_str += formatted_table + "\n"
+        if len(table_lines) > 0:
+            result_str += table_lines[0] + "\n"  # Header
+            result_str += "-" * separator_width + "\n"  # Separator
+            for line in table_lines[1:]:  # Data rows
+                if line.strip():
+                    result_str += line + "\n"
         if print_count < len(sorted_slabtop) - 1:
             result_str += "\t<...>\n"
         result_str += "=" * separator_width + "\n"
@@ -1272,19 +1409,24 @@ def show_ps_memusage(op, no_pipe):
 
     # Create table with TableFormatter
     show_graph = getattr(op, 'graph', False)
+
+    # Calculate optimal column width based on terminal width and longest process name
+    max_widths = get_optimal_max_widths(show_graph)
+    max_pname_len = max(len(sorted_usage[i][0]) for i in range(0, print_count))
+    pname_width = max(20, min(max_widths['process_name'], max_pname_len + 2))
     # Disable Rich when using graphs to avoid ANSI code conflicts
     use_rich = not show_graph
     table = TableFormatter(no_pipe=no_pipe, use_rich=use_rich, show_header=True, padding=1)
-    table.add_column("Process_Name", width=42, align='left', color='yellow')
+    table.add_column("Process_Name", width=pname_width, align='left', color='yellow')
     if show_graph:
-        table.add_column("Percent", width=24, align='left', color='cyan')
+        table.add_column("Usage_Percent", width=24, align='left', color='cyan')
     table.add_column("RSS_Usage", width=15, align='right', color='red')
 
     for i in range(0, print_count):
         pname = sorted_usage[i][0]
         # Truncate process name to fit column width
-        if len(pname) > 42:
-            pname = pname[:39] + "..."
+        if len(pname) > pname_width:
+            pname = pname[:pname_width-3] + "..."
         rss_kb = sorted_usage[i][1]
         if show_graph:
             percentage = (rss_kb * 100.0 / total_rss) if total_rss > 0 else 0
@@ -1296,14 +1438,21 @@ def show_ps_memusage(op, no_pipe):
     # Format and output table
     formatted_table = table.format()
     # Calculate separator width based on columns
-    # Process_Name(42) + Graph(24 if shown) + RSS_Usage(15) + padding between columns
-    separator_width = 42 + 15 + 4  # 4 = 2 spaces padding on each side
+    # Process_Name(dynamic) + Graph(24 if shown) + RSS_Usage(15) + padding between columns
+    separator_width = pname_width + 15 + 4  # 4 = 2 spaces padding on each side
     if show_graph:
         separator_width += 24 + 2  # Graph column + padding
 
     if no_pipe:
+        # Split table into header and data rows
+        table_lines = formatted_table.split('\n')
         print("=" * separator_width)
-        print(formatted_table)
+        if len(table_lines) > 0:
+            print(table_lines[0])  # Print header
+            print("-" * separator_width)  # Add separator line
+            for line in table_lines[1:]:  # Print data rows
+                if line.strip():  # Skip empty lines
+                    print(line)
         if print_count < len(sorted_usage) - 1:
             print("\t<...>")
         print("=" * separator_width)
@@ -1322,8 +1471,15 @@ def show_ps_memusage(op, no_pipe):
         sys.stdout.flush()
         result_str = ""
     else:
+        # Split table into header and data rows for piped output
+        table_lines = formatted_table.split('\n')
         result_str = "=" * separator_width + "\n"
-        result_str += formatted_table + "\n"
+        if len(table_lines) > 0:
+            result_str += table_lines[0] + "\n"  # Header
+            result_str += "-" * separator_width + "\n"  # Separator
+            for line in table_lines[1:]:  # Data rows
+                if line.strip():
+                    result_str += line + "\n"
         if print_count < len(sorted_usage) - 1:
             result_str += "\t<...>\n"
         result_str += "=" * separator_width + "\n"
