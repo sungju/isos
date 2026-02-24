@@ -66,12 +66,13 @@ def get_optimal_max_widths(show_graph=False):
     terminal_width = get_terminal_width()
 
     # Reserve space for other columns and padding
+    # This matches separator_width formula: pname_width + 15 + 4 (+ 24 + 2 if graph)
     if show_graph:
-        # With graph: Process_Name + Percent(24) + Usage(15) + padding(~10)
-        reserved_space = 24 + 15 + 10
+        # With graph: Process_Name + Percent(24) + Usage(15) + padding(4+2)
+        reserved_space = 24 + 15 + 4 + 2  # = 45
     else:
-        # Without graph: Process_Name + Usage(15) + padding(~10)
-        reserved_space = 15 + 10
+        # Without graph: Process_Name + Usage(15) + padding(4)
+        reserved_space = 15 + 4  # = 19
 
     available_width = terminal_width - reserved_space
 
