@@ -114,6 +114,31 @@ def get_colored_line(line):
     """
     Apply column-based coloring to a line of text.
 
+    DEPRECATED: This function has a fundamental design issue - it splits
+    lines by whitespace and colors "words" by position, which breaks when
+    fixed-width format strings create extra spaces. This causes colors to
+    land on wrong columns or in the middle of values.
+
+    RECOMMENDED: Use TableFormatter from table_formatter.py instead.
+    TableFormatter handles formatting and coloring together, avoiding the
+    split/color mismatch problem.
+
+    Old pattern (problematic):
+        screen.column_color = {1: screen.COLOR_3, 2: screen.COLOR_2}
+        header = "%-12s %-6s" % ("COL1", "COL2")
+        line = screen.get_colored_line(header)
+
+    New pattern (recommended):
+        from table_formatter import TableFormatter
+        table = TableFormatter(no_pipe=no_pipe)
+        table.add_column("COL1", width=12, color='cyan')
+        table.add_column("COL2", width=6, color='green')
+        table.add_row("value1", "value2")
+        output = table.format()
+
+    This function is kept functional for backward compatibility during
+    the transition period, but new code should use TableFormatter.
+
     Colors each whitespace-separated word based on its column position.
     Skips the first N columns if header_start_idx is set.
 
@@ -239,3 +264,34 @@ def get_pipe_color_line(line, color="normal", end="\n"):
         return ""
     else:
         return line + end
+
+
+def should_use_table_formatter():
+    """
+    Check if TableFormatter is available and recommended.
+
+    This helper function guides command authors to use the new TableFormatter
+    pattern instead of the deprecated column_color + get_colored_line approach.
+
+    The old pattern has a fundamental issue where splitting text by whitespace
+    and coloring by position breaks when fixed-width formatting creates extra
+    spaces. TableFormatter solves this by handling formatting and coloring
+    together.
+
+    Returns:
+        True (always) - TableFormatter is available and recommended
+
+    Example usage in command modules:
+        if should_use_table_formatter():
+            # Use new pattern
+            from table_formatter import create_table
+            table = create_table(no_pipe)
+            table.add_column("NAME", width=20, color='cyan')
+            table.add_row("value")
+            output = table.format()
+        else:
+            # Use old pattern (deprecated)
+            screen.column_color = {1: screen.COLOR_3}
+            line = screen.get_colored_line(header)
+    """
+    return True

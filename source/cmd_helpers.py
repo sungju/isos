@@ -6,9 +6,11 @@ This module provides reusable utilities for:
 - Size formatting
 - File parsing
 - Error handling
+- Table formatting (new pattern using TableFormatter)
 """
 
 import ansicolor
+from table_formatter import TableFormatter, create_table
 
 
 # Constants for size formatting
@@ -265,6 +267,14 @@ class OutputBuilder(object):
         builder = OutputBuilder(no_pipe)
         builder.add_line("Hello")
         return builder.get_result()
+
+    New table support:
+        builder = OutputBuilder(no_pipe)
+        table = create_table(no_pipe)
+        table.add_column("NAME", width=20, color='cyan')
+        table.add_row("value")
+        builder.add_table(table)
+        return builder.get_result()
     """
 
     def __init__(self, no_pipe):
@@ -288,6 +298,27 @@ class OutputBuilder(object):
                 print(text)
             else:
                 self.buffer.append(text)
+
+    def add_table(self, table_formatter):
+        """
+        Add a formatted table to output.
+
+        Args:
+            table_formatter: TableFormatter instance with data
+
+        Example:
+            table = create_table(no_pipe)
+            table.add_column("PID", width=8, color='cyan')
+            table.add_row("1234")
+            builder.add_table(table)
+        """
+        if table_formatter:
+            formatted = table_formatter.format()
+            if formatted:
+                if self.no_pipe:
+                    print(formatted)
+                else:
+                    self.buffer.append(formatted)
 
     def get_result(self):
         """Get final result string."""
@@ -332,3 +363,157 @@ def get_sos_file_path(sos_home, *path_components):
     """
     import os.path
     return os.path.join(sos_home, *path_components)
+
+
+# ============================================================================
+# Table Formatting Utilities (New Pattern)
+# ============================================================================
+
+def format_table_row(values, widths, colors=None, no_pipe=True, align='left'):
+    """
+    Format a single table row with colors.
+
+    Helper function for manual table formatting when not using TableFormatter.
+
+    Args:
+        values: List of column values
+        widths: List of column widths
+        colors: List of color names (optional)
+        no_pipe: True if outputting to terminal
+        align: Default alignment ('left', 'right', 'center')
+
+    Returns:
+        Formatted row string
+
+    Example:
+        row = format_table_row(
+            ["eth0", "up", "192.168.1.1"],
+            [12, 6, 15],
+            ["cyan", "green", "yellow"],
+            no_pipe=True
+        )
+    """
+    parts = []
+    for i, value in enumerate(values):
+        if i >= len(widths):
+            parts.append(str(value))
+            continue
+
+        width = widths[i]
+        text = str(value)
+
+        # Apply alignment
+        if width < 0:
+            # Negative width means left align
+            text = text.ljust(-width)
+        else:
+            # Positive width means right align
+            if align == 'right':
+                text = text.rjust(width)
+            elif align == 'center':
+                text = text.center(width)
+            else:
+                text = text.ljust(width)
+
+        # Apply color if specified
+        if no_pipe and colors and i < len(colors) and colors[i]:
+            from table_formatter import ANSI_COLOR_MAP
+            color_const = ANSI_COLOR_MAP.get(colors[i].lower())
+            if color_const:
+                color_code = ansicolor.get_color(color_const)
+                reset_code = ansicolor.get_color(ansicolor.RESET)
+                text = color_code + text + reset_code
+
+        parts.append(text)
+
+    return " ".join(parts)
+
+
+# Pre-defined color schemes for common table types
+
+SCHEME_PROCESS_TABLE = {
+    'pid': 'cyan',
+    'user': 'green',
+    'cpu': 'yellow',
+    'mem': 'yellow',
+    'command': 'lightcyan'
+}
+
+SCHEME_NETWORK_TABLE = {
+    'device': 'cyan',
+    'state': 'green',
+    'address': 'yellow',
+    'speed': 'lightcyan'
+}
+
+SCHEME_MEMORY_TABLE = {
+    'name': 'cyan',
+    'size': 'yellow',
+    'used': 'lightred',
+    'free': 'lightgreen',
+    'percent': 'lightyellow'
+}
+
+SCHEME_DISK_TABLE = {
+    'device': 'cyan',
+    'mount': 'green',
+    'size': 'yellow',
+    'used': 'lightred',
+    'avail': 'lightgreen',
+    'percent': 'lightyellow'
+}
+
+SCHEME_LVM_TABLE = {
+    'name': 'cyan',
+    'vg': 'green',
+    'size': 'yellow',
+    'free': 'lightgreen',
+    'devices': 'lightcyan'
+}
+
+
+def create_process_table(no_pipe=True):
+    """
+    Create a table formatted for process information.
+
+    Returns:
+        TableFormatter configured for process display
+    """
+    table = create_table(no_pipe=no_pipe)
+    table.add_column("PID", width=8, align='right', color=SCHEME_PROCESS_TABLE['pid'])
+    table.add_column("USER", width=12, align='left', color=SCHEME_PROCESS_TABLE['user'])
+    table.add_column("CPU%", width=6, align='right', color=SCHEME_PROCESS_TABLE['cpu'])
+    table.add_column("MEM%", width=6, align='right', color=SCHEME_PROCESS_TABLE['mem'])
+    table.add_column("COMMAND", width=40, align='left', color=SCHEME_PROCESS_TABLE['command'])
+    return table
+
+
+def create_network_table(no_pipe=True):
+    """
+    Create a table formatted for network device information.
+
+    Returns:
+        TableFormatter configured for network display
+    """
+    table = create_table(no_pipe=no_pipe)
+    table.add_column("DEVICE", width=12, align='left', color=SCHEME_NETWORK_TABLE['device'])
+    table.add_column("STATE", width=6, align='left', color=SCHEME_NETWORK_TABLE['state'])
+    table.add_column("IP_ADDRESS", width=18, align='left', color=SCHEME_NETWORK_TABLE['address'])
+    table.add_column("SPEED", width=10, align='right', color=SCHEME_NETWORK_TABLE['speed'])
+    return table
+
+
+def create_memory_table(no_pipe=True):
+    """
+    Create a table formatted for memory information.
+
+    Returns:
+        TableFormatter configured for memory display
+    """
+    table = create_table(no_pipe=no_pipe)
+    table.add_column("NAME", width=20, align='left', color=SCHEME_MEMORY_TABLE['name'])
+    table.add_column("SIZE", width=12, align='right', color=SCHEME_MEMORY_TABLE['size'])
+    table.add_column("USED", width=12, align='right', color=SCHEME_MEMORY_TABLE['used'])
+    table.add_column("FREE", width=12, align='right', color=SCHEME_MEMORY_TABLE['free'])
+    table.add_column("USE%", width=6, align='right', color=SCHEME_MEMORY_TABLE['percent'])
+    return table

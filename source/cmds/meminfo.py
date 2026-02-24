@@ -89,23 +89,17 @@ def get_file_list(filename, checkdir=True):
 hugepages_size = 2 * 1024 * 1024
 
 def show_oom_meminfo(op, no_pipe, meminfo_dict):
+    from table_formatter import TableFormatter
+
     global hugepages_size
 
     result_str = ""
     page_size = get_main().page_size
 
-    # Set up semantic column coloring for memory info table
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_3,   # Category - YELLOW (identifier)
-            2: screen.COLOR_1,   # Size - RED (critical memory value)
-        }
-
-    result_str = result_str + screen.get_pipe_aware_line("\n%s" % ('#' * 46))
-    result_str = result_str +\
-            screen.get_pipe_aware_line("%-30s %15s" %
-                    ("Category", "Size"))
-    result_str = result_str + screen.get_pipe_aware_line("%s" % ('-' * 46))
+    # Create table with TableFormatter
+    table = TableFormatter(no_pipe=no_pipe, show_header=True, padding=1)
+    table.add_column("Category", width=30, align='left', color='yellow')
+    table.add_column("Size", width=15, align='right', color='red')
 
     sorted_meminfo_dict = sorted(meminfo_dict.items(),
                             key=operator.itemgetter(1), reverse=True)
@@ -116,18 +110,28 @@ def show_oom_meminfo(op, no_pipe, meminfo_dict):
             val = sorted_meminfo_dict[i][1]
             if key.startswith("hugepages_") and key != "hugepages_size":
                 val = val * hugepages_size
-            result_str = result_str +\
-                    screen.get_pipe_aware_line("%-30s %15s" % 
-                            (key, get_size_str(val)))
+            table.add_row(key, get_size_str(val))
         except Exception as e:
             print(e)
             pass
-    result_str = result_str + screen.get_pipe_aware_line("%s" % ('~' * 46))
+
+    # Format and output table
+    formatted_table = table.format()
+    if no_pipe:
+        print("\n" + "#" * 46)
+        print(formatted_table)
+        print("~" * 46)
+    else:
+        result_str = "\n" + "#" * 46 + "\n"
+        result_str += formatted_table + "\n"
+        result_str += "~" * 46 + "\n"
 
     return result_str
 
 
 def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
+    from table_formatter import TableFormatter
+
     result_str = ""
     sorted_slab_dict = sorted(slab_dict.items(),
                             key=operator.itemgetter(1), reverse=True)
@@ -135,40 +139,41 @@ def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
     if (op.all):
         min_number = len(sorted_slab_dict) - 1
 
-    # Set up semantic column coloring for SLAB usage table
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_3,   # SLAB name - YELLOW (identifier)
-            2: screen.COLOR_1,   # Memory usage - RED (critical resource)
-        }
-
-    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
-    result_str = result_str +\
-            screen.get_pipe_aware_line("%-42s %15s" %
-            ("SLAB_Name", "Usage"))
-    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
+    # Create table with TableFormatter
+    table = TableFormatter(no_pipe=no_pipe, show_header=True, padding=1)
+    table.add_column("SLAB_Name", width=42, align='left', color='yellow')
+    table.add_column("Usage", width=15, align='right', color='red')
 
     print_count = min(len(sorted_slab_dict) - 1, min_number)
 
     for i in range(0, print_count):
         pname = sorted_slab_dict[i][0]
-
         mem_usage = sorted_slab_dict[i][1]
-        result_str = result_str + \
-                screen.get_pipe_aware_line("%-42s %15s" %
-                (pname, get_size_str(mem_usage)))
+        table.add_row(pname, get_size_str(mem_usage))
 
-    if print_count < len(sorted_slab_dict) - 1:
-        result_str = result_str + screen.get_pipe_aware_line("\t<...>")
-    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
-    result_str = result_str +\
-            screen.get_pipe_aware_line("Total memory usage from SLABs = %s" %
-                    get_size_str(total_usage))
+    # Format and output table
+    formatted_table = table.format()
+    if no_pipe:
+        print("=" * 58)
+        print(formatted_table)
+        if print_count < len(sorted_slab_dict) - 1:
+            print("\t<...>")
+        print("=" * 58)
+        print("Total memory usage from SLABs = %s" % get_size_str(total_usage))
+    else:
+        result_str = "=" * 58 + "\n"
+        result_str += formatted_table + "\n"
+        if print_count < len(sorted_slab_dict) - 1:
+            result_str += "\t<...>\n"
+        result_str += "=" * 58 + "\n"
+        result_str += "Total memory usage from SLABs = %s\n" % get_size_str(total_usage)
 
     return result_str
 
 
 def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
+    from table_formatter import TableFormatter
+
     result_str = ""
     sorted_oom_dict = sorted(oom_dict.items(),
                             key=operator.itemgetter(1), reverse=True)
@@ -176,35 +181,34 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
     if (op.all):
         min_number = len(sorted_oom_dict) - 1
 
-    # Set up semantic column coloring for process memory usage table
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_3,   # Process name - YELLOW (identifier)
-            2: screen.COLOR_1,   # Memory usage - RED (critical resource)
-        }
-
-    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
-    result_str = result_str +\
-            screen.get_pipe_aware_line("%-42s %15s" %
-            ("Process_Name", "Usage"))
-    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
+    # Create table with TableFormatter
+    table = TableFormatter(no_pipe=no_pipe, show_header=True, padding=1)
+    table.add_column("Process_Name", width=42, align='left', color='yellow')
+    table.add_column("Usage", width=15, align='right', color='red')
 
     print_count = min(len(sorted_oom_dict) - 1, min_number)
 
     for i in range(0, print_count):
         pname = sorted_oom_dict[i][0]
-
         mem_usage = sorted_oom_dict[i][1]
-        result_str = result_str + \
-                screen.get_pipe_aware_line("%-42s %15s" %
-                (pname, get_size_str(mem_usage)))
+        table.add_row(pname, get_size_str(mem_usage))
 
-    if print_count < len(sorted_oom_dict) - 1:
-        result_str = result_str + screen.get_pipe_aware_line("\t<...>")
-    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
-    result_str = result_str +\
-            screen.get_pipe_aware_line("Total memory usage from processes = %s" %
-                    get_size_str(total_usage))
+    # Format and output table
+    formatted_table = table.format()
+    if no_pipe:
+        print("=" * 58)
+        print(formatted_table)
+        if print_count < len(sorted_oom_dict) - 1:
+            print("\t<...>")
+        print("=" * 58)
+        print("Total memory usage from processes = %s" % get_size_str(total_usage))
+    else:
+        result_str = "=" * 58 + "\n"
+        result_str += formatted_table + "\n"
+        if print_count < len(sorted_oom_dict) - 1:
+            result_str += "\t<...>\n"
+        result_str += "=" * 58 + "\n"
+        result_str += "Total memory usage from processes = %s\n" % get_size_str(total_usage)
 
     return result_str
 
@@ -519,36 +523,37 @@ def show_swap_usage(op, no_pipe):
     if (op.all):
         min_number = len(sorted_swap_usage) - 1
 
-    # Set up semantic column coloring for swap usage table
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_3,   # Process name - YELLOW (identifier)
-            2: screen.COLOR_1,   # Swap usage - RED (critical resource)
-        }
+    # Create table with TableFormatter
+    from table_formatter import TableFormatter
 
-    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
-    result_str = result_str +\
-            screen.get_pipe_aware_line("%-42s %15s" %
-            ("NAME", "Usage"))
-    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
+    table = TableFormatter(no_pipe=no_pipe, show_header=True, padding=1)
+    table.add_column("NAME", width=42, align='left', color='yellow')
+    table.add_column("Usage", width=15, align='right', color='red')
 
     print_count = min(len(sorted_swap_usage) - 1, min_number)
 
     for i in range(0, print_count):
         pname = sorted_swap_usage[i][0]
+        table.add_row(pname, get_size_str(sorted_swap_usage[i][1] * 1024))
 
-        result_str = result_str + \
-                screen.get_pipe_aware_line("%-42s %15s" % 
-                (pname, get_size_str(sorted_swap_usage[i][1] * 1024)))
-
-    if print_count < len(sorted_swap_usage) - 1:
-        result_str = result_str + screen.get_pipe_aware_line("\t<...>")
-    result_str = result_str + screen.get_pipe_aware_line("=" * 58)
-    result_str = result_str +\
-            screen.get_pipe_aware_line("Total memory usage from swap = %s" %
-          (get_size_str(total_swap * 1024)))
-    result_str = result_str +\
-            screen.get_pipe_aware_line("Notes) The total can be bigger than actual usage due to the shared memory")
+    # Format and output table
+    formatted_table = table.format()
+    if no_pipe:
+        print("=" * 58)
+        print(formatted_table)
+        if print_count < len(sorted_swap_usage) - 1:
+            print("\t<...>")
+        print("=" * 58)
+        print("Total memory usage from swap = %s" % get_size_str(total_swap * 1024))
+        print("Notes) The total can be bigger than actual usage due to the shared memory")
+    else:
+        result_str = "=" * 58 + "\n"
+        result_str += formatted_table + "\n"
+        if print_count < len(sorted_swap_usage) - 1:
+            result_str += "\t<...>\n"
+        result_str += "=" * 58 + "\n"
+        result_str += "Total memory usage from swap = %s\n" % get_size_str(total_swap * 1024)
+        result_str += "Notes) The total can be bigger than actual usage due to the shared memory\n"
 
     return result_str
 
@@ -598,19 +603,13 @@ def show_slabtop(op, no_pipe):
     if (op.all):
         min_number = len(sorted_slabtop) - 1
 
-    # Set up semantic column coloring for slabtop table
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_3,   # SLAB name - YELLOW (identifier)
-            2: screen.COLOR_1,   # Total size - RED (critical memory usage)
-            3: screen.COLOR_4,   # Object size - BLUE (metadata)
-        }
+    # Create table with TableFormatter
+    from table_formatter import TableFormatter
 
-    result_str = result_str + screen.get_pipe_aware_line("=" * 51)
-    result_str = result_str +\
-            screen.get_pipe_aware_line("%-29s %12s %8s" %
-            ("NAME", "TOTAL", "OBJSIZE"))
-    result_str = result_str + screen.get_pipe_aware_line("=" * 51)
+    table = TableFormatter(no_pipe=no_pipe, show_header=True, padding=1)
+    table.add_column("NAME", width=29, align='left', color='yellow')
+    table.add_column("TOTAL", width=12, align='right', color='red')
+    table.add_column("OBJSIZE", width=8, align='right', color='blue')
 
     print_count = min(len(sorted_slabtop) - 1, min_number)
 
@@ -618,20 +617,26 @@ def show_slabtop(op, no_pipe):
     for i in range(0, print_count):
         slab_name = sorted_slabtop[i][0]
         obj_size = slab_objsize[slab_name]
+        table.add_row(slab_name,
+                     get_size_str(sorted_slabtop[i][1] * page_size),
+                     str(obj_size))
 
-        result_str = result_str + \
-                screen.get_pipe_aware_line("%-29s %12s %8d" %
-                (slab_name,
-                 get_size_str(sorted_slabtop[i][1] * page_size),
-                 obj_size))
-
-
-    if print_count < len(sorted_slabtop) - 1:
-        result_str = result_str + screen.get_pipe_aware_line("\t<...>")
-    result_str = result_str + screen.get_pipe_aware_line("=" * 51)
-    result_str = result_str +\
-            screen.get_pipe_aware_line("Total memory usage from SLAB = %s" %
-          (get_size_str(total_slab * page_size)))
+    # Format and output table
+    formatted_table = table.format()
+    if no_pipe:
+        print("=" * 51)
+        print(formatted_table)
+        if print_count < len(sorted_slabtop) - 1:
+            print("\t<...>")
+        print("=" * 51)
+        print("Total memory usage from SLAB = %s" % get_size_str(total_slab * page_size))
+    else:
+        result_str = "=" * 51 + "\n"
+        result_str += formatted_table + "\n"
+        if print_count < len(sorted_slabtop) - 1:
+            result_str += "\t<...>\n"
+        result_str += "=" * 51 + "\n"
+        result_str += "Total memory usage from SLAB = %s\n" % get_size_str(total_slab * page_size)
 
     return result_str
 

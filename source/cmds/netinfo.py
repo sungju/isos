@@ -444,6 +444,8 @@ def format_number(num):
 
 def show_summary(sos_home, no_pipe):
     """Display default network summary"""
+    from table_formatter import TableFormatter
+
     result_str = ""
 
     # Parse all data sources
@@ -452,36 +454,17 @@ def show_summary(sos_home, no_pipe):
     ss_info = parse_ss_summary(sos_home)
     default_route = parse_default_route(sos_home)
 
-    # Set up column coloring
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_3,   # Device name - YELLOW
-            2: screen.COLOR_2,   # State - GREEN (or RED for DOWN)
-            3: screen.COLOR_6,   # IP address - CYAN
-            4: screen.COLOR_4,   # Speed - BLUE
-            5: screen.COLOR_14,  # RX packets - default
-            6: screen.COLOR_14,  # TX packets - default
-        }
+    # Create table with TableFormatter (new pattern)
+    table = TableFormatter(no_pipe=no_pipe, show_header=True, padding=1)
+    table.add_column("DEVICE", width=12, align='left', color='yellow')
+    table.add_column("STATE", width=6, align='left', color='green')
+    table.add_column("IP_ADDRESS", width=18, align='left', color='cyan')
+    table.add_column("SPEED", width=12, align='left', color='blue')
+    table.add_column("RX_PACKETS", width=12, align='left', color='lightcyan')
+    table.add_column("TX_PACKETS", width=12, align='left', color='lightcyan')
+    table.add_column("ERRORS", width=10, align='left', color='lightcyan')
 
-    # Display interface table header
-    header = "%-12s %-6s %-18s %-12s %-12s %-12s %s" % (
-        "DEVICE", "STATE", "IP_ADDRESS", "SPEED", "RX_PACKETS", "TX_PACKETS", "ERRORS"
-    )
-
-    line = screen.get_colored_line(header)
-    if no_pipe:
-        print(line)
-    else:
-        result_str += line + "\n"
-
-    # Separator
-    separator = "-" * 100
-    if no_pipe:
-        print(separator)
-    else:
-        result_str += separator + "\n"
-
-    # Display each interface
+    # Add data rows with conditional coloring
     for iface in sorted(ip_info.keys()):
         info = ip_info[iface]
         stats = stats_info.get(iface, {})
@@ -509,28 +492,27 @@ def show_summary(sos_home, no_pipe):
 
         errors = "%d/%d" % (rx_errors + rx_dropped, tx_errors + tx_dropped)
 
-        # Build line
-        line_text = "%-12s %-6s %-18s %-12s %-12s %-12s %s" % (
-            iface, info['state'], ip_addr, speed, rx_packets, tx_packets, errors
-        )
+        # Build cell_colors dict for conditional coloring
+        cell_colors = {}
 
-        # Apply coloring
-        line = screen.get_colored_line(line_text)
+        # Color STATE column RED if DOWN
+        if info['state'] == 'DOWN':
+            cell_colors[1] = 'red'  # Column index 1 is STATE
 
-        # Color state column based on UP/DOWN
-        if no_pipe:
-            if info['state'] == 'DOWN':
-                # Replace the state part with red
-                line = line.replace(info['state'], ansicolor.get_color(screen.COLOR_1) + info['state'] + ansicolor.get_color(screen.COLOR_RESET))
+        # Color ERRORS column RED if non-zero
+        if rx_errors + tx_errors + rx_dropped + tx_dropped > 0:
+            cell_colors[6] = 'red'  # Column index 6 is ERRORS
 
-            # Color errors if non-zero
-            if rx_errors + tx_errors + rx_dropped + tx_dropped > 0:
-                line = line.replace(errors, ansicolor.get_color(screen.COLOR_1) + errors + ansicolor.get_color(screen.COLOR_RESET))
+        # Add row to table with conditional cell colors
+        table.add_row(iface, info['state'], ip_addr, speed, rx_packets, tx_packets, errors,
+                      cell_colors=cell_colors if cell_colors else None)
 
-        if no_pipe:
-            print(line)
-        else:
-            result_str += line + "\n"
+    # Format and display table
+    formatted_table = table.format()
+    if no_pipe:
+        print(formatted_table)
+    else:
+        result_str += formatted_table + "\n"
 
     # Empty line
     if no_pipe:
