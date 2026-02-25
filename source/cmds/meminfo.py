@@ -99,6 +99,39 @@ def get_optimal_max_widths(show_graph=False):
     }
 
 
+def truncate_middle(text, max_width):
+    """
+    Truncate text with ellipsis in the middle to preserve the end.
+
+    This is useful for process names with full paths where the end
+    contains the actual executable name.
+
+    Args:
+        text: String to truncate
+        max_width: Maximum width including ellipsis
+
+    Returns:
+        Truncated string with '...' in the middle if needed
+
+    Examples:
+        truncate_middle("/usr/bin/very_long_process_name", 20)
+        -> "/usr/bin/...s_name"
+    """
+    if len(text) <= max_width:
+        return text
+
+    if max_width < 4:
+        return text[:max_width]
+
+    # Reserve 3 characters for '...'
+    available = max_width - 3
+    # Split available space: slightly favor the end to preserve executable name
+    left_chars = available // 2
+    right_chars = available - left_chars
+
+    return text[:left_chars] + "..." + text[-right_chars:]
+
+
 def show_mem_balloon(op, no_pipe):
     result_str = ''
     page_size = get_main().page_size
@@ -392,8 +425,7 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
 
         pname = sorted_oom_dict[i][0]
         # Truncate process name to fit column width
-        if len(pname) > pname_width:
-            pname = pname[:pname_width-3] + "..."
+        pname = truncate_middle(pname, pname_width)
         mem_usage = sorted_oom_dict[i][1]
         if show_graph:
             percentage = (mem_usage * 100.0 / total_usage) if total_usage > 0 else 0
@@ -1210,8 +1242,7 @@ def show_swap_usage(op, no_pipe):
     for i in range(0, print_count):
         pname = sorted_swap_usage[i][0]
         # Truncate process name to fit column width
-        if len(pname) > pname_width:
-            pname = pname[:pname_width-3] + "..."
+        pname = truncate_middle(pname, pname_width)
         swap_size = sorted_swap_usage[i][1] * 1024
         if show_graph:
             percentage = (sorted_swap_usage[i][1] * 100.0 / total_swap) if total_swap > 0 else 0
@@ -1557,8 +1588,7 @@ def show_ps_memusage(op, no_pipe):
 
         pname = sorted_usage[i][0]
         # Truncate process name to fit column width
-        if len(pname) > pname_width:
-            pname = pname[:pname_width-3] + "..."
+        pname = truncate_middle(pname, pname_width)
         rss_kb = sorted_usage[i][1]
         if show_graph:
             percentage = (rss_kb * 100.0 / total_rss) if total_rss > 0 else 0
