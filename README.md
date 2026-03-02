@@ -54,12 +54,11 @@ host0.example.com> help
 Help
 ------------------------------
 audit      cat        cd         cron
-eval       help       log        man
-mods       perf       powner     psinfo
-sarinfo    trace      xsos
+eval       exit       help       log
+man        mods       perf       powner
+psinfo     sarinfo    trace      xsos
 
-/exit      /list      /reload    /set
-/sethome
+/list      /reload    /set       /sethome
 ```
 
 - Some commands are very simple and gives you a single line help.

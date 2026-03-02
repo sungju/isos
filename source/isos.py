@@ -500,7 +500,7 @@ def exit_app(input_str, env_vars, is_cmd_stopped=None,
     Exit the isos application.
 
     Usage:
-        /exit
+        exit
 
     Args:
         input_str: Command arguments (unused)
@@ -513,7 +513,7 @@ def exit_app(input_str, env_vars, is_cmd_stopped=None,
         Help text if show_help=True, otherwise exits
     """
     if show_help:
-        return "Usage) /exit\n\nExit the isos application"
+        return "Usage) exit\n\nExit the isos application"
 
     sys.exit(0)
 
@@ -735,7 +735,7 @@ command_set = {
     "xsos" : xsos_run,
     "/reload" : reload_commands,
     "/list" : show_commands,
-    "/exit" : exit_app,
+    "exit" : exit_app,
 }
 
 
