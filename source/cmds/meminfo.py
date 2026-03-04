@@ -365,6 +365,13 @@ def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
             print("\t<...>")
         print("=" * separator_width)
         print("Total memory usage from SLABs = %s" % get_size_str(total_usage))
+        # Show total usage bar graph
+        if show_graph and system_total_mem_kb > 0:
+            total_percentage = (total_usage * 100.0 / (system_total_mem_kb * 1024))
+            print("\tNotes) %.2f percent from total system memory(%s)" %
+                  (total_percentage, get_size_str(system_total_mem_kb * 1024)))
+            bar = get_memory_bar(total_percentage, width=40, no_pipe=no_pipe)
+            print("\t       %s" % bar)
     else:
         # Split table into header and data rows for piped output
         table_lines = formatted_table.split('\n')
@@ -379,6 +386,13 @@ def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
             result_str += "\t<...>\n"
         result_str += "=" * separator_width + "\n"
         result_str += "Total memory usage from SLABs = %s\n" % get_size_str(total_usage)
+        # Show total usage bar graph
+        if show_graph and system_total_mem_kb > 0:
+            total_percentage = (total_usage * 100.0 / (system_total_mem_kb * 1024))
+            result_str += "\tNotes) %.2f percent from total system memory(%s)\n" % \
+                          (total_percentage, get_size_str(system_total_mem_kb * 1024))
+            bar = get_memory_bar(total_percentage, width=40, no_pipe=no_pipe)
+            result_str += "\t       %s\n" % bar
 
     return result_str
 
@@ -489,6 +503,13 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
             print("\t<...>")
         print("=" * separator_width)
         print("Total memory usage from processes = %s" % get_size_str(total_usage))
+        # Show total usage bar graph
+        if show_graph and system_total_mem_kb > 0:
+            total_percentage = (total_usage * 100.0 / (system_total_mem_kb * 1024))
+            print("\tNotes) %.2f percent from total system memory(%s)" %
+                  (total_percentage, get_size_str(system_total_mem_kb * 1024)))
+            bar = get_memory_bar(total_percentage, width=40, no_pipe=no_pipe)
+            print("\t       %s" % bar)
     else:
         # Split table into header and data rows for piped output
         table_lines = formatted_table.split('\n')
@@ -503,6 +524,13 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
             result_str += "\t<...>\n"
         result_str += "=" * separator_width + "\n"
         result_str += "Total memory usage from processes = %s\n" % get_size_str(total_usage)
+        # Show total usage bar graph
+        if show_graph and system_total_mem_kb > 0:
+            total_percentage = (total_usage * 100.0 / (system_total_mem_kb * 1024))
+            result_str += "\tNotes) %.2f percent from total system memory(%s)\n" % \
+                          (total_percentage, get_size_str(system_total_mem_kb * 1024))
+            bar = get_memory_bar(total_percentage, width=40, no_pipe=no_pipe)
+            result_str += "\t       %s\n" % bar
 
     return result_str
 
@@ -1483,6 +1511,16 @@ def show_slabtop(op, no_pipe):
             print("\t<...>")
         print("=" * separator_width)
         print("Total memory usage from SLAB = %s" % get_size_str(total_slab * page_size))
+
+        # Show total usage percentage with bar graph
+        if system_total_mem_kb > 0:
+            slab_kb = total_slab * page_size // 1024
+            total_percentage = (slab_kb * 100.0 / system_total_mem_kb)
+            print("\tNotes) %.2f percent from total system memory(%s)" %
+                  (total_percentage, get_size_str(system_total_mem_kb * 1024)))
+            if show_graph:
+                bar = get_memory_bar(total_percentage, width=40, no_pipe=no_pipe)
+                print("\t       %s" % bar)
     else:
         # Split table into header and data rows for piped output
         table_lines = formatted_table.split('\n')
@@ -1673,8 +1711,13 @@ def show_ps_memusage(op, no_pipe):
                 for line in f:
                     if "MemTotal:" in line:
                         total_mem = int(line.split()[1])
+                        total_percentage = (total_rss * 100 / total_mem) if total_mem > 0 else 0
                         print("\tNotes) %.2f percent from total system memory(%s)" % \
-                                (total_rss * 100 / total_mem, get_size_str(total_mem * 1024)))
+                                (total_percentage, get_size_str(total_mem * 1024)))
+                        if show_graph:
+                            from ansicolor import get_color, CYAN, RESET
+                            bar = get_memory_bar(total_percentage, width=40, no_pipe=no_pipe)
+                            print("\t       %s" % bar)
                         break
         except:
             pass
@@ -1700,8 +1743,12 @@ def show_ps_memusage(op, no_pipe):
                 for line in f:
                     if "MemTotal:" in line:
                         total_mem = int(line.split()[1])
+                        total_percentage = (total_rss * 100 / total_mem) if total_mem > 0 else 0
                         result_str += "\tNotes) %.2f percent from total system memory(%s)\n" % \
-                                (total_rss * 100 / total_mem, get_size_str(total_mem * 1024))
+                                (total_percentage, get_size_str(total_mem * 1024))
+                        if show_graph:
+                            bar = get_memory_bar(total_percentage, width=40, no_pipe=no_pipe)
+                            result_str += "\t       %s\n" % bar
                         break
         except:
             pass
