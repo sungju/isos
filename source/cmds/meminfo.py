@@ -31,6 +31,24 @@ def get_command_info():
     return { cmd_name : run_meminfo }
 
 
+def get_system_total_memory_kb():
+    """
+    Get system's total physical memory in KB from /proc/meminfo.
+
+    Returns:
+        int: Total memory in KB, or 0 if unable to determine
+    """
+    try:
+        sos_home = get_main().sos_home
+        with open(sos_home + "/proc/meminfo") as f:
+            for line in f:
+                if "MemTotal:" in line:
+                    return int(line.split()[1])
+    except:
+        pass
+    return 0
+
+
 def get_terminal_width():
     """
     Get terminal width from prompt_toolkit/shutil.
@@ -279,6 +297,9 @@ def show_oom_meminfo(op, no_pipe, meminfo_dict):
 def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
     from table_formatter import TableFormatter
 
+    # Get system's total memory for percentage calculation
+    system_total_mem_kb = get_system_total_memory_kb()
+
     result_str = ""
     sorted_slab_dict = sorted(slab_dict.items(),
                             key=operator.itemgetter(1), reverse=True)
@@ -310,7 +331,8 @@ def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
             pname = pname[:slab_width-3] + "..."
         mem_usage = sorted_slab_dict[i][1]
         if show_graph:
-            percentage = (mem_usage * 100.0 / total_usage) if total_usage > 0 else 0
+            # Calculate percentage based on system's total memory
+            percentage = (mem_usage * 100.0 / (system_total_mem_kb * 1024)) if system_total_mem_kb > 0 else 0
             bar = get_memory_bar(percentage, width=20, no_pipe=no_pipe)
             table.add_row(pname, bar, get_size_str(mem_usage))
         else:
@@ -357,6 +379,9 @@ def show_oom_slab_usage(op, no_pipe, slab_dict, total_usage):
 
 def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
     from table_formatter import TableFormatter
+
+    # Get system's total memory for percentage calculation
+    system_total_mem_kb = get_system_total_memory_kb()
 
     result_str = ""
     sorted_oom_dict = sorted(oom_dict.items(),
@@ -428,7 +453,8 @@ def show_oom_memory_usage(op, no_pipe, oom_dict, total_usage):
         pname = truncate_middle(pname, pname_width)
         mem_usage = sorted_oom_dict[i][1]
         if show_graph:
-            percentage = (mem_usage * 100.0 / total_usage) if total_usage > 0 else 0
+            # Calculate percentage based on system's total memory
+            percentage = (mem_usage * 100.0 / (system_total_mem_kb * 1024)) if system_total_mem_kb > 0 else 0
             bar = get_memory_bar(percentage, width=20, no_pipe=no_pipe)
             table.add_row(pname, bar, get_size_str(mem_usage))
         else:
@@ -1181,6 +1207,9 @@ def show_oom_events(op, args, no_pipe):
 
 
 def show_swap_usage(op, no_pipe):
+    # Get system's total memory for percentage calculation
+    system_total_mem_kb = get_system_total_memory_kb()
+
     result_str = ""
     swap_usage_dict = {}
     total_swap = 0
@@ -1245,7 +1274,8 @@ def show_swap_usage(op, no_pipe):
         pname = truncate_middle(pname, pname_width)
         swap_size = sorted_swap_usage[i][1] * 1024
         if show_graph:
-            percentage = (sorted_swap_usage[i][1] * 100.0 / total_swap) if total_swap > 0 else 0
+            # Calculate percentage based on system's total memory
+            percentage = (sorted_swap_usage[i][1] * 100.0 / system_total_mem_kb) if system_total_mem_kb > 0 else 0
             bar = get_memory_bar(percentage, width=20, no_pipe=no_pipe)
             table.add_row(pname, bar, get_size_str(swap_size))
         else:
@@ -1293,6 +1323,9 @@ def show_swap_usage(op, no_pipe):
 
 
 def show_slabtop(op, no_pipe):
+    # Get system's total memory for percentage calculation
+    system_total_mem_kb = get_system_total_memory_kb()
+
     result_str = ''
     slab_list = {}
     slab_objsize = {}
@@ -1407,7 +1440,10 @@ def show_slabtop(op, no_pipe):
         obj_size = slab_objsize[sorted_slabtop[i][0]]  # Use original name for lookup
         slab_pages = sorted_slabtop[i][1]
         if show_graph:
-            percentage = (slab_pages * 100.0 / total_slab) if total_slab > 0 else 0
+            # Calculate percentage based on system's total memory
+            # Convert slab_pages to KB by multiplying by page_size/1024
+            slab_kb = slab_pages * page_size // 1024
+            percentage = (slab_kb * 100.0 / system_total_mem_kb) if system_total_mem_kb > 0 else 0
             bar = get_memory_bar(percentage, width=20, no_pipe=no_pipe)
             table.add_row(slab_name,
                          bar,
@@ -1462,6 +1498,9 @@ def show_slabtop(op, no_pipe):
 def show_ps_memusage(op, no_pipe):
     from table_formatter import TableFormatter
     import sys
+
+    # Get system's total memory for percentage calculation
+    system_total_mem_kb = get_system_total_memory_kb()
 
     result_str = ''
     mem_usage_dict = {}
@@ -1591,7 +1630,8 @@ def show_ps_memusage(op, no_pipe):
         pname = truncate_middle(pname, pname_width)
         rss_kb = sorted_usage[i][1]
         if show_graph:
-            percentage = (rss_kb * 100.0 / total_rss) if total_rss > 0 else 0
+            # Calculate percentage based on system's total memory
+            percentage = (rss_kb * 100.0 / system_total_mem_kb) if system_total_mem_kb > 0 else 0
             bar = get_memory_bar(percentage, width=20, no_pipe=no_pipe)
             table.add_row(pname, bar, get_size_str(rss_kb * 1024))
         else:
