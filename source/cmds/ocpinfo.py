@@ -1668,7 +1668,7 @@ Examples (Sosreport):
     > ocpinfo -a
 
     # Show pods in specific namespace with details
-    > ocpinfo -p -d -n jbsb-ci
+    > ocpinfo -p -d -n my-namespace
 
     # Show only NotReady pods
     > ocpinfo -p --state NotReady
@@ -1677,13 +1677,13 @@ Examples (Sosreport):
     > ocpinfo -p -d -f api
 
     # Filter containers for specific image
-    > ocpinfo -c -d -f sonarqube
+    > ocpinfo -c -d -f nginx
 
     # Combine filters: namespace and pattern
-    > ocpinfo -p -d -n jbsb-ci -f quarkus
+    > ocpinfo -p -d -n my-namespace -f my-app
 
     # Show only pods matching pattern with limit
-    > ocpinfo -p -d -f portal -l 5
+    > ocpinfo -p -d -f my-app -l 5
     '''
     elif must_gather_available:
         cmd_examples = '''
@@ -1728,7 +1728,7 @@ Examples (Inspect):
     > ocpinfo --events --type Warning
 
     # Show events in specific namespace
-    > ocpinfo --events -n elastic-monitoring
+    > ocpinfo --events -n my-namespace
 
     # Show events with limit
     > ocpinfo --events -l 20
@@ -1740,28 +1740,28 @@ Examples (Inspect):
     > ocpinfo --inspect-pods -d
 
     # Filter pods by namespace
-    > ocpinfo --inspect-pods -n elastic-monitoring
+    > ocpinfo --inspect-pods -n my-namespace
 
     # Filter pods by pattern
-    > ocpinfo --inspect-pods -f monitoring
+    > ocpinfo --inspect-pods -f my-app
 
     # List available pod logs
     > ocpinfo --logs
 
     # List logs for specific pod
-    > ocpinfo --logs -f stack-monitoring
+    > ocpinfo --logs -f my-pod
 
     # View log content for a pod
-    > ocpinfo --logs -f stack-monitoring-metric-0 --show
+    > ocpinfo --logs -f my-pod-12345 --show
 
     # View log content for specific container
-    > ocpinfo --logs -f stack-monitoring-es-default-0 --show --container elasticsearch
+    > ocpinfo --logs -f my-pod-12345 --show --container app
 
     # View last 200 lines of log
-    > ocpinfo --logs -f stack-monitoring-kb --show --tail 200
+    > ocpinfo --logs -f my-pod-67890 --show --tail 200
 
     # View previous container log (from restart)
-    > ocpinfo --logs -f stack-monitoring-es-default-1 --show --previous
+    > ocpinfo --logs -f my-pod-12345 --show --previous
 
     # Show deployments and statefulsets
     > ocpinfo --deployments
