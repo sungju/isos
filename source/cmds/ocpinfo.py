@@ -1824,7 +1824,7 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
     """Main entry point for ocpinfo command"""
 
     # Detect environment early for context-aware help
-    base_path = os.getcwd()
+    base_path = env_vars["sos_home"]
     sources = detect_data_sources(base_path)
     sosreport_available = sources.get('sosreport', False)
     must_gather_available = sources.get('must-gather', False)
@@ -2197,4 +2197,4 @@ if __name__ == "__main__":
     # For testing
     def dummy_is_stopped():
         return False
-    run_ocpinfo(" ".join(sys.argv[1:]), {}, dummy_is_stopped, False, True)
+    run_ocpinfo(" ".join(sys.argv[1:]), {"sos_home": os.getcwd()}, dummy_is_stopped, False, True)
