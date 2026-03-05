@@ -378,13 +378,62 @@ def show_resource_stats(sosreport_path):
     print(f"\n{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
 
 
+def print_help_msg(op, no_pipe):
+    """Print help message following isos pattern"""
+    cmd_examples = '''
+Examples:
+    # Show cluster overview (default)
+    > ocpinfo
+
+    # Show pod information
+    > ocpinfo -p
+
+    # Show detailed pod list (first 10)
+    > ocpinfo -p -d -l 10
+
+    # Filter pods by namespace
+    > ocpinfo -p -n openshift-kube-apiserver
+
+    # Show container information
+    > ocpinfo -c
+
+    # Show container images
+    > ocpinfo -i
+
+    # Show resource statistics
+    > ocpinfo -s
+
+    # Show all information
+    > ocpinfo -a
+
+    # Show pods in specific namespace with details
+    > ocpinfo -p -d -n jbsb-ci
+
+    # Show only NotReady pods
+    > ocpinfo -p --state NotReady
+    '''
+
+    if no_pipe == False:
+        output = StringIO()
+        op.print_help(file=output)
+        contents = output.getvalue()
+        output.close()
+        return contents + "\n" + cmd_examples
+    else:
+        op.print_help()
+        print(cmd_examples)
+        return ""
+
+
 def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
                 show_help=False, no_pipe=True):
     """Main entry point for ocpinfo command"""
 
     usage = "Usage: %s [options]" % (cmd_name)
 
-    op = OptionParser(usage=usage)
+    op = OptionParser(usage=usage, add_help_option=False)
+    op.add_option('-h', '--help', dest='help', action='store_true',
+                  help='show this help message and exit')
     op.add_option("-p", "--pods", dest="pods", default=False,
                   action="store_true",
                   help="Show pod information")
@@ -413,7 +462,13 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
                   action="store_true",
                   help="Show all information (equivalent to -p -c -i -s)")
 
-    (o, args) = op.parse_args(input_str.split())
+    try:
+        (o, args) = op.parse_args(input_str.split())
+    except:
+        return ""
+
+    if o.help or show_help == True:
+        return print_help_msg(op, no_pipe)
 
     # Set colors
     set_color_table(no_pipe)
