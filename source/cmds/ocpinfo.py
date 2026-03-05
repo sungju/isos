@@ -9,12 +9,14 @@ Inspired by sos4ocp (https://github.com/vlours/sos4ocp.git)
 import sys
 import os
 import re
+import json
 from optparse import OptionParser
 from io import StringIO
 
 import ansicolor
 import screen
 import table_formatter
+from cmd_helpers import format_bytes, ColorManager
 
 
 def description():
@@ -30,29 +32,37 @@ def get_command_info():
     return { "%s" % cmd_name : run_ocpinfo }
 
 
-# Color constants
-COLOR_RED = ""
-COLOR_YELLOW = ""
-COLOR_GREEN = ""
-COLOR_BLUE = ""
-COLOR_CYAN = ""
-COLOR_MAGENTA = ""
-COLOR_RESET = ""
+# Status value constants
+class StatusValues:
+    """OpenShift status value constants"""
+    TRUE = "True"
+    FALSE = "False"
+    UNKNOWN = "Unknown"
 
 
-def set_color_table(no_pipe):
-    global COLOR_RED, COLOR_YELLOW, COLOR_GREEN, COLOR_BLUE, COLOR_CYAN, COLOR_MAGENTA, COLOR_RESET
+class PodStates:
+    """Pod state constants"""
+    READY = "Ready"
+    NOT_READY = "NotReady"
+    RUNNING = "Running"
+    EXITED = "Exited"
 
-    if no_pipe:
-        COLOR_RED = ansicolor.get_color(ansicolor.LIGHTRED)
-        COLOR_YELLOW = ansicolor.get_color(ansicolor.YELLOW)
-        COLOR_GREEN = ansicolor.get_color(ansicolor.GREEN)
-        COLOR_BLUE = ansicolor.get_color(ansicolor.BLUE)
-        COLOR_CYAN = ansicolor.get_color(ansicolor.CYAN)
-        COLOR_MAGENTA = ansicolor.get_color(ansicolor.MAGENTA)
-        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
-    else:
-        COLOR_RED = COLOR_YELLOW = COLOR_GREEN = COLOR_BLUE = COLOR_CYAN = COLOR_MAGENTA = COLOR_RESET = ""
+
+class MustGatherPaths:
+    """Centralized must-gather path definitions"""
+    def __init__(self, root):
+        self.root = root
+        self.cluster_scoped = os.path.join(root, "cluster-scoped-resources/config.openshift.io")
+        self.etcd_info = os.path.join(root, "etcd_info")
+
+    def cluster_version_file(self):
+        return os.path.join(self.cluster_scoped, "clusterversions.yaml")
+
+    def cluster_operators_dir(self):
+        return os.path.join(self.cluster_scoped, "clusteroperators")
+
+    def etcd_file(self, filename):
+        return os.path.join(self.etcd_info, filename)
 
 
 def read_file(filepath):
@@ -60,7 +70,7 @@ def read_file(filepath):
     try:
         with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
             return f.read()
-    except:
+    except (IOError, OSError):
         return ""
 
 
@@ -70,16 +80,351 @@ def read_lines(filepath):
     return content.splitlines() if content else []
 
 
-def get_size_str(size_bytes):
-    """Convert bytes to human-readable size"""
-    if size_bytes > (1024 * 1024 * 1024):  # GiB
-        return "%.1f GiB" % (size_bytes / (1024*1024*1024))
-    elif size_bytes > (1024 * 1024):  # MiB
-        return "%.1f MiB" % (size_bytes / (1024*1024))
-    elif size_bytes > 1024:  # KiB
-        return "%.1f KiB" % (size_bytes / 1024)
-    else:
-        return "%d B" % size_bytes
+def read_must_gather_file(filepath, description, colors):
+    """Read must-gather file with consistent error handling"""
+    content = read_file(filepath)
+    if not content:
+        print(f"{colors.red}Error: {description} not found or empty{colors.reset}")
+        return None
+    return content
+
+
+def extract_yaml_value(content, key, strip_quotes=True):
+    """Extract value from simple YAML key:value pairs
+
+    Args:
+        content: YAML content string
+        key: Key to search for
+        strip_quotes: Whether to strip quotes from value
+
+    Returns:
+        First value found or None
+    """
+    for line in content.splitlines():
+        line = line.strip()
+        if f'{key}:' in line:
+            parts = line.split(':', 1)
+            if len(parts) > 1:
+                value = parts[1].strip()
+                if strip_quotes:
+                    value = value.strip('"').strip("'")
+                if value and not value.startswith('{') and value != 'v1':
+                    return value
+    return None
+
+
+def find_condition_status(lines, condition_type):
+    """Find status value for a given condition type in YAML lines
+
+    Args:
+        lines: List of YAML lines
+        condition_type: Condition type to search for (e.g., 'Available')
+
+    Returns:
+        Status string or None
+    """
+    for i, line in enumerate(lines):
+        if f'type: {condition_type}' in line or f'type: "{condition_type}"' in line:
+            # Look for status in next few lines
+            for j in range(i + 1, min(i + 10, len(lines))):
+                if 'status:' in lines[j]:
+                    return lines[j].split(':', 1)[1].strip().strip('"').strip("'")
+    return None
+
+
+def print_section_header(title, colors, width=80):
+    """Print consistent section header"""
+    print(f"{colors.blue}{'=' * width}{colors.reset}")
+    print(f"{colors.blue}{title}{colors.reset}")
+    print(f"{colors.blue}{'=' * width}{colors.reset}\n")
+
+
+def print_section_footer(colors, width=80):
+    """Print consistent section footer"""
+    print(f"\n{colors.blue}{'=' * width}{colors.reset}\n")
+
+
+def find_must_gather_root(base_path=None):
+    """Find must-gather root directory"""
+    if base_path is None:
+        base_path = os.getcwd()
+
+    try:
+        for item in os.listdir(base_path):
+            if item.startswith('quay-io-openshift-release-dev') or \
+               item.startswith('must-gather'):
+                full_path = os.path.join(base_path, item)
+                if os.path.isdir(full_path):
+                    return full_path
+    except (IOError, OSError):
+        pass
+    return None
+
+
+def detect_data_sources(base_path=None):
+    """Detect available data sources (sosreport and/or must-gather)
+
+    Returns:
+        dict with keys: 'sosreport', 'must-gather', 'must-gather-root'
+    """
+    if base_path is None:
+        base_path = os.getcwd()
+
+    must_gather_path = find_must_gather_root(base_path)
+    sources = {
+        'sosreport': os.path.exists(os.path.join(base_path, 'sos_commands')),
+        'must-gather': must_gather_path is not None,
+        'must-gather-root': must_gather_path
+    }
+    return sources
+
+
+def show_cluster_version(must_gather_root, colors):
+    """Show OpenShift cluster version information"""
+    print_section_header("OpenShift Cluster Version", colors)
+
+    paths = MustGatherPaths(must_gather_root)
+    version_file = paths.cluster_version_file()
+
+    content = read_must_gather_file(version_file, "Cluster version file", colors)
+    if not content:
+        return
+
+    # Parse version information using helper functions
+    current_version = extract_yaml_value(content, 'version')
+    channel = extract_yaml_value(content, 'channel')
+    cluster_id = extract_yaml_value(content, 'clusterID')
+
+    if current_version:
+        print(f"{colors.cyan}Current Version:{colors.reset} {colors.green}{current_version}{colors.reset}")
+
+    if channel:
+        print(f"{colors.cyan}Update Channel:{colors.reset} {channel}")
+
+    if cluster_id:
+        print(f"{colors.cyan}Cluster ID:{colors.reset} {cluster_id}")
+
+    # Check for conditions (split content once for efficiency)
+    lines = content.splitlines()
+
+    # Define conditions with their color rules
+    conditions = {
+        'Available': lambda status: colors.green if status == StatusValues.TRUE else colors.red,
+        'Progressing': lambda status: colors.yellow if status == StatusValues.TRUE else colors.green,
+        'Failing': lambda status: colors.red if status == StatusValues.TRUE else colors.green,
+    }
+
+    status_printed = False
+    for condition_name, color_func in conditions.items():
+        status = find_condition_status(lines, condition_name)
+        if status:
+            if not status_printed:
+                print(f"\n{colors.cyan}Status:{colors.reset}")
+                status_printed = True
+            color = color_func(status)
+            print(f"  {condition_name}: {color}{status}{colors.reset}")
+
+    print_section_footer(colors)
+
+
+def parse_operator_file(filepath, name):
+    """Parse a single operator YAML file
+
+    Args:
+        filepath: Path to operator YAML file
+        name: Operator name (from filename)
+
+    Returns:
+        dict with operator info or None if parse fails
+    """
+    content = read_file(filepath)
+    if not content:
+        return None
+
+    lines = content.splitlines()
+
+    # Extract status conditions using helper
+    available = find_condition_status(lines, 'Available')
+    progressing = find_condition_status(lines, 'Progressing')
+    degraded = find_condition_status(lines, 'Degraded')
+
+    # Extract version
+    version = extract_yaml_value(content, 'version')
+
+    return {
+        'name': name,
+        'available': available,
+        'progressing': progressing,
+        'degraded': degraded,
+        'version': version
+    }
+
+
+def show_cluster_operators(must_gather_root, options, colors):
+    """Show cluster operators status"""
+    print_section_header("Cluster Operators", colors)
+
+    paths = MustGatherPaths(must_gather_root)
+    operators_dir = paths.cluster_operators_dir()
+
+    # Get all operator files - filter by name first if filter specified (efficiency improvement)
+    operator_files = []
+    try:
+        for filename in os.listdir(operators_dir):
+            if filename.endswith('.yaml'):
+                name = filename.replace('.yaml', '')
+                # Early name filtering to avoid reading unnecessary files
+                if hasattr(options, 'filter') and options.filter:
+                    if options.filter.lower() not in name.lower():
+                        continue
+                operator_files.append((filename, name))
+    except (IOError, OSError):
+        print(f"{colors.red}Error: Could not list operators{colors.reset}")
+        return
+
+    operator_files.sort()
+
+    # Parse each operator file
+    operators = []
+    for filename, name in operator_files:
+        filepath = os.path.join(operators_dir, filename)
+        op_data = parse_operator_file(filepath, name)
+        if op_data:
+            operators.append(op_data)
+
+    # Filter by state if specified
+    if hasattr(options, 'state') and options.state:
+        state_lower = options.state.lower()
+        filtered = []
+        for op in operators:
+            if state_lower == 'degraded' and op['degraded'] == StatusValues.TRUE:
+                filtered.append(op)
+            elif state_lower == 'progressing' and op['progressing'] == StatusValues.TRUE:
+                filtered.append(op)
+            elif state_lower == 'available' and op['available'] == StatusValues.TRUE:
+                filtered.append(op)
+        operators = filtered
+
+    print(f"{colors.cyan}Total Operators: {len(operators)}{colors.reset}\n")
+
+    # Count by status
+    available_count = sum(1 for op in operators if op['available'] == StatusValues.TRUE)
+    degraded_count = sum(1 for op in operators if op['degraded'] == StatusValues.TRUE)
+    progressing_count = sum(1 for op in operators if op['progressing'] == StatusValues.TRUE)
+
+    print(f"{colors.cyan}Status Summary:{colors.reset}")
+    print(f"  {colors.green}Available: {available_count}{colors.reset}")
+    print(f"  {colors.red}Degraded: {degraded_count}{colors.reset}")
+    print(f"  {colors.yellow}Progressing: {progressing_count}{colors.reset}")
+
+    # Show detailed list if requested
+    if hasattr(options, 'detail') and options.detail:
+        print(f"\n{colors.cyan}{'Operator':<40} {'Available':<12} {'Degraded':<12} {'Progressing':<12}{colors.reset}")
+        print("-" * 80)
+
+        count = 0
+        for op in operators:
+            if hasattr(options, 'limit') and options.limit and count >= options.limit:
+                remaining = len(operators) - count
+                print(f"\n{colors.yellow}... and {remaining} more operators{colors.reset}")
+                break
+
+            name = op['name'][:39] if len(op['name']) > 39 else op['name']
+
+            # Color code based on status
+            avail_color = colors.green if op['available'] == StatusValues.TRUE else colors.red
+            deg_color = colors.red if op['degraded'] == StatusValues.TRUE else colors.green
+            prog_color = colors.yellow if op['progressing'] == StatusValues.TRUE else colors.green
+
+            avail_str = f"{avail_color}{op['available'] or StatusValues.UNKNOWN:<12}{colors.reset}"
+            deg_str = f"{deg_color}{op['degraded'] or StatusValues.UNKNOWN:<12}{colors.reset}"
+            prog_str = f"{prog_color}{op['progressing'] or StatusValues.UNKNOWN:<12}{colors.reset}"
+
+            print(f"{name:<40} {avail_str} {deg_str} {prog_str}")
+            count += 1
+
+    print_section_footer(colors)
+
+
+def show_etcd_health(must_gather_root, colors):
+    """Show ETCD cluster health"""
+    print_section_header("ETCD Cluster Health", colors)
+
+    paths = MustGatherPaths(must_gather_root)
+
+    # Read endpoint health
+    health_file = paths.etcd_file("endpoint_health.json")
+    content = read_file(health_file)
+    if content:
+        try:
+            health_data = json.loads(content)
+            print(f"{colors.cyan}ETCD Endpoints Health:{colors.reset}\n")
+
+            healthy_count = 0
+            for endpoint in health_data:
+                ep = endpoint.get('endpoint', 'Unknown')
+                health = endpoint.get('health', False)
+                took = endpoint.get('took', 'N/A')
+
+                status_color = colors.green if health else colors.red
+                status_text = "Healthy" if health else "Unhealthy"
+
+                print(f"  {ep:<40} {status_color}{status_text:<12}{colors.reset} (took: {took})")
+                if health:
+                    healthy_count += 1
+
+            print(f"\n{colors.cyan}Summary: {colors.green}{healthy_count}/{len(health_data)}{colors.reset} endpoints healthy")
+        except (json.JSONDecodeError, ValueError) as e:
+            print(f"{colors.red}Error parsing endpoint health: {e}{colors.reset}")
+
+    # Read member list
+    member_file = paths.etcd_file("member_list.json")
+    content = read_file(member_file)
+    if content:
+        try:
+            member_data = json.loads(content)
+            if 'members' in member_data:
+                print(f"\n{colors.cyan}ETCD Members:{colors.reset}")
+                print(f"  Total members: {len(member_data['members'])}")
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # Read endpoint status
+    status_file = paths.etcd_file("endpoint_status.json")
+    content = read_file(status_file)
+    if content:
+        try:
+            status_data = json.loads(content)
+            print(f"\n{colors.cyan}ETCD Status Details:{colors.reset}\n")
+
+            for endpoint in status_data:
+                ep = endpoint.get('Endpoint', 'Unknown')
+                status = endpoint.get('Status', {})
+                leader = status.get('header', {}).get('member_id', 'Unknown')
+                db_size = status.get('dbSize', 0)
+
+                print(f"  {ep}")
+                print(f"    Leader ID: {leader}")
+                print(f"    DB Size: {format_bytes(db_size, precision=1)}")
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # Read alarms
+    alarm_file = paths.etcd_file("alarm_list.json")
+    content = read_file(alarm_file)
+    if content:
+        try:
+            alarm_data = json.loads(content)
+            if alarm_data and 'alarms' in alarm_data and alarm_data['alarms']:
+                print(f"\n{colors.red}ETCD Alarms:{colors.reset}")
+                for alarm in alarm_data['alarms']:
+                    print(f"  {colors.red}⚠ {alarm}{colors.reset}")
+            else:
+                print(f"\n{colors.green}No ETCD alarms{colors.reset}")
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    print_section_footer(colors)
 
 
 def show_cluster_info(sosreport_path):
@@ -435,6 +780,22 @@ Examples:
 
     # Show only pods matching pattern with limit
     > ocpinfo -p -d -f portal -l 5
+
+    # Must-gather features (requires must-gather archive)
+    # Show cluster version
+    > ocpinfo --version
+
+    # Show cluster operators status
+    > ocpinfo --operators
+
+    # Show detailed operators list
+    > ocpinfo --operators -d
+
+    # Filter degraded operators
+    > ocpinfo --operators --state Degraded
+
+    # Show ETCD cluster health
+    > ocpinfo --etcd
     '''
 
     if no_pipe == False:
@@ -488,6 +849,15 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
     op.add_option("-a", "--all", dest="all", default=False,
                   action="store_true",
                   help="Show all information (equivalent to -p -c -i -s)")
+    op.add_option("--version", dest="show_version", default=False,
+                  action="store_true",
+                  help="Show cluster version (must-gather)")
+    op.add_option("--operators", dest="operators", default=False,
+                  action="store_true",
+                  help="Show cluster operators status (must-gather)")
+    op.add_option("--etcd", dest="etcd", default=False,
+                  action="store_true",
+                  help="Show ETCD cluster health (must-gather)")
 
     try:
         (o, args) = op.parse_args(input_str.split())
@@ -497,44 +867,81 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
     if o.help or show_help == True:
         return print_help_msg(op, no_pipe)
 
-    # Set colors
-    set_color_table(no_pipe)
+    # Create color manager
+    colors = ColorManager(no_pipe)
 
-    # Get sosreport path
-    sosreport_path = os.getcwd()
+    # Detect data sources
+    base_path = os.getcwd()
+    sources = detect_data_sources(base_path)
 
-    # Check if we're in a sosreport directory
-    if not os.path.exists(os.path.join(sosreport_path, "sos_commands")):
-        print(f"{COLOR_RED}Error: Not in a sosreport directory{COLOR_RESET}")
-        print("Please run this command from within an extracted sosreport")
-        return
+    # Check what data is available
+    must_gather_root = sources.get('must-gather-root')
+    sosreport_available = sources.get('sosreport', False)
+    must_gather_available = sources.get('must-gather', False)
 
-    # If no specific option, show cluster overview
-    if not (o.pods or o.containers or o.images or o.stats or o.all):
-        show_cluster_info(sosreport_path)
+    # Handle must-gather specific options
+    if o.show_version or o.operators or o.etcd:
+        if not must_gather_available:
+            print(f"{colors.red}Error: Must-gather data not found{colors.reset}")
+            print("These options require a must-gather archive")
+            print(f"Current directory: {base_path}")
+            return ""
+
+        # Show requested must-gather information
+        if o.show_version:
+            show_cluster_version(must_gather_root, colors)
+
+        if o.operators:
+            show_cluster_operators(must_gather_root, o, colors)
+
+        if o.etcd:
+            show_etcd_health(must_gather_root, colors)
+
         return ""
 
-    # Show all if requested
-    if o.all:
-        show_cluster_info(sosreport_path)
-        show_pods_info(sosreport_path, o)
-        show_containers_info(sosreport_path, o)
-        show_images_info(sosreport_path, o)
-        show_resource_stats(sosreport_path)
+    # Handle sosreport options (pods, containers, images, stats)
+    if o.pods or o.containers or o.images or o.stats or o.all:
+        if not sosreport_available:
+            print(f"{colors.red}Error: Sosreport data not found{colors.reset}")
+            print("These options require a sosreport directory")
+            print(f"Current directory: {base_path}")
+            return ""
+
+        sosreport_path = base_path
+
+        # Show all if requested
+        if o.all:
+            show_cluster_info(sosreport_path)
+            show_pods_info(sosreport_path, o)
+            show_containers_info(sosreport_path, o)
+            show_images_info(sosreport_path, o)
+            show_resource_stats(sosreport_path)
+            return ""
+
+        # Show specific information
+        if o.pods:
+            show_pods_info(sosreport_path, o)
+
+        if o.containers:
+            show_containers_info(sosreport_path, o)
+
+        if o.images:
+            show_images_info(sosreport_path, o)
+
+        if o.stats:
+            show_resource_stats(sosreport_path)
+
         return ""
 
-    # Show specific information
-    if o.pods:
-        show_pods_info(sosreport_path, o)
-
-    if o.containers:
-        show_containers_info(sosreport_path, o)
-
-    if o.images:
-        show_images_info(sosreport_path, o)
-
-    if o.stats:
-        show_resource_stats(sosreport_path)
+    # No specific option - show cluster overview
+    # Prefer must-gather if available, otherwise sosreport
+    if must_gather_available:
+        show_cluster_version(must_gather_root, colors)
+    elif sosreport_available:
+        show_cluster_info(base_path)
+    else:
+        print(f"{colors.red}Error: No OCP data found{colors.reset}")
+        print("Please run this command from within a sosreport or must-gather directory")
 
     return ""
 
