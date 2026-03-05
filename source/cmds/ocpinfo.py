@@ -152,15 +152,15 @@ def show_pods_info(sosreport_path, options):
     data_lines = lines[1:]
 
     # Filter by namespace if specified
-    if options.namespace:
+    if hasattr(options, 'namespace') and options.namespace:
         data_lines = [line for line in data_lines if options.namespace in line]
 
     # Filter by state if specified
-    if options.state:
+    if hasattr(options, 'state') and options.state:
         data_lines = [line for line in data_lines if options.state in line]
 
     # Filter by pattern if specified (case-insensitive)
-    if options.filter:
+    if hasattr(options, 'filter') and options.filter:
         data_lines = [line for line in data_lines if options.filter.lower() in line.lower()]
 
     print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}")
@@ -192,7 +192,7 @@ def show_pods_info(sosreport_path, options):
                 namespace_counts[namespace] = namespace_counts.get(namespace, 0) + 1
 
     # Show summary
-    if not options.detail:
+    if not (hasattr(options, 'detail') and options.detail):
         print(f"{COLOR_CYAN}Pods by State:{COLOR_RESET}")
         for state in sorted(state_counts.keys()):
             count = state_counts[state]
@@ -204,13 +204,13 @@ def show_pods_info(sosreport_path, options):
             print(f"  {namespace:40s}: {count:4d}")
 
     # Show detailed list if requested
-    if options.detail:
+    if hasattr(options, 'detail') and options.detail:
         print(f"\n{COLOR_CYAN}{header}{COLOR_RESET}")
         print("-" * 80)
 
         count = 0
         for line in data_lines:
-            if options.limit and count >= options.limit:
+            if hasattr(options, 'limit') and options.limit and count >= options.limit:
                 remaining = len(data_lines) - count
                 print(f"\n{COLOR_YELLOW}... and {remaining} more pods{COLOR_RESET}")
                 break
@@ -252,7 +252,7 @@ def show_containers_info(sosreport_path, options):
     data_lines = lines[1:]
 
     # Filter by pattern if specified (case-insensitive)
-    if options.filter:
+    if hasattr(options, 'filter') and options.filter:
         data_lines = [line for line in data_lines if options.filter.lower() in line.lower()]
 
     print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}")
@@ -277,13 +277,13 @@ def show_containers_info(sosreport_path, options):
         print(f"  {color}{state:15s}{COLOR_RESET}: {count:4d}")
 
     # Show detailed list if requested
-    if options.detail:
+    if hasattr(options, 'detail') and options.detail:
         print(f"\n{COLOR_CYAN}{header}{COLOR_RESET}")
         print("-" * 80)
 
         count = 0
         for line in data_lines:
-            if options.limit and count >= options.limit:
+            if hasattr(options, 'limit') and options.limit and count >= options.limit:
                 remaining = len(data_lines) - count
                 print(f"\n{COLOR_YELLOW}... and {remaining} more containers{COLOR_RESET}")
                 break
@@ -320,7 +320,7 @@ def show_images_info(sosreport_path, options):
     data_lines = lines[1:]
 
     # Filter by pattern if specified (case-insensitive)
-    if options.filter:
+    if hasattr(options, 'filter') and options.filter:
         data_lines = [line for line in data_lines if options.filter.lower() in line.lower()]
 
     print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}")
