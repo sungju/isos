@@ -1190,7 +1190,7 @@ def show_inspect_log_content(inspect_root, options, colors):
         print()
         print(f"{colors.yellow}Usage:{colors.reset}")
         print(f"  ocpinfo --logs -f <pod-name> --show")
-        print(f"  ocpinfo --logs -f <pod-name> --show -c <container>")
+        print(f"  ocpinfo --logs -f <pod-name> --show --container <container>")
         print(f"  ocpinfo --logs -f <pod-name> --show --tail 200")
         print(f"  ocpinfo --logs -f <pod-name> --show --previous")
         return
@@ -1273,8 +1273,8 @@ def show_inspect_log_content(inspect_root, options, colors):
                 size = os.path.getsize(log_path) if os.path.exists(log_path) else 0
                 print(f"  - {container} ({log_filename}: {format_bytes(size, precision=1)})")
         print()
-        print(f"{colors.cyan}Specify container with -c option:{colors.reset}")
-        print(f"  ocpinfo --logs -f {pod_name} --show -c <container-name>")
+        print(f"{colors.cyan}Specify container with --container option:{colors.reset}")
+        print(f"  ocpinfo --logs -f {pod_name} --show --container <container-name>")
         return
 
     # Show log content for the container
@@ -1721,7 +1721,7 @@ Examples:
     > ocpinfo --logs -f stack-monitoring-metric-0 --show
 
     # View log content for specific container
-    > ocpinfo --logs -f stack-monitoring-es-default-0 --show -c elasticsearch
+    > ocpinfo --logs -f stack-monitoring-es-default-0 --show --container elasticsearch
 
     # View last 200 lines of log
     > ocpinfo --logs -f stack-monitoring-kb --show --tail 200
@@ -1730,7 +1730,7 @@ Examples:
     > ocpinfo --logs -f stack-monitoring-es-default-1 --show --previous
 
     # View previous log for specific container
-    > ocpinfo --logs -f stack-monitoring-es-default-1 --show -c elasticsearch --previous
+    > ocpinfo --logs -f stack-monitoring-es-default-1 --show --container elasticsearch --previous
 
     # Show deployments and statefulsets
     > ocpinfo --deployments
@@ -1842,7 +1842,7 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
     op.add_option("--previous", dest="previous_log", default=False,
                   action="store_true",
                   help="Show previous container log instead of current")
-    op.add_option("-c", "--container", dest="container", default="",
+    op.add_option("--container", dest="container", default="",
                   type="string", action="store",
                   help="Specific container name (use with --logs --show)")
 
