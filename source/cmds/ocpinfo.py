@@ -159,6 +159,10 @@ def show_pods_info(sosreport_path, options):
     if options.state:
         data_lines = [line for line in data_lines if options.state in line]
 
+    # Filter by pattern if specified (case-insensitive)
+    if options.filter:
+        data_lines = [line for line in data_lines if options.filter.lower() in line.lower()]
+
     print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}")
     print(f"{COLOR_BLUE}Pod Information ({len(data_lines)} pods){COLOR_RESET}")
     print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
@@ -247,6 +251,10 @@ def show_containers_info(sosreport_path, options):
     header = lines[0] if lines else ""
     data_lines = lines[1:]
 
+    # Filter by pattern if specified (case-insensitive)
+    if options.filter:
+        data_lines = [line for line in data_lines if options.filter.lower() in line.lower()]
+
     print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}")
     print(f"{COLOR_BLUE}Container Information ({len(data_lines)} containers){COLOR_RESET}")
     print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
@@ -310,6 +318,10 @@ def show_images_info(sosreport_path, options):
 
     header = lines[0] if lines else ""
     data_lines = lines[1:]
+
+    # Filter by pattern if specified (case-insensitive)
+    if options.filter:
+        data_lines = [line for line in data_lines if options.filter.lower() in line.lower()]
 
     print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}")
     print(f"{COLOR_BLUE}Container Images ({len(data_lines)} images){COLOR_RESET}")
@@ -411,6 +423,18 @@ Examples:
 
     # Show only NotReady pods
     > ocpinfo -p --state NotReady
+
+    # Filter pods containing "api" in any field
+    > ocpinfo -p -d -f api
+
+    # Filter containers for specific image
+    > ocpinfo -c -d -f sonarqube
+
+    # Combine filters: namespace and pattern
+    > ocpinfo -p -d -n jbsb-ci -f quarkus
+
+    # Show only pods matching pattern with limit
+    > ocpinfo -p -d -f portal -l 5
     '''
 
     if no_pipe == False:
@@ -458,6 +482,9 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
     op.add_option("-l", "--limit", dest="limit", default=0,
                   type="int", action="store",
                   help="Limit number of items to display")
+    op.add_option("-f", "--filter", dest="filter", default="",
+                  type="string", action="store",
+                  help="Filter lines containing pattern (case-insensitive)")
     op.add_option("-a", "--all", dest="all", default=False,
                   action="store_true",
                   help="Show all information (equivalent to -p -c -i -s)")
