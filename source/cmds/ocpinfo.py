@@ -1627,10 +1627,22 @@ def show_inspect_pvc(inspect_root, options, colors):
     print_section_footer(colors)
 
 
-def print_help_msg(op, no_pipe):
-    """Print help message following isos pattern"""
-    cmd_examples = '''
-Examples:
+def print_help_msg(op, no_pipe, base_path=None):
+    """Print help message following isos pattern - context-aware based on environment"""
+
+    # Detect current environment
+    if base_path is None:
+        base_path = os.getcwd()
+
+    sources = detect_data_sources(base_path)
+    sosreport_available = sources.get('sosreport', False)
+    must_gather_available = sources.get('must-gather', False)
+    inspect_available = sources.get('inspect', False)
+
+    # Determine which examples to show
+    if sosreport_available:
+        cmd_examples = '''
+Examples (Sosreport):
     # Show cluster overview (default)
     > ocpinfo
 
@@ -1672,9 +1684,14 @@ Examples:
 
     # Show only pods matching pattern with limit
     > ocpinfo -p -d -f portal -l 5
+    '''
+    elif must_gather_available:
+        cmd_examples = '''
+Examples (Must-Gather):
+    # Show cluster version (default)
+    > ocpinfo
 
-    # Must-gather features (requires must-gather archive)
-    # Show cluster version
+    # Show cluster version explicitly
     > ocpinfo --version
 
     # Show cluster operators status
@@ -1686,11 +1703,22 @@ Examples:
     # Filter degraded operators
     > ocpinfo --operators --state Degraded
 
+    # Filter operators by name
+    > ocpinfo --operators -f authentication -d
+
     # Show ETCD cluster health
     > ocpinfo --etcd
 
-    # Inspect data features (requires inspect archive)
-    # List inspected namespaces
+    # Show operators with limit
+    > ocpinfo --operators -d -l 20
+    '''
+    elif inspect_available:
+        cmd_examples = '''
+Examples (Inspect):
+    # List inspected namespaces (default)
+    > ocpinfo
+
+    # List namespaces explicitly
     > ocpinfo --namespaces
 
     # Show events (warnings and errors)
@@ -1702,6 +1730,9 @@ Examples:
     # Show events in specific namespace
     > ocpinfo --events -n elastic-monitoring
 
+    # Show events with limit
+    > ocpinfo --events -l 20
+
     # Show pods from inspect data
     > ocpinfo --inspect-pods
 
@@ -1710,6 +1741,9 @@ Examples:
 
     # Filter pods by namespace
     > ocpinfo --inspect-pods -n elastic-monitoring
+
+    # Filter pods by pattern
+    > ocpinfo --inspect-pods -f monitoring
 
     # List available pod logs
     > ocpinfo --logs
@@ -1729,9 +1763,6 @@ Examples:
     # View previous container log (from restart)
     > ocpinfo --logs -f stack-monitoring-es-default-1 --show --previous
 
-    # View previous log for specific container
-    > ocpinfo --logs -f stack-monitoring-es-default-1 --show --container elasticsearch --previous
-
     # Show deployments and statefulsets
     > ocpinfo --deployments
 
@@ -1743,6 +1774,37 @@ Examples:
 
     # Show PersistentVolumeClaims
     > ocpinfo --pvc
+    '''
+    else:
+        # No environment detected - show general help
+        cmd_examples = '''
+No OCP data detected in current directory.
+
+This command requires one of:
+  • A sosreport directory (contains 'sos_commands/' subdirectory)
+  • A must-gather directory (contains 'quay-io-*' or 'must-gather*' subdirectory)
+  • An inspect directory (contains 'namespaces/' subdirectory)
+
+Please navigate to a valid OCP data directory and try again.
+
+Examples by data type:
+
+Sosreport (node-level):
+    > ocpinfo -p           # Show pods
+    > ocpinfo -c           # Show containers
+    > ocpinfo -i           # Show images
+    > ocpinfo -a           # Show all information
+
+Must-Gather (cluster-level):
+    > ocpinfo --version    # Show cluster version
+    > ocpinfo --operators  # Show cluster operators
+    > ocpinfo --etcd       # Show ETCD health
+
+Inspect (namespace-level):
+    > ocpinfo --namespaces # List namespaces
+    > ocpinfo --events     # Show events
+    > ocpinfo --inspect-pods  # Show pods
+    > ocpinfo --logs       # List/view logs
     '''
 
     if no_pipe == False:
@@ -1761,90 +1823,124 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
                 show_help=False, no_pipe=True):
     """Main entry point for ocpinfo command"""
 
-    usage = "Usage: %s [options]" % (cmd_name)
+    # Detect environment early for context-aware help
+    base_path = os.getcwd()
+    sources = detect_data_sources(base_path)
+    sosreport_available = sources.get('sosreport', False)
+    must_gather_available = sources.get('must-gather', False)
+    inspect_available = sources.get('inspect', False)
+
+    # Build usage message with environment info
+    env_type = ""
+    if sosreport_available:
+        env_type = " (Sosreport detected)"
+    elif must_gather_available:
+        env_type = " (Must-Gather detected)"
+    elif inspect_available:
+        env_type = " (Inspect detected)"
+
+    usage = "Usage: %s [options]%s" % (cmd_name, env_type)
 
     op = OptionParser(usage=usage, add_help_option=False)
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')
-    op.add_option("-p", "--pods", dest="pods", default=False,
-                  action="store_true",
-                  help="Show pod information")
-    op.add_option("-c", "--containers", dest="containers", default=False,
-                  action="store_true",
-                  help="Show container information")
-    op.add_option("-i", "--images", dest="images", default=False,
-                  action="store_true",
-                  help="Show container images")
-    op.add_option("-s", "--stats", dest="stats", default=False,
-                  action="store_true",
-                  help="Show resource statistics")
+
+    # Common options (available in all environments)
     op.add_option("-d", "--detail", dest="detail", default=False,
                   action="store_true",
                   help="Show detailed information")
     op.add_option("-n", "--namespace", dest="namespace", default="",
                   type="string", action="store",
                   help="Filter by namespace")
-    op.add_option("--state", dest="state", default="",
-                  type="string", action="store",
-                  help="Filter by state (Ready, NotReady, Running, etc.)")
     op.add_option("-l", "--limit", dest="limit", default=0,
                   type="int", action="store",
                   help="Limit number of items to display")
     op.add_option("-f", "--filter", dest="filter", default="",
                   type="string", action="store",
                   help="Filter lines containing pattern (case-insensitive)")
-    op.add_option("-a", "--all", dest="all", default=False,
-                  action="store_true",
-                  help="Show all information (equivalent to -p -c -i -s)")
-    op.add_option("--version", dest="show_version", default=False,
-                  action="store_true",
-                  help="Show cluster version (must-gather)")
-    op.add_option("--operators", dest="operators", default=False,
-                  action="store_true",
-                  help="Show cluster operators status (must-gather)")
-    op.add_option("--etcd", dest="etcd", default=False,
-                  action="store_true",
-                  help="Show ETCD cluster health (must-gather)")
-    # Inspect data options
-    op.add_option("--namespaces", dest="namespaces", default=False,
-                  action="store_true",
-                  help="List namespaces (inspect)")
-    op.add_option("--events", dest="events", default=False,
-                  action="store_true",
-                  help="Show events (inspect)")
-    op.add_option("--inspect-pods", dest="inspect_pods", default=False,
-                  action="store_true",
-                  help="Show pods from inspect data (inspect)")
-    op.add_option("--logs", dest="logs", default=False,
-                  action="store_true",
-                  help="List available pod logs (inspect)")
-    op.add_option("--deployments", dest="deployments", default=False,
-                  action="store_true",
-                  help="Show deployments and statefulsets (inspect)")
-    op.add_option("--services", dest="services", default=False,
-                  action="store_true",
-                  help="Show services and routes (inspect)")
-    op.add_option("--resources", dest="resources", default=False,
-                  action="store_true",
-                  help="Show resource inventory (inspect)")
-    op.add_option("--pvc", dest="pvc", default=False,
-                  action="store_true",
-                  help="Show PersistentVolumeClaims (inspect)")
-    op.add_option("--type", dest="event_type", default="",
-                  type="string", action="store",
-                  help="Filter events by type (Warning, Normal) - for --events")
-    op.add_option("--show", dest="show_logs", default=False,
-                  action="store_true",
-                  help="Show log content (use with --logs)")
-    op.add_option("--tail", dest="tail_lines", default=100,
-                  type="int", action="store",
-                  help="Number of lines to show from end of log (default: 100)")
-    op.add_option("--previous", dest="previous_log", default=False,
-                  action="store_true",
-                  help="Show previous container log instead of current")
-    op.add_option("--container", dest="container", default="",
-                  type="string", action="store",
-                  help="Specific container name (use with --logs --show)")
+
+    # Sosreport-specific options
+    if sosreport_available or not (must_gather_available or inspect_available):
+        op.add_option("-p", "--pods", dest="pods", default=False,
+                      action="store_true",
+                      help="Show pod information (sosreport)")
+        op.add_option("-c", "--containers", dest="containers", default=False,
+                      action="store_true",
+                      help="Show container information (sosreport)")
+        op.add_option("-i", "--images", dest="images", default=False,
+                      action="store_true",
+                      help="Show container images (sosreport)")
+        op.add_option("-s", "--stats", dest="stats", default=False,
+                      action="store_true",
+                      help="Show resource statistics (sosreport)")
+        op.add_option("-a", "--all", dest="all", default=False,
+                      action="store_true",
+                      help="Show all information (sosreport)")
+        op.add_option("--state", dest="state", default="",
+                      type="string", action="store",
+                      help="Filter by state (Ready, NotReady, Running, etc.)")
+
+    # Must-gather-specific options
+    if must_gather_available or not (sosreport_available or inspect_available):
+        op.add_option("--version", dest="show_version", default=False,
+                      action="store_true",
+                      help="Show cluster version (must-gather)")
+        op.add_option("--operators", dest="operators", default=False,
+                      action="store_true",
+                      help="Show cluster operators status (must-gather)")
+        op.add_option("--etcd", dest="etcd", default=False,
+                      action="store_true",
+                      help="Show ETCD cluster health (must-gather)")
+        if not sosreport_available:  # Only add --state for must-gather if no sosreport
+            op.add_option("--state", dest="state", default="",
+                          type="string", action="store",
+                          help="Filter by state (Available, Degraded, etc.)")
+
+    # Inspect-specific options
+    if inspect_available or not (sosreport_available or must_gather_available):
+        op.add_option("--namespaces", dest="namespaces", default=False,
+                      action="store_true",
+                      help="List namespaces (inspect)")
+        op.add_option("--events", dest="events", default=False,
+                      action="store_true",
+                      help="Show events (inspect)")
+        op.add_option("--inspect-pods", dest="inspect_pods", default=False,
+                      action="store_true",
+                      help="Show pods from inspect data (inspect)")
+        op.add_option("--logs", dest="logs", default=False,
+                      action="store_true",
+                      help="List/view pod logs (inspect)")
+        op.add_option("--deployments", dest="deployments", default=False,
+                      action="store_true",
+                      help="Show deployments and statefulsets (inspect)")
+        op.add_option("--services", dest="services", default=False,
+                      action="store_true",
+                      help="Show services and routes (inspect)")
+        op.add_option("--resources", dest="resources", default=False,
+                      action="store_true",
+                      help="Show resource inventory (inspect)")
+        op.add_option("--pvc", dest="pvc", default=False,
+                      action="store_true",
+                      help="Show PersistentVolumeClaims (inspect)")
+        op.add_option("--type", dest="event_type", default="",
+                      type="string", action="store",
+                      help="Filter events by type (Warning, Normal)")
+        op.add_option("--show", dest="show_logs", default=False,
+                      action="store_true",
+                      help="Show log content (use with --logs)")
+        op.add_option("--tail", dest="tail_lines", default=100,
+                      type="int", action="store",
+                      help="Number of lines to show from end of log (default: 100)")
+        op.add_option("--previous", dest="previous_log", default=False,
+                      action="store_true",
+                      help="Show previous container log instead of current")
+        op.add_option("--container", dest="container", default="",
+                      type="string", action="store",
+                      help="Specific container name (use with --logs --show)")
+        if not sosreport_available and not must_gather_available:  # Only if no other env
+            op.add_option("--state", dest="state", default="",
+                          type="string", action="store",
+                          help="Filter by state/phase")
 
     try:
         (o, args) = op.parse_args(input_str.split())
@@ -1852,21 +1948,15 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
         return ""
 
     if o.help or show_help == True:
-        return print_help_msg(op, no_pipe)
+        return print_help_msg(op, no_pipe, base_path)
 
     # Create color manager
     colors = ColorManager(no_pipe)
 
-    # Detect data sources
-    base_path = os.getcwd()
-    sources = detect_data_sources(base_path)
-
-    # Check what data is available
+    # Data sources already detected at the beginning of function
+    # Get the roots
     must_gather_root = sources.get('must-gather-root')
     inspect_root = sources.get('inspect-root')
-    sosreport_available = sources.get('sosreport', False)
-    must_gather_available = sources.get('must-gather', False)
-    inspect_available = sources.get('inspect', False)
 
     # Handle must-gather specific options
     if o.show_version or o.operators or o.etcd:
