@@ -878,9 +878,41 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
     # Handle must-gather specific options
     if o.show_version or o.operators or o.etcd:
         if not must_gather_available:
-            print(f"{colors.red}Error: Must-gather data not found{colors.reset}")
-            print("These options require a must-gather archive")
-            print(f"Current directory: {base_path}")
+            # Determine what's available and provide helpful message
+            print(f"{colors.red}Error: Must-gather options not available{colors.reset}")
+            print()
+
+            # Build list of requested options
+            requested = []
+            if o.show_version:
+                requested.append("--version")
+            if o.operators:
+                requested.append("--operators")
+            if o.etcd:
+                requested.append("--etcd")
+
+            print(f"Requested option(s): {', '.join(requested)}")
+            print(f"{colors.yellow}These options require a must-gather archive{colors.reset}")
+            print()
+
+            if sosreport_available:
+                # In sosreport - show available options
+                print(f"{colors.cyan}You are in a sosreport directory:{colors.reset}")
+                print(f"  {base_path}")
+                print()
+                print(f"{colors.green}Available sosreport options:{colors.reset}")
+                print("  ocpinfo              - Show cluster overview")
+                print("  ocpinfo -p           - Show pods")
+                print("  ocpinfo -c           - Show containers")
+                print("  ocpinfo -i           - Show images")
+                print("  ocpinfo -s           - Show resource stats")
+                print("  ocpinfo -a           - Show all information")
+            else:
+                # Not in any OCP directory
+                print(f"{colors.yellow}Current directory:{colors.reset} {base_path}")
+                print()
+                print("Please run this command from within a must-gather archive directory")
+
             return ""
 
         # Show requested must-gather information
@@ -898,9 +930,43 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
     # Handle sosreport options (pods, containers, images, stats)
     if o.pods or o.containers or o.images or o.stats or o.all:
         if not sosreport_available:
-            print(f"{colors.red}Error: Sosreport data not found{colors.reset}")
-            print("These options require a sosreport directory")
-            print(f"Current directory: {base_path}")
+            # Determine what's available and provide helpful message
+            print(f"{colors.red}Error: Sosreport options not available{colors.reset}")
+            print()
+
+            # Build list of requested options
+            requested = []
+            if o.pods:
+                requested.append("-p/--pods")
+            if o.containers:
+                requested.append("-c/--containers")
+            if o.images:
+                requested.append("-i/--images")
+            if o.stats:
+                requested.append("-s/--stats")
+            if o.all:
+                requested.append("-a/--all")
+
+            print(f"Requested option(s): {', '.join(requested)}")
+            print(f"{colors.yellow}These options require a sosreport directory{colors.reset}")
+            print()
+
+            if must_gather_available:
+                # In must-gather - show available options
+                print(f"{colors.cyan}You are in a must-gather directory:{colors.reset}")
+                print(f"  {base_path}")
+                print()
+                print(f"{colors.green}Available must-gather options:{colors.reset}")
+                print("  ocpinfo              - Show cluster version")
+                print("  ocpinfo --version    - Show cluster version")
+                print("  ocpinfo --operators  - Show cluster operators status")
+                print("  ocpinfo --etcd       - Show ETCD cluster health")
+            else:
+                # Not in any OCP directory
+                print(f"{colors.yellow}Current directory:{colors.reset} {base_path}")
+                print()
+                print("Please run this command from within a sosreport directory")
+
             return ""
 
         sosreport_path = base_path
@@ -937,7 +1003,14 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
         show_cluster_info(base_path, colors)
     else:
         print(f"{colors.red}Error: No OCP data found{colors.reset}")
-        print("Please run this command from within a sosreport or must-gather directory")
+        print()
+        print(f"{colors.yellow}Current directory:{colors.reset} {base_path}")
+        print()
+        print("This command requires either:")
+        print(f"  {colors.cyan}• A sosreport directory{colors.reset} (contains 'sos_commands/' subdirectory)")
+        print(f"  {colors.cyan}• A must-gather directory{colors.reset} (contains 'quay-io-*' or 'must-gather*' subdirectory)")
+        print()
+        print("Please navigate to a sosreport or must-gather directory and try again.")
 
     return ""
 
