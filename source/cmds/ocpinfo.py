@@ -10,8 +10,10 @@ import sys
 import os
 import re
 import json
+import yaml
 from optparse import OptionParser
 from io import StringIO
+from datetime import datetime
 
 import ansicolor
 import screen
@@ -63,6 +65,33 @@ class MustGatherPaths:
 
     def etcd_file(self, filename):
         return os.path.join(self.etcd_info, filename)
+
+
+class InspectPaths:
+    """Centralized inspect data path definitions"""
+    def __init__(self, root):
+        self.root = root
+        self.namespaces_dir = os.path.join(root, "namespaces")
+
+    def namespace_dir(self, namespace):
+        return os.path.join(self.namespaces_dir, namespace)
+
+    def namespace_file(self, namespace, resource_type, resource_file):
+        """Get path to a resource file in a namespace
+
+        Args:
+            namespace: Namespace name
+            resource_type: Resource type directory (e.g., 'core', 'apps')
+            resource_file: Resource filename (e.g., 'pods.yaml', 'events.yaml')
+        """
+        return os.path.join(self.namespaces_dir, namespace, resource_type, resource_file)
+
+    def pods_dir(self, namespace):
+        return os.path.join(self.namespaces_dir, namespace, "pods")
+
+    def pod_logs_dir(self, namespace, pod_name, container_name):
+        return os.path.join(self.namespaces_dir, namespace, "pods", pod_name,
+                          container_name, container_name, "logs")
 
 
 def read_file(filepath):
@@ -161,20 +190,51 @@ def find_must_gather_root(base_path=None):
     return None
 
 
+def find_inspect_root(base_path=None):
+    """Find inspect root directory"""
+    if base_path is None:
+        base_path = os.getcwd()
+
+    # Check for namespaces directory (key indicator of inspect data)
+    namespaces_dir = os.path.join(base_path, 'namespaces')
+    if os.path.isdir(namespaces_dir):
+        # Verify it's inspect data by checking for timestamp file
+        if os.path.exists(os.path.join(base_path, 'timestamp')):
+            return base_path
+
+    # Check subdirectories for inspect.local.* pattern
+    try:
+        for item in os.listdir(base_path):
+            if item.startswith('inspect.local'):
+                full_path = os.path.join(base_path, item)
+                if os.path.isdir(full_path):
+                    namespaces_dir = os.path.join(full_path, 'namespaces')
+                    if os.path.isdir(namespaces_dir):
+                        return full_path
+    except (IOError, OSError):
+        pass
+
+    return None
+
+
 def detect_data_sources(base_path=None):
-    """Detect available data sources (sosreport and/or must-gather)
+    """Detect available data sources (sosreport, must-gather, and/or inspect)
 
     Returns:
-        dict with keys: 'sosreport', 'must-gather', 'must-gather-root'
+        dict with keys: 'sosreport', 'must-gather', 'must-gather-root', 'inspect', 'inspect-root'
     """
     if base_path is None:
         base_path = os.getcwd()
 
     must_gather_path = find_must_gather_root(base_path)
+    inspect_path = find_inspect_root(base_path)
+
     sources = {
         'sosreport': os.path.exists(os.path.join(base_path, 'sos_commands')),
         'must-gather': must_gather_path is not None,
-        'must-gather-root': must_gather_path
+        'must-gather-root': must_gather_path,
+        'inspect': inspect_path is not None,
+        'inspect-root': inspect_path
     }
     return sources
 
@@ -731,6 +791,659 @@ def show_resource_stats(sosreport_path, colors):
     print_section_footer(colors)
 
 
+def get_inspect_namespaces(inspect_root):
+    """Get list of namespaces in inspect data
+
+    Returns:
+        List of namespace names
+    """
+    paths = InspectPaths(inspect_root)
+    namespaces = []
+
+    try:
+        if os.path.isdir(paths.namespaces_dir):
+            for item in os.listdir(paths.namespaces_dir):
+                ns_path = os.path.join(paths.namespaces_dir, item)
+                if os.path.isdir(ns_path):
+                    namespaces.append(item)
+    except (IOError, OSError):
+        pass
+
+    return sorted(namespaces)
+
+
+def load_yaml_resources(filepath):
+    """Load YAML resources from file (handles multi-document YAML and List objects)
+
+    Returns:
+        List of resource dicts
+    """
+    content = read_file(filepath)
+    if not content:
+        return []
+
+    try:
+        # Handle multi-document YAML
+        documents = list(yaml.safe_load_all(content))
+        resources = []
+
+        for doc in documents:
+            if not doc or not isinstance(doc, dict):
+                continue
+
+            # Check if this is a List object (kind ends with 'List' and has 'items' field)
+            # Examples: List, PodList, EventList, DeploymentList, etc.
+            kind = doc.get('kind', '')
+            if kind.endswith('List') and 'items' in doc:
+                # Extract items from List
+                resources.extend(doc['items'])
+            else:
+                # Regular resource
+                resources.append(doc)
+
+        return resources
+    except yaml.YAMLError:
+        return []
+
+
+def show_inspect_namespaces(inspect_root, colors):
+    """Show namespaces in inspect data"""
+    print_section_header("Namespaces in Inspect Data", colors)
+
+    namespaces = get_inspect_namespaces(inspect_root)
+
+    if not namespaces:
+        print(f"{colors.yellow}No namespaces found{colors.reset}")
+        print_section_footer(colors)
+        return
+
+    print(f"{colors.cyan}Total Namespaces: {len(namespaces)}{colors.reset}\n")
+
+    # Count resources in each namespace
+    paths = InspectPaths(inspect_root)
+
+    # Print header
+    print(f"{colors.cyan}{'Namespace':<40} {'Pods':<8} {'Services':<10} {'Deployments':<12}{colors.reset}")
+    print("-" * 80)
+
+    for ns in namespaces:
+        # Count pods
+        pods_file = paths.namespace_file(ns, "core", "pods.yaml")
+        pods = load_yaml_resources(pods_file)
+        pod_count = len([p for p in pods if p.get('kind') == 'Pod'])
+
+        # Count services
+        svc_file = paths.namespace_file(ns, "core", "services.yaml")
+        services = load_yaml_resources(svc_file)
+        svc_count = len([s for s in services if s.get('kind') == 'Service'])
+
+        # Count deployments
+        deploy_file = paths.namespace_file(ns, "apps", "deployments.yaml")
+        deployments = load_yaml_resources(deploy_file)
+        deploy_count = len([d for d in deployments if d.get('kind') == 'Deployment'])
+
+        print(f"{ns:<40} {pod_count:<8} {svc_count:<10} {deploy_count:<12}")
+
+    print_section_footer(colors)
+
+
+def show_inspect_events(inspect_root, options, colors):
+    """Show events from inspect data"""
+    print_section_header("Events", colors)
+
+    namespaces = get_inspect_namespaces(inspect_root)
+    paths = InspectPaths(inspect_root)
+
+    # Filter by namespace if specified
+    if hasattr(options, 'namespace') and options.namespace:
+        namespaces = [ns for ns in namespaces if ns == options.namespace]
+
+    all_events = []
+
+    # Load events from all namespaces
+    for ns in namespaces:
+        events_file = paths.namespace_file(ns, "core", "events.yaml")
+        events = load_yaml_resources(events_file)
+
+        for event in events:
+            if event.get('kind') == 'Event':
+                event['_namespace'] = ns
+                all_events.append(event)
+
+    if not all_events:
+        print(f"{colors.yellow}No events found{colors.reset}")
+        print_section_footer(colors)
+        return
+
+    # Filter by type if specified
+    if hasattr(options, 'event_type') and options.event_type:
+        all_events = [e for e in all_events if e.get('type') == options.event_type]
+
+    # Filter by pattern if specified
+    if hasattr(options, 'filter') and options.filter:
+        filter_lower = options.filter.lower()
+        all_events = [e for e in all_events if
+                     filter_lower in e.get('message', '').lower() or
+                     filter_lower in e.get('reason', '').lower() or
+                     filter_lower in e.get('_namespace', '').lower()]
+
+    # Sort by last timestamp (most recent first)
+    all_events.sort(key=lambda e: e.get('lastTimestamp', ''), reverse=True)
+
+    # Count by type
+    warning_count = sum(1 for e in all_events if e.get('type') == 'Warning')
+    normal_count = sum(1 for e in all_events if e.get('type') == 'Normal')
+
+    print(f"{colors.cyan}Total Events: {len(all_events)}{colors.reset}")
+    print(f"  {colors.red}Warnings: {warning_count}{colors.reset}")
+    print(f"  {colors.green}Normal: {normal_count}{colors.reset}\n")
+
+    # Apply limit
+    limit = options.limit if hasattr(options, 'limit') and options.limit else 20
+    display_events = all_events[:limit]
+
+    print(f"{colors.cyan}Recent Events (showing {len(display_events)}):{colors.reset}\n")
+
+    for event in display_events:
+        event_type = event.get('type', 'Unknown')
+        count = event.get('count', 1)
+        reason = event.get('reason', 'Unknown')
+        message = event.get('message', '')
+        last_time = event.get('lastTimestamp', 'Unknown')
+        involved = event.get('involvedObject', {})
+        obj_kind = involved.get('kind', 'Unknown')
+        obj_name = involved.get('name', 'Unknown')
+        namespace = event.get('_namespace', 'Unknown')
+
+        # Color based on type
+        type_color = colors.red if event_type == 'Warning' else colors.green
+
+        print(f"{type_color}{event_type:<10}{colors.reset} ", end='')
+        print(f"Count: {count:<6} Age: {last_time[:19] if len(last_time) >= 19 else last_time:<19}")
+        print(f"  Reason: {reason}")
+        print(f"  Object: {obj_kind}/{obj_name} (ns: {namespace})")
+        print(f"  Message: {message}")
+        print()
+
+    if len(all_events) > limit:
+        remaining = len(all_events) - limit
+        print(f"{colors.yellow}... and {remaining} more events{colors.reset}")
+
+    print_section_footer(colors)
+
+
+def show_inspect_pods(inspect_root, options, colors):
+    """Show pods from inspect data"""
+    print_section_header("Pods", colors)
+
+    namespaces = get_inspect_namespaces(inspect_root)
+    paths = InspectPaths(inspect_root)
+
+    # Filter by namespace if specified
+    if hasattr(options, 'namespace') and options.namespace:
+        namespaces = [ns for ns in namespaces if ns == options.namespace]
+
+    all_pods = []
+
+    # Load pods from all namespaces
+    for ns in namespaces:
+        pods_file = paths.namespace_file(ns, "core", "pods.yaml")
+        pods = load_yaml_resources(pods_file)
+
+        for pod in pods:
+            if pod.get('kind') == 'Pod':
+                pod['_namespace'] = ns
+                all_pods.append(pod)
+
+    # Filter by pattern if specified
+    if hasattr(options, 'filter') and options.filter:
+        filter_lower = options.filter.lower()
+        all_pods = [p for p in all_pods if
+                   filter_lower in p.get('metadata', {}).get('name', '').lower() or
+                   filter_lower in p.get('_namespace', '').lower()]
+
+    # Filter by phase if specified
+    if hasattr(options, 'state') and options.state:
+        all_pods = [p for p in all_pods if
+                   p.get('status', {}).get('phase') == options.state]
+
+    if not all_pods:
+        print(f"{colors.yellow}No pods found{colors.reset}")
+        print_section_footer(colors)
+        return
+
+    print(f"{colors.cyan}Total Pods: {len(all_pods)}{colors.reset}\n")
+
+    # Count by phase
+    phase_counts = {}
+    restart_counts = {'0': 0, '1-5': 0, '>5': 0}
+
+    for pod in all_pods:
+        phase = pod.get('status', {}).get('phase', 'Unknown')
+        phase_counts[phase] = phase_counts.get(phase, 0) + 1
+
+        # Count restarts
+        containers = pod.get('status', {}).get('containerStatuses', [])
+        total_restarts = sum(c.get('restartCount', 0) for c in containers)
+
+        if total_restarts == 0:
+            restart_counts['0'] += 1
+        elif total_restarts <= 5:
+            restart_counts['1-5'] += 1
+        else:
+            restart_counts['>5'] += 1
+
+    print(f"{colors.cyan}Pods by Phase:{colors.reset}")
+    for phase in sorted(phase_counts.keys()):
+        count = phase_counts[phase]
+        color = colors.green if phase == 'Running' else colors.yellow if phase == 'Pending' else colors.red
+        print(f"  {color}{phase:15s}{colors.reset}: {count:4d}")
+
+    print(f"\n{colors.cyan}Pods by Restart Count:{colors.reset}")
+    print(f"  0 restarts   : {restart_counts['0']:4d}")
+    print(f"  1-5 restarts : {restart_counts['1-5']:4d}")
+    print(f"  >5 restarts  : {restart_counts['>5']:4d}")
+
+    # Show detailed list if requested
+    if hasattr(options, 'detail') and options.detail:
+        print(f"\n{colors.cyan}{'Pod Name':<50} {'Namespace':<20} {'Phase':<12} {'Restarts':<8}{colors.reset}")
+        print("-" * 100)
+
+        limit = options.limit if hasattr(options, 'limit') and options.limit else len(all_pods)
+        count = 0
+
+        for pod in all_pods:
+            if count >= limit:
+                remaining = len(all_pods) - count
+                print(f"\n{colors.yellow}... and {remaining} more pods{colors.reset}")
+                break
+
+            name = pod.get('metadata', {}).get('name', 'Unknown')[:49]
+            namespace = pod.get('_namespace', 'Unknown')[:19]
+            phase = pod.get('status', {}).get('phase', 'Unknown')
+
+            # Calculate total restarts
+            containers = pod.get('status', {}).get('containerStatuses', [])
+            total_restarts = sum(c.get('restartCount', 0) for c in containers)
+
+            # Color based on phase
+            phase_color = colors.green if phase == 'Running' else colors.yellow if phase == 'Pending' else colors.red
+
+            print(f"{name:<50} {namespace:<20} {phase_color}{phase:<12}{colors.reset} {total_restarts:<8}")
+            count += 1
+
+    print_section_footer(colors)
+
+
+def show_inspect_logs(inspect_root, options, colors):
+    """Show available pod logs from inspect data"""
+    print_section_header("Available Pod Logs", colors)
+
+    namespaces = get_inspect_namespaces(inspect_root)
+    paths = InspectPaths(inspect_root)
+
+    # Filter by namespace if specified
+    if hasattr(options, 'namespace') and options.namespace:
+        namespaces = [ns for ns in namespaces if ns == options.namespace]
+
+    # Filter by pod name if specified
+    pod_filter = options.filter.lower() if hasattr(options, 'filter') and options.filter else None
+
+    total_logs = 0
+
+    for ns in namespaces:
+        pods_dir = paths.pods_dir(ns)
+
+        if not os.path.isdir(pods_dir):
+            continue
+
+        try:
+            pod_names = os.listdir(pods_dir)
+        except (IOError, OSError):
+            continue
+
+        # Filter pod names
+        if pod_filter:
+            pod_names = [p for p in pod_names if pod_filter in p.lower()]
+
+        for pod_name in sorted(pod_names):
+            pod_dir = os.path.join(pods_dir, pod_name)
+            if not os.path.isdir(pod_dir):
+                continue
+
+            # Find container directories
+            try:
+                containers = os.listdir(pod_dir)
+            except (IOError, OSError):
+                continue
+
+            pod_has_logs = False
+
+            for container in sorted(containers):
+                logs_dir = paths.pod_logs_dir(ns, pod_name, container)
+
+                if not os.path.isdir(logs_dir):
+                    continue
+
+                # Check for log files
+                try:
+                    log_files = os.listdir(logs_dir)
+                except (IOError, OSError):
+                    continue
+
+                if not log_files:
+                    continue
+
+                # Print pod header once
+                if not pod_has_logs:
+                    print(f"{colors.green}Pod: {pod_name}{colors.reset} (ns: {ns})")
+                    pod_has_logs = True
+
+                print(f"  {colors.cyan}Container: {container}{colors.reset}")
+
+                for log_file in sorted(log_files):
+                    log_path = os.path.join(logs_dir, log_file)
+                    if os.path.isfile(log_path):
+                        size = os.path.getsize(log_path)
+                        print(f"    ✓ {log_file} ({format_bytes(size, precision=1)})")
+                        total_logs += 1
+
+            if pod_has_logs:
+                print()
+
+    if total_logs == 0:
+        print(f"{colors.yellow}No log files found{colors.reset}")
+    else:
+        print(f"{colors.cyan}Total log files: {total_logs}{colors.reset}")
+
+    print_section_footer(colors)
+
+
+def show_inspect_deployments(inspect_root, options, colors):
+    """Show deployments and statefulsets from inspect data"""
+    print_section_header("Deployments and StatefulSets", colors)
+
+    namespaces = get_inspect_namespaces(inspect_root)
+    paths = InspectPaths(inspect_root)
+
+    # Filter by namespace if specified
+    if hasattr(options, 'namespace') and options.namespace:
+        namespaces = [ns for ns in namespaces if ns == options.namespace]
+
+    all_workloads = []
+
+    # Load deployments and statefulsets from all namespaces
+    for ns in namespaces:
+        # Load deployments
+        deploy_file = paths.namespace_file(ns, "apps", "deployments.yaml")
+        deployments = load_yaml_resources(deploy_file)
+        for d in deployments:
+            if d.get('kind') == 'Deployment':
+                d['_namespace'] = ns
+                d['_type'] = 'Deployment'
+                all_workloads.append(d)
+
+        # Load statefulsets
+        sts_file = paths.namespace_file(ns, "apps", "statefulsets.yaml")
+        statefulsets = load_yaml_resources(sts_file)
+        for s in statefulsets:
+            if s.get('kind') == 'StatefulSet':
+                s['_namespace'] = ns
+                s['_type'] = 'StatefulSet'
+                all_workloads.append(s)
+
+        # Load daemonsets
+        ds_file = paths.namespace_file(ns, "apps", "daemonsets.yaml")
+        daemonsets = load_yaml_resources(ds_file)
+        for ds in daemonsets:
+            if ds.get('kind') == 'DaemonSet':
+                ds['_namespace'] = ns
+                ds['_type'] = 'DaemonSet'
+                all_workloads.append(ds)
+
+    # Filter by pattern if specified
+    if hasattr(options, 'filter') and options.filter:
+        filter_lower = options.filter.lower()
+        all_workloads = [w for w in all_workloads if
+                        filter_lower in w.get('metadata', {}).get('name', '').lower() or
+                        filter_lower in w.get('_namespace', '').lower()]
+
+    if not all_workloads:
+        print(f"{colors.yellow}No deployments or statefulsets found{colors.reset}")
+        print_section_footer(colors)
+        return
+
+    print(f"{colors.cyan}Total Workloads: {len(all_workloads)}{colors.reset}\n")
+
+    # Count by type
+    type_counts = {}
+    for w in all_workloads:
+        wtype = w.get('_type', 'Unknown')
+        type_counts[wtype] = type_counts.get(wtype, 0) + 1
+
+    print(f"{colors.cyan}Workloads by Type:{colors.reset}")
+    for wtype in sorted(type_counts.keys()):
+        print(f"  {wtype:15s}: {type_counts[wtype]:4d}")
+
+    # Show detailed list
+    print(f"\n{colors.cyan}{'Type':<15} {'Name':<40} {'Namespace':<20} {'Replicas':<10}{colors.reset}")
+    print("-" * 100)
+
+    limit = options.limit if hasattr(options, 'limit') and options.limit else len(all_workloads)
+    count = 0
+
+    for workload in all_workloads:
+        if count >= limit:
+            remaining = len(all_workloads) - count
+            print(f"\n{colors.yellow}... and {remaining} more workloads{colors.reset}")
+            break
+
+        wtype = workload.get('_type', 'Unknown')
+        name = workload.get('metadata', {}).get('name', 'Unknown')[:39]
+        namespace = workload.get('_namespace', 'Unknown')[:19]
+
+        # Get replica info
+        spec = workload.get('spec', {})
+        desired = spec.get('replicas', 0)
+        status = workload.get('status', {})
+        ready = status.get('readyReplicas', 0)
+
+        replicas_str = f"{ready}/{desired}"
+        replicas_color = colors.green if ready == desired else colors.yellow
+
+        print(f"{wtype:<15} {name:<40} {namespace:<20} {replicas_color}{replicas_str:<10}{colors.reset}")
+        count += 1
+
+    print_section_footer(colors)
+
+
+def show_inspect_services(inspect_root, options, colors):
+    """Show services and routes from inspect data"""
+    print_section_header("Services and Routes", colors)
+
+    namespaces = get_inspect_namespaces(inspect_root)
+    paths = InspectPaths(inspect_root)
+
+    # Filter by namespace if specified
+    if hasattr(options, 'namespace') and options.namespace:
+        namespaces = [ns for ns in namespaces if ns == options.namespace]
+
+    all_services = []
+
+    # Load services from all namespaces
+    for ns in namespaces:
+        # Load services
+        svc_file = paths.namespace_file(ns, "core", "services.yaml")
+        services = load_yaml_resources(svc_file)
+        for s in services:
+            if s.get('kind') == 'Service':
+                s['_namespace'] = ns
+                all_services.append(s)
+
+    # Filter by pattern if specified
+    if hasattr(options, 'filter') and options.filter:
+        filter_lower = options.filter.lower()
+        all_services = [s for s in all_services if
+                       filter_lower in s.get('metadata', {}).get('name', '').lower() or
+                       filter_lower in s.get('_namespace', '').lower()]
+
+    if not all_services:
+        print(f"{colors.yellow}No services found{colors.reset}")
+        print_section_footer(colors)
+        return
+
+    print(f"{colors.cyan}Total Services: {len(all_services)}{colors.reset}\n")
+
+    # Show detailed list
+    print(f"{colors.cyan}{'Name':<40} {'Namespace':<20} {'Type':<15} {'ClusterIP':<20}{colors.reset}")
+    print("-" * 100)
+
+    limit = options.limit if hasattr(options, 'limit') and options.limit else len(all_services)
+    count = 0
+
+    for service in all_services:
+        if count >= limit:
+            remaining = len(all_services) - count
+            print(f"\n{colors.yellow}... and {remaining} more services{colors.reset}")
+            break
+
+        name = service.get('metadata', {}).get('name', 'Unknown')[:39]
+        namespace = service.get('_namespace', 'Unknown')[:19]
+        spec = service.get('spec', {})
+        svc_type = spec.get('type', 'Unknown')
+        cluster_ip = spec.get('clusterIP', 'None')[:19]
+
+        print(f"{name:<40} {namespace:<20} {svc_type:<15} {cluster_ip:<20}")
+        count += 1
+
+    print_section_footer(colors)
+
+
+def show_inspect_resources(inspect_root, options, colors):
+    """Show resource inventory from inspect data"""
+    print_section_header("Resource Inventory", colors)
+
+    namespaces = get_inspect_namespaces(inspect_root)
+    paths = InspectPaths(inspect_root)
+
+    # Filter by namespace if specified
+    if hasattr(options, 'namespace') and options.namespace:
+        namespaces = [ns for ns in namespaces if ns == options.namespace]
+
+    # Resource type to file mapping
+    resource_types = {
+        'Pods': ('core', 'pods.yaml'),
+        'Services': ('core', 'services.yaml'),
+        'Events': ('core', 'events.yaml'),
+        'ConfigMaps': ('core', 'configmaps.yaml'),
+        'Secrets': ('core', 'secrets.yaml'),
+        'Endpoints': ('core', 'endpoints.yaml'),
+        'PersistentVolumeClaims': ('core', 'persistentvolumeclaims.yaml'),
+        'Deployments': ('apps', 'deployments.yaml'),
+        'StatefulSets': ('apps', 'statefulsets.yaml'),
+        'DaemonSets': ('apps', 'daemonsets.yaml'),
+        'ReplicaSets': ('apps', 'replicasets.yaml'),
+        'Jobs': ('batch', 'jobs.yaml'),
+        'CronJobs': ('batch', 'cronjobs.yaml'),
+        'Routes': ('route.openshift.io', 'routes.yaml'),
+        'NetworkPolicies': ('networking.k8s.io', 'networkpolicies.yaml'),
+    }
+
+    # Count resources
+    resource_counts = {rtype: 0 for rtype in resource_types.keys()}
+
+    for ns in namespaces:
+        for rtype, (res_dir, res_file) in resource_types.items():
+            file_path = paths.namespace_file(ns, res_dir, res_file)
+            resources = load_yaml_resources(file_path)
+            resource_counts[rtype] += len([r for r in resources if r.get('kind') == rtype.rstrip('s') or
+                                          r.get('kind') == rtype])
+
+    print(f"{colors.cyan}{'Resource Type':<30} {'Count':<10}{colors.reset}")
+    print("-" * 40)
+
+    for rtype in sorted(resource_types.keys()):
+        count = resource_counts[rtype]
+        if count > 0:
+            print(f"{rtype:<30} {count:<10}")
+
+    print_section_footer(colors)
+
+
+def show_inspect_pvc(inspect_root, options, colors):
+    """Show PersistentVolumeClaims from inspect data"""
+    print_section_header("PersistentVolumeClaims", colors)
+
+    namespaces = get_inspect_namespaces(inspect_root)
+    paths = InspectPaths(inspect_root)
+
+    # Filter by namespace if specified
+    if hasattr(options, 'namespace') and options.namespace:
+        namespaces = [ns for ns in namespaces if ns == options.namespace]
+
+    all_pvcs = []
+
+    # Load PVCs from all namespaces
+    for ns in namespaces:
+        pvc_file = paths.namespace_file(ns, "core", "persistentvolumeclaims.yaml")
+        pvcs = load_yaml_resources(pvc_file)
+        for pvc in pvcs:
+            if pvc.get('kind') == 'PersistentVolumeClaim':
+                pvc['_namespace'] = ns
+                all_pvcs.append(pvc)
+
+    # Filter by pattern if specified
+    if hasattr(options, 'filter') and options.filter:
+        filter_lower = options.filter.lower()
+        all_pvcs = [p for p in all_pvcs if
+                   filter_lower in p.get('metadata', {}).get('name', '').lower() or
+                   filter_lower in p.get('_namespace', '').lower()]
+
+    if not all_pvcs:
+        print(f"{colors.yellow}No PersistentVolumeClaims found{colors.reset}")
+        print_section_footer(colors)
+        return
+
+    print(f"{colors.cyan}Total PVCs: {len(all_pvcs)}{colors.reset}\n")
+
+    # Count by status
+    status_counts = {}
+    for pvc in all_pvcs:
+        phase = pvc.get('status', {}).get('phase', 'Unknown')
+        status_counts[phase] = status_counts.get(phase, 0) + 1
+
+    print(f"{colors.cyan}PVCs by Status:{colors.reset}")
+    for phase in sorted(status_counts.keys()):
+        count = status_counts[phase]
+        color = colors.green if phase == 'Bound' else colors.yellow
+        print(f"  {color}{phase:15s}{colors.reset}: {count:4d}")
+
+    # Show detailed list
+    print(f"\n{colors.cyan}{'Name':<40} {'Namespace':<20} {'Status':<10} {'Capacity':<10}{colors.reset}")
+    print("-" * 90)
+
+    limit = options.limit if hasattr(options, 'limit') and options.limit else len(all_pvcs)
+    count = 0
+
+    for pvc in all_pvcs:
+        if count >= limit:
+            remaining = len(all_pvcs) - count
+            print(f"\n{colors.yellow}... and {remaining} more PVCs{colors.reset}")
+            break
+
+        name = pvc.get('metadata', {}).get('name', 'Unknown')[:39]
+        namespace = pvc.get('_namespace', 'Unknown')[:19]
+        phase = pvc.get('status', {}).get('phase', 'Unknown')
+        capacity = pvc.get('status', {}).get('capacity', {}).get('storage', 'Unknown')
+
+        phase_color = colors.green if phase == 'Bound' else colors.yellow
+
+        print(f"{name:<40} {namespace:<20} {phase_color}{phase:<10}{colors.reset} {capacity:<10}")
+        count += 1
+
+    print_section_footer(colors)
+
+
 def print_help_msg(op, no_pipe):
     """Print help message following isos pattern"""
     cmd_examples = '''
@@ -792,6 +1505,46 @@ Examples:
 
     # Show ETCD cluster health
     > ocpinfo --etcd
+
+    # Inspect data features (requires inspect archive)
+    # List inspected namespaces
+    > ocpinfo --namespaces
+
+    # Show events (warnings and errors)
+    > ocpinfo --events
+
+    # Show only warnings
+    > ocpinfo --events --type Warning
+
+    # Show events in specific namespace
+    > ocpinfo --events -n elastic-monitoring
+
+    # Show pods from inspect data
+    > ocpinfo --inspect-pods
+
+    # Show pods with details
+    > ocpinfo --inspect-pods -d
+
+    # Filter pods by namespace
+    > ocpinfo --inspect-pods -n elastic-monitoring
+
+    # List available pod logs
+    > ocpinfo --logs
+
+    # List logs for specific pod
+    > ocpinfo --logs -f stack-monitoring
+
+    # Show deployments and statefulsets
+    > ocpinfo --deployments
+
+    # Show services and routes
+    > ocpinfo --services
+
+    # Show complete resource inventory
+    > ocpinfo --resources
+
+    # Show PersistentVolumeClaims
+    > ocpinfo --pvc
     '''
 
     if no_pipe == False:
@@ -854,6 +1607,34 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
     op.add_option("--etcd", dest="etcd", default=False,
                   action="store_true",
                   help="Show ETCD cluster health (must-gather)")
+    # Inspect data options
+    op.add_option("--namespaces", dest="namespaces", default=False,
+                  action="store_true",
+                  help="List namespaces (inspect)")
+    op.add_option("--events", dest="events", default=False,
+                  action="store_true",
+                  help="Show events (inspect)")
+    op.add_option("--inspect-pods", dest="inspect_pods", default=False,
+                  action="store_true",
+                  help="Show pods from inspect data (inspect)")
+    op.add_option("--logs", dest="logs", default=False,
+                  action="store_true",
+                  help="List available pod logs (inspect)")
+    op.add_option("--deployments", dest="deployments", default=False,
+                  action="store_true",
+                  help="Show deployments and statefulsets (inspect)")
+    op.add_option("--services", dest="services", default=False,
+                  action="store_true",
+                  help="Show services and routes (inspect)")
+    op.add_option("--resources", dest="resources", default=False,
+                  action="store_true",
+                  help="Show resource inventory (inspect)")
+    op.add_option("--pvc", dest="pvc", default=False,
+                  action="store_true",
+                  help="Show PersistentVolumeClaims (inspect)")
+    op.add_option("--type", dest="event_type", default="",
+                  type="string", action="store",
+                  help="Filter events by type (Warning, Normal) - for --events")
 
     try:
         (o, args) = op.parse_args(input_str.split())
@@ -872,8 +1653,10 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
 
     # Check what data is available
     must_gather_root = sources.get('must-gather-root')
+    inspect_root = sources.get('inspect-root')
     sosreport_available = sources.get('sosreport', False)
     must_gather_available = sources.get('must-gather', False)
+    inspect_available = sources.get('inspect', False)
 
     # Handle must-gather specific options
     if o.show_version or o.operators or o.etcd:
@@ -924,6 +1707,94 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
 
         if o.etcd:
             show_etcd_health(must_gather_root, colors)
+
+        return ""
+
+    # Handle inspect options
+    if (o.namespaces or o.events or o.inspect_pods or o.logs or
+        o.deployments or o.services or o.resources or o.pvc):
+        if not inspect_available:
+            # Determine what's available and provide helpful message
+            print(f"{colors.red}Error: Inspect options not available{colors.reset}")
+            print()
+
+            # Build list of requested options
+            requested = []
+            if o.namespaces:
+                requested.append("--namespaces")
+            if o.events:
+                requested.append("--events")
+            if o.inspect_pods:
+                requested.append("--inspect-pods")
+            if o.logs:
+                requested.append("--logs")
+            if o.deployments:
+                requested.append("--deployments")
+            if o.services:
+                requested.append("--services")
+            if o.resources:
+                requested.append("--resources")
+            if o.pvc:
+                requested.append("--pvc")
+
+            print(f"Requested option(s): {', '.join(requested)}")
+            print(f"{colors.yellow}These options require an inspect archive{colors.reset}")
+            print()
+
+            if sosreport_available:
+                # In sosreport - show available options
+                print(f"{colors.cyan}You are in a sosreport directory:{colors.reset}")
+                print(f"  {base_path}")
+                print()
+                print(f"{colors.green}Available sosreport options:{colors.reset}")
+                print("  ocpinfo              - Show cluster overview")
+                print("  ocpinfo -p           - Show pods")
+                print("  ocpinfo -c           - Show containers")
+                print("  ocpinfo -i           - Show images")
+                print("  ocpinfo -s           - Show resource stats")
+                print("  ocpinfo -a           - Show all information")
+            elif must_gather_available:
+                # In must-gather - show available options
+                print(f"{colors.cyan}You are in a must-gather directory:{colors.reset}")
+                print(f"  {base_path}")
+                print()
+                print(f"{colors.green}Available must-gather options:{colors.reset}")
+                print("  ocpinfo              - Show cluster version")
+                print("  ocpinfo --version    - Show cluster version")
+                print("  ocpinfo --operators  - Show cluster operators status")
+                print("  ocpinfo --etcd       - Show ETCD cluster health")
+            else:
+                # Not in any OCP directory
+                print(f"{colors.yellow}Current directory:{colors.reset} {base_path}")
+                print()
+                print("Please run this command from within an inspect archive directory")
+
+            return ""
+
+        # Show requested inspect information
+        if o.namespaces:
+            show_inspect_namespaces(inspect_root, colors)
+
+        if o.events:
+            show_inspect_events(inspect_root, o, colors)
+
+        if o.inspect_pods:
+            show_inspect_pods(inspect_root, o, colors)
+
+        if o.logs:
+            show_inspect_logs(inspect_root, o, colors)
+
+        if o.deployments:
+            show_inspect_deployments(inspect_root, o, colors)
+
+        if o.services:
+            show_inspect_services(inspect_root, o, colors)
+
+        if o.resources:
+            show_inspect_resources(inspect_root, o, colors)
+
+        if o.pvc:
+            show_inspect_pvc(inspect_root, o, colors)
 
         return ""
 
@@ -996,9 +1867,12 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
         return ""
 
     # No specific option - show cluster overview
-    # Prefer must-gather if available, otherwise sosreport
+    # Prefer must-gather if available, then inspect, then sosreport
     if must_gather_available:
         show_cluster_version(must_gather_root, colors)
+    elif inspect_available:
+        # For inspect, show namespaces as default overview
+        show_inspect_namespaces(inspect_root, colors)
     elif sosreport_available:
         show_cluster_info(base_path, colors)
     else:
@@ -1006,11 +1880,12 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
         print()
         print(f"{colors.yellow}Current directory:{colors.reset} {base_path}")
         print()
-        print("This command requires either:")
+        print("This command requires one of:")
         print(f"  {colors.cyan}• A sosreport directory{colors.reset} (contains 'sos_commands/' subdirectory)")
         print(f"  {colors.cyan}• A must-gather directory{colors.reset} (contains 'quay-io-*' or 'must-gather*' subdirectory)")
+        print(f"  {colors.cyan}• An inspect directory{colors.reset} (contains 'namespaces/' subdirectory)")
         print()
-        print("Please navigate to a sosreport or must-gather directory and try again.")
+        print("Please navigate to a valid OCP data directory and try again.")
 
     return ""
 
