@@ -1958,8 +1958,8 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
     must_gather_root = sources.get('must-gather-root')
     inspect_root = sources.get('inspect-root')
 
-    # Handle must-gather specific options
-    if o.show_version or o.operators or o.etcd:
+    # Handle must-gather specific options (use getattr for safety)
+    if getattr(o, 'show_version', False) or getattr(o, 'operators', False) or getattr(o, 'etcd', False):
         if not must_gather_available:
             # Determine what's available and provide helpful message
             print(f"{colors.red}Error: Must-gather options not available{colors.reset}")
@@ -1967,11 +1967,11 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
 
             # Build list of requested options
             requested = []
-            if o.show_version:
+            if getattr(o, 'show_version', False):
                 requested.append("--version")
-            if o.operators:
+            if getattr(o, 'operators', False):
                 requested.append("--operators")
-            if o.etcd:
+            if getattr(o, 'etcd', False):
                 requested.append("--etcd")
 
             print(f"Requested option(s): {', '.join(requested)}")
@@ -1999,20 +1999,22 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
             return ""
 
         # Show requested must-gather information
-        if o.show_version:
+        if getattr(o, 'show_version', False):
             show_cluster_version(must_gather_root, colors)
 
-        if o.operators:
+        if getattr(o, 'operators', False):
             show_cluster_operators(must_gather_root, o, colors)
 
-        if o.etcd:
+        if getattr(o, 'etcd', False):
             show_etcd_health(must_gather_root, colors)
 
         return ""
 
-    # Handle inspect options
-    if (o.namespaces or o.events or o.inspect_pods or o.logs or
-        o.deployments or o.services or o.resources or o.pvc):
+    # Handle inspect options (use getattr for safety)
+    if (getattr(o, 'namespaces', False) or getattr(o, 'events', False) or
+        getattr(o, 'inspect_pods', False) or getattr(o, 'logs', False) or
+        getattr(o, 'deployments', False) or getattr(o, 'services', False) or
+        getattr(o, 'resources', False) or getattr(o, 'pvc', False)):
         if not inspect_available:
             # Determine what's available and provide helpful message
             print(f"{colors.red}Error: Inspect options not available{colors.reset}")
@@ -2020,21 +2022,21 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
 
             # Build list of requested options
             requested = []
-            if o.namespaces:
+            if getattr(o, 'namespaces', False):
                 requested.append("--namespaces")
-            if o.events:
+            if getattr(o, 'events', False):
                 requested.append("--events")
-            if o.inspect_pods:
+            if getattr(o, 'inspect_pods', False):
                 requested.append("--inspect-pods")
-            if o.logs:
+            if getattr(o, 'logs', False):
                 requested.append("--logs")
-            if o.deployments:
+            if getattr(o, 'deployments', False):
                 requested.append("--deployments")
-            if o.services:
+            if getattr(o, 'services', False):
                 requested.append("--services")
-            if o.resources:
+            if getattr(o, 'resources', False):
                 requested.append("--resources")
-            if o.pvc:
+            if getattr(o, 'pvc', False):
                 requested.append("--pvc")
 
             print(f"Requested option(s): {', '.join(requested)}")
@@ -2072,34 +2074,35 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
             return ""
 
         # Show requested inspect information
-        if o.namespaces:
+        if getattr(o, 'namespaces', False):
             show_inspect_namespaces(inspect_root, colors)
 
-        if o.events:
+        if getattr(o, 'events', False):
             show_inspect_events(inspect_root, o, colors)
 
-        if o.inspect_pods:
+        if getattr(o, 'inspect_pods', False):
             show_inspect_pods(inspect_root, o, colors)
 
-        if o.logs:
+        if getattr(o, 'logs', False):
             show_inspect_logs(inspect_root, o, colors)
 
-        if o.deployments:
+        if getattr(o, 'deployments', False):
             show_inspect_deployments(inspect_root, o, colors)
 
-        if o.services:
+        if getattr(o, 'services', False):
             show_inspect_services(inspect_root, o, colors)
 
-        if o.resources:
+        if getattr(o, 'resources', False):
             show_inspect_resources(inspect_root, o, colors)
 
-        if o.pvc:
+        if getattr(o, 'pvc', False):
             show_inspect_pvc(inspect_root, o, colors)
 
         return ""
 
-    # Handle sosreport options (pods, containers, images, stats)
-    if o.pods or o.containers or o.images or o.stats or o.all:
+    # Handle sosreport options (pods, containers, images, stats) - use getattr for safety
+    if (getattr(o, 'pods', False) or getattr(o, 'containers', False) or
+        getattr(o, 'images', False) or getattr(o, 'stats', False) or getattr(o, 'all', False)):
         if not sosreport_available:
             # Determine what's available and provide helpful message
             print(f"{colors.red}Error: Sosreport options not available{colors.reset}")
@@ -2107,15 +2110,15 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
 
             # Build list of requested options
             requested = []
-            if o.pods:
+            if getattr(o, 'pods', False):
                 requested.append("-p/--pods")
-            if o.containers:
+            if getattr(o, 'containers', False):
                 requested.append("-c/--containers")
-            if o.images:
+            if getattr(o, 'images', False):
                 requested.append("-i/--images")
-            if o.stats:
+            if getattr(o, 'stats', False):
                 requested.append("-s/--stats")
-            if o.all:
+            if getattr(o, 'all', False):
                 requested.append("-a/--all")
 
             print(f"Requested option(s): {', '.join(requested)}")
@@ -2143,7 +2146,7 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
         sosreport_path = base_path
 
         # Show all if requested
-        if o.all:
+        if getattr(o, 'all', False):
             show_cluster_info(sosreport_path, colors)
             show_pods_info(sosreport_path, o, colors)
             show_containers_info(sosreport_path, o, colors)
@@ -2152,16 +2155,16 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
             return ""
 
         # Show specific information
-        if o.pods:
+        if getattr(o, 'pods', False):
             show_pods_info(sosreport_path, o, colors)
 
-        if o.containers:
+        if getattr(o, 'containers', False):
             show_containers_info(sosreport_path, o, colors)
 
-        if o.images:
+        if getattr(o, 'images', False):
             show_images_info(sosreport_path, o, colors)
 
-        if o.stats:
+        if getattr(o, 'stats', False):
             show_resource_stats(sosreport_path, colors)
 
         return ""
