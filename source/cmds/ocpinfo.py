@@ -1076,7 +1076,17 @@ def show_inspect_pods(inspect_root, options, colors):
 
 
 def show_inspect_logs(inspect_root, options, colors):
-    """Show available pod logs from inspect data"""
+    """Show available pod logs from inspect data or display log content"""
+
+    # Check if user wants to view log content
+    show_content = hasattr(options, 'show_logs') and options.show_logs
+
+    if show_content:
+        # Show log content mode
+        show_inspect_log_content(inspect_root, options, colors)
+        return
+
+    # List available logs mode
     print_section_header("Available Pod Logs", colors)
 
     namespaces = get_inspect_namespaces(inspect_root)
@@ -1155,6 +1165,179 @@ def show_inspect_logs(inspect_root, options, colors):
         print(f"{colors.yellow}No log files found{colors.reset}")
     else:
         print(f"{colors.cyan}Total log files: {total_logs}{colors.reset}")
+        print()
+        print(f"{colors.cyan}Tip: Use --show to view log content{colors.reset}")
+        print(f"  Example: ocpinfo --logs -f <pod-name> --show")
+
+    print_section_footer(colors)
+
+
+def show_inspect_log_content(inspect_root, options, colors):
+    """Display actual log content for a pod"""
+
+    namespaces = get_inspect_namespaces(inspect_root)
+    paths = InspectPaths(inspect_root)
+
+    # Filter by namespace if specified
+    if hasattr(options, 'namespace') and options.namespace:
+        namespaces = [ns for ns in namespaces if ns == options.namespace]
+
+    # Pod filter is required for --show
+    pod_filter = options.filter.lower() if hasattr(options, 'filter') and options.filter else None
+
+    if not pod_filter:
+        print(f"{colors.red}Error: Pod name filter required with --show{colors.reset}")
+        print()
+        print(f"{colors.yellow}Usage:{colors.reset}")
+        print(f"  ocpinfo --logs -f <pod-name> --show")
+        print(f"  ocpinfo --logs -f <pod-name> --show -c <container>")
+        print(f"  ocpinfo --logs -f <pod-name> --show --tail 200")
+        print(f"  ocpinfo --logs -f <pod-name> --show --previous")
+        return
+
+    # Find matching pods
+    matching_pods = []
+
+    for ns in namespaces:
+        pods_dir = paths.pods_dir(ns)
+        if not os.path.isdir(pods_dir):
+            continue
+
+        try:
+            pod_names = os.listdir(pods_dir)
+        except (IOError, OSError):
+            continue
+
+        # Filter pod names
+        for pod_name in pod_names:
+            if pod_filter in pod_name.lower():
+                matching_pods.append((ns, pod_name))
+
+    if not matching_pods:
+        print(f"{colors.red}Error: No pods found matching '{options.filter}'{colors.reset}")
+        return
+
+    # If multiple pods match and no exact match, list them
+    exact_matches = [p for p in matching_pods if p[1].lower() == pod_filter]
+    if len(matching_pods) > 1 and not exact_matches:
+        print(f"{colors.yellow}Multiple pods match '{options.filter}':{colors.reset}")
+        print()
+        for ns, pod_name in matching_pods:
+            print(f"  - {pod_name} (ns: {ns})")
+        print()
+        print(f"{colors.cyan}Please be more specific or use exact pod name{colors.reset}")
+        return
+
+    # Use exact match if found, otherwise use the single match
+    if exact_matches:
+        ns, pod_name = exact_matches[0]
+    else:
+        ns, pod_name = matching_pods[0]
+
+    # Get container filter if specified
+    container_filter = options.container.lower() if hasattr(options, 'container') and options.container else None
+
+    # Determine log file to show
+    log_filename = "previous.log" if hasattr(options, 'previous_log') and options.previous_log else "current.log"
+
+    # Get tail lines
+    tail_lines = options.tail_lines if hasattr(options, 'tail_lines') and options.tail_lines else 100
+
+    # Find containers for this pod
+    pod_dir = os.path.join(paths.pods_dir(ns), pod_name)
+    try:
+        containers = os.listdir(pod_dir)
+    except (IOError, OSError):
+        print(f"{colors.red}Error: Cannot read pod directory{colors.reset}")
+        return
+
+    # Filter containers if specified
+    if container_filter:
+        containers = [c for c in containers if container_filter in c.lower()]
+
+    if not containers:
+        if container_filter:
+            print(f"{colors.red}Error: No container found matching '{options.container}'{colors.reset}")
+        else:
+            print(f"{colors.red}Error: No containers found in pod{colors.reset}")
+        return
+
+    # If multiple containers and no filter, list them
+    if len(containers) > 1 and not container_filter:
+        print(f"{colors.yellow}Multiple containers in pod '{pod_name}':{colors.reset}")
+        print()
+        for container in sorted(containers):
+            logs_dir = paths.pod_logs_dir(ns, pod_name, container)
+            if os.path.isdir(logs_dir):
+                log_path = os.path.join(logs_dir, log_filename)
+                size = os.path.getsize(log_path) if os.path.exists(log_path) else 0
+                print(f"  - {container} ({log_filename}: {format_bytes(size, precision=1)})")
+        print()
+        print(f"{colors.cyan}Specify container with -c option:{colors.reset}")
+        print(f"  ocpinfo --logs -f {pod_name} --show -c <container-name>")
+        return
+
+    # Show log content for the container
+    container = containers[0]
+    logs_dir = paths.pod_logs_dir(ns, pod_name, container)
+    log_path = os.path.join(logs_dir, log_filename)
+
+    if not os.path.exists(log_path):
+        print(f"{colors.red}Error: Log file not found: {log_filename}{colors.reset}")
+        print(f"  Pod: {pod_name}")
+        print(f"  Container: {container}")
+        return
+
+    log_size = os.path.getsize(log_path)
+
+    if log_size == 0:
+        print(f"{colors.yellow}Log file is empty{colors.reset}")
+        print(f"  Pod: {pod_name}")
+        print(f"  Namespace: {ns}")
+        print(f"  Container: {container}")
+        print(f"  File: {log_filename}")
+        return
+
+    # Display log header
+    print_section_header(f"Pod Log: {pod_name}", colors)
+    print(f"{colors.cyan}Namespace:{colors.reset} {ns}")
+    print(f"{colors.cyan}Container:{colors.reset} {container}")
+    print(f"{colors.cyan}Log File:{colors.reset} {log_filename}")
+    print(f"{colors.cyan}Size:{colors.reset} {format_bytes(log_size, precision=1)}")
+    print(f"{colors.cyan}Showing:{colors.reset} Last {tail_lines} lines")
+    print(f"{colors.blue}{'=' * 80}{colors.reset}\n")
+
+    # Read and display log content
+    try:
+        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+
+        # Get last N lines
+        if tail_lines > 0 and len(lines) > tail_lines:
+            display_lines = lines[-tail_lines:]
+            skipped = len(lines) - tail_lines
+            print(f"{colors.yellow}... (skipped {skipped} earlier lines) ...{colors.reset}\n")
+        else:
+            display_lines = lines
+
+        # Display lines
+        for line in display_lines:
+            line = line.rstrip('\n')
+
+            # Color code based on log level
+            line_lower = line.lower()
+            if 'error' in line_lower or 'fail' in line_lower or 'fatal' in line_lower:
+                print(f"{colors.red}{line}{colors.reset}")
+            elif 'warn' in line_lower:
+                print(f"{colors.yellow}{line}{colors.reset}")
+            elif 'info' in line_lower:
+                print(f"{colors.cyan}{line}{colors.reset}")
+            else:
+                print(line)
+
+    except (IOError, OSError) as e:
+        print(f"{colors.red}Error reading log file: {e}{colors.reset}")
+        return
 
     print_section_footer(colors)
 
@@ -1534,6 +1717,21 @@ Examples:
     # List logs for specific pod
     > ocpinfo --logs -f stack-monitoring
 
+    # View log content for a pod
+    > ocpinfo --logs -f stack-monitoring-metric-0 --show
+
+    # View log content for specific container
+    > ocpinfo --logs -f stack-monitoring-es-default-0 --show -c elasticsearch
+
+    # View last 200 lines of log
+    > ocpinfo --logs -f stack-monitoring-kb --show --tail 200
+
+    # View previous container log (from restart)
+    > ocpinfo --logs -f stack-monitoring-es-default-1 --show --previous
+
+    # View previous log for specific container
+    > ocpinfo --logs -f stack-monitoring-es-default-1 --show -c elasticsearch --previous
+
     # Show deployments and statefulsets
     > ocpinfo --deployments
 
@@ -1635,6 +1833,18 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
     op.add_option("--type", dest="event_type", default="",
                   type="string", action="store",
                   help="Filter events by type (Warning, Normal) - for --events")
+    op.add_option("--show", dest="show_logs", default=False,
+                  action="store_true",
+                  help="Show log content (use with --logs)")
+    op.add_option("--tail", dest="tail_lines", default=100,
+                  type="int", action="store",
+                  help="Number of lines to show from end of log (default: 100)")
+    op.add_option("--previous", dest="previous_log", default=False,
+                  action="store_true",
+                  help="Show previous container log instead of current")
+    op.add_option("-c", "--container", dest="container", default="",
+                  type="string", action="store",
+                  help="Specific container name (use with --logs --show)")
 
     try:
         (o, args) = op.parse_args(input_str.split())
