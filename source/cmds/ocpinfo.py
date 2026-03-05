@@ -427,11 +427,9 @@ def show_etcd_health(must_gather_root, colors):
     print_section_footer(colors)
 
 
-def show_cluster_info(sosreport_path):
+def show_cluster_info(sosreport_path, colors):
     """Show OCP cluster overview information"""
-    print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}")
-    print(f"{COLOR_BLUE}OpenShift Cluster Information{COLOR_RESET}")
-    print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
+    print_section_header("OpenShift Cluster Information", colors)
 
     # Read kubelet journal for version info
     kubelet_journal = os.path.join(sosreport_path, "sos_commands/openshift/journalctl_--no-pager_--unit_kubelet")
@@ -447,7 +445,7 @@ def show_cluster_info(sosreport_path):
     if os.path.exists(crio_info_path):
         content = read_file(crio_info_path)
         if content:
-            print(f"\n{COLOR_CYAN}Container Runtime:{COLOR_RESET}")
+            print(f"\n{colors.cyan}Container Runtime:{colors.reset}")
             for line in content.splitlines()[:20]:
                 if '"version"' in line.lower() or '"runtimeVersion"' in line.lower():
                     print(f"  {line.strip()}")
@@ -457,7 +455,7 @@ def show_cluster_info(sosreport_path):
     if os.path.exists(crio_version_path):
         content = read_file(crio_version_path)
         if content:
-            print(f"\n{COLOR_CYAN}CRI-O Version:{COLOR_RESET}")
+            print(f"\n{colors.cyan}CRI-O Version:{colors.reset}")
             for line in content.splitlines():
                 print(f"  {line.strip()}")
 
@@ -465,31 +463,31 @@ def show_cluster_info(sosreport_path):
     hostname_path = os.path.join(sosreport_path, "hostname")
     if os.path.exists(hostname_path):
         hostname = read_file(hostname_path).strip()
-        print(f"\n{COLOR_CYAN}Node Hostname:{COLOR_RESET} {hostname}")
+        print(f"\n{colors.cyan}Node Hostname:{colors.reset} {hostname}")
 
     # Read RHCOS version
     rhcos_path = os.path.join(sosreport_path, "sos_commands/rhcos/rpm-ostree_status")
     if os.path.exists(rhcos_path):
         lines = read_lines(rhcos_path)
-        print(f"\n{COLOR_CYAN}RHCOS Version:{COLOR_RESET}")
+        print(f"\n{colors.cyan}RHCOS Version:{colors.reset}")
         for line in lines[:10]:
             if "Version:" in line or "Commit:" in line:
                 print(f"  {line.strip()}")
 
-    print(f"\n{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
+    print_section_footer(colors)
 
 
-def show_pods_info(sosreport_path, options):
+def show_pods_info(sosreport_path, options, colors):
     """Show pod information"""
     crictl_pods_path = os.path.join(sosreport_path, "sos_commands/crio/crictl_pods")
 
     if not os.path.exists(crictl_pods_path):
-        print(f"{COLOR_RED}Error: crictl pods output not found{COLOR_RESET}")
+        print(f"{colors.red}Error: crictl pods output not found{colors.reset}")
         return
 
     lines = read_lines(crictl_pods_path)
     if not lines:
-        print(f"{COLOR_RED}Error: crictl pods output is empty{COLOR_RESET}")
+        print(f"{colors.red}Error: crictl pods output is empty{colors.reset}")
         return
 
     # Parse header
@@ -508,9 +506,9 @@ def show_pods_info(sosreport_path, options):
     if hasattr(options, 'filter') and options.filter:
         data_lines = [line for line in data_lines if options.filter.lower() in line.lower()]
 
-    print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}")
-    print(f"{COLOR_BLUE}Pod Information ({len(data_lines)} pods){COLOR_RESET}")
-    print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
+    print(f"{colors.blue}{'=' * 80}{colors.reset}")
+    print(f"{colors.blue}Pod Information ({len(data_lines)} pods){colors.reset}")
+    print(f"{colors.blue}{'=' * 80}{colors.reset}\n")
 
     # Count by state and namespace
     # crictl pods format: POD_ID CREATED(variable) STATE NAME NAMESPACE ATTEMPT RUNTIME
@@ -538,46 +536,46 @@ def show_pods_info(sosreport_path, options):
 
     # Show summary
     if not (hasattr(options, 'detail') and options.detail):
-        print(f"{COLOR_CYAN}Pods by State:{COLOR_RESET}")
+        print(f"{colors.cyan}Pods by State:{colors.reset}")
         for state in sorted(state_counts.keys()):
             count = state_counts[state]
-            color = COLOR_GREEN if state == "Ready" else COLOR_YELLOW if state == "NotReady" else COLOR_RED
-            print(f"  {color}{state:15s}{COLOR_RESET}: {count:4d}")
+            color = colors.green if state == PodStates.READY else colors.yellow if state == PodStates.NOT_READY else colors.red
+            print(f"  {color}{state:15s}{colors.reset}: {count:4d}")
 
-        print(f"\n{COLOR_CYAN}Pods by Namespace (top 10):{COLOR_RESET}")
+        print(f"\n{colors.cyan}Pods by Namespace (top 10):{colors.reset}")
         for namespace, count in sorted(namespace_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
             print(f"  {namespace:40s}: {count:4d}")
 
     # Show detailed list if requested
     if hasattr(options, 'detail') and options.detail:
-        print(f"\n{COLOR_CYAN}{header}{COLOR_RESET}")
+        print(f"\n{colors.cyan}{header}{colors.reset}")
         print("-" * 80)
 
         count = 0
         for line in data_lines:
             if hasattr(options, 'limit') and options.limit and count >= options.limit:
                 remaining = len(data_lines) - count
-                print(f"\n{COLOR_YELLOW}... and {remaining} more pods{COLOR_RESET}")
+                print(f"\n{colors.yellow}... and {remaining} more pods{colors.reset}")
                 break
 
             # Color based on state
             match = re.search(r'\s+(Ready|NotReady|Running|Exited|Created|Paused)\s+', line)
             if match:
                 state = match.group(1)
-                if state == "Ready" or state == "Running":
-                    print(f"{COLOR_GREEN}{line}{COLOR_RESET}")
-                elif state == "NotReady":
-                    print(f"{COLOR_YELLOW}{line}{COLOR_RESET}")
+                if state == PodStates.READY or state == PodStates.RUNNING:
+                    print(f"{colors.green}{line}{colors.reset}")
+                elif state == PodStates.NOT_READY:
+                    print(f"{colors.yellow}{line}{colors.reset}")
                 else:
                     print(line)
             else:
                 print(line)
             count += 1
 
-    print(f"\n{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
+    print(f"\n{colors.blue}{'=' * 80}{colors.reset}\n")
 
 
-def show_containers_info(sosreport_path, options):
+def show_containers_info(sosreport_path, options, colors):
     """Show container information"""
     crictl_ps_path = os.path.join(sosreport_path, "sos_commands/crio/crictl_ps_-a")
 
@@ -585,12 +583,12 @@ def show_containers_info(sosreport_path, options):
         # Try without -a flag
         crictl_ps_path = os.path.join(sosreport_path, "sos_commands/crio/crictl_ps")
         if not os.path.exists(crictl_ps_path):
-            print(f"{COLOR_RED}Error: crictl ps output not found{COLOR_RESET}")
+            print(f"{colors.red}Error: crictl ps output not found{colors.reset}")
             return
 
     lines = read_lines(crictl_ps_path)
     if not lines:
-        print(f"{COLOR_RED}Error: crictl ps output is empty{COLOR_RESET}")
+        print(f"{colors.red}Error: crictl ps output is empty{colors.reset}")
         return
 
     header = lines[0] if lines else ""
@@ -600,9 +598,9 @@ def show_containers_info(sosreport_path, options):
     if hasattr(options, 'filter') and options.filter:
         data_lines = [line for line in data_lines if options.filter.lower() in line.lower()]
 
-    print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}")
-    print(f"{COLOR_BLUE}Container Information ({len(data_lines)} containers){COLOR_RESET}")
-    print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
+    print(f"{colors.blue}{'=' * 80}{colors.reset}")
+    print(f"{colors.blue}Container Information ({len(data_lines)} containers){colors.reset}")
+    print(f"{colors.blue}{'=' * 80}{colors.reset}\n")
 
     # Count by state
     # crictl ps format: CONTAINER IMAGE CREATED STATE NAME ...
@@ -615,50 +613,50 @@ def show_containers_info(sosreport_path, options):
             state = match.group(1)
             state_counts[state] = state_counts.get(state, 0) + 1
 
-    print(f"{COLOR_CYAN}Containers by State:{COLOR_RESET}")
+    print(f"{colors.cyan}Containers by State:{colors.reset}")
     for state in sorted(state_counts.keys()):
         count = state_counts[state]
-        color = COLOR_GREEN if state == "Running" else COLOR_YELLOW if state == "Exited" else COLOR_RED
-        print(f"  {color}{state:15s}{COLOR_RESET}: {count:4d}")
+        color = colors.green if state == PodStates.RUNNING else colors.yellow if state == PodStates.EXITED else colors.red
+        print(f"  {color}{state:15s}{colors.reset}: {count:4d}")
 
     # Show detailed list if requested
     if hasattr(options, 'detail') and options.detail:
-        print(f"\n{COLOR_CYAN}{header}{COLOR_RESET}")
+        print(f"\n{colors.cyan}{header}{colors.reset}")
         print("-" * 80)
 
         count = 0
         for line in data_lines:
             if hasattr(options, 'limit') and options.limit and count >= options.limit:
                 remaining = len(data_lines) - count
-                print(f"\n{COLOR_YELLOW}... and {remaining} more containers{COLOR_RESET}")
+                print(f"\n{colors.yellow}... and {remaining} more containers{colors.reset}")
                 break
 
             # Color based on state
             match = re.search(r'\s+(Running|Exited|Created|Paused|Unknown)\s+', line)
             if match:
                 state = match.group(1)
-                if state == "Running":
-                    print(f"{COLOR_GREEN}{line}{COLOR_RESET}")
+                if state == PodStates.RUNNING:
+                    print(f"{colors.green}{line}{colors.reset}")
                 else:
-                    print(f"{COLOR_YELLOW}{line}{COLOR_RESET}")
+                    print(f"{colors.yellow}{line}{colors.reset}")
             else:
                 print(line)
             count += 1
 
-    print(f"\n{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
+    print(f"\n{colors.blue}{'=' * 80}{colors.reset}\n")
 
 
-def show_images_info(sosreport_path, options):
+def show_images_info(sosreport_path, options, colors):
     """Show container images information"""
     crictl_images_path = os.path.join(sosreport_path, "sos_commands/crio/crictl_images")
 
     if not os.path.exists(crictl_images_path):
-        print(f"{COLOR_RED}Error: crictl images output not found{COLOR_RESET}")
+        print(f"{colors.red}Error: crictl images output not found{colors.reset}")
         return
 
     lines = read_lines(crictl_images_path)
     if not lines:
-        print(f"{COLOR_RED}Error: crictl images output is empty{COLOR_RESET}")
+        print(f"{colors.red}Error: crictl images output is empty{colors.reset}")
         return
 
     header = lines[0] if lines else ""
@@ -668,9 +666,9 @@ def show_images_info(sosreport_path, options):
     if hasattr(options, 'filter') and options.filter:
         data_lines = [line for line in data_lines if options.filter.lower() in line.lower()]
 
-    print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}")
-    print(f"{COLOR_BLUE}Container Images ({len(data_lines)} images){COLOR_RESET}")
-    print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
+    print(f"{colors.blue}{'=' * 80}{colors.reset}")
+    print(f"{colors.blue}Container Images ({len(data_lines)} images){colors.reset}")
+    print(f"{colors.blue}{'=' * 80}{colors.reset}\n")
 
     # Calculate total size
     total_size = 0
@@ -689,50 +687,48 @@ def show_images_info(sosreport_path, options):
                 elif "KB" in size_str:
                     size_val = float(size_str.replace("KB", ""))
                     total_size += size_val * 1024
-            except:
+            except (ValueError, AttributeError):
                 pass
 
-    print(f"{COLOR_CYAN}Total Images Size:{COLOR_RESET} {get_size_str(total_size)}")
+    print(f"{colors.cyan}Total Images Size:{colors.reset} {format_bytes(total_size, precision=1)}")
 
     if options.detail:
-        print(f"\n{COLOR_CYAN}{header}{COLOR_RESET}")
+        print(f"\n{colors.cyan}{header}{colors.reset}")
         print("-" * 80)
 
         count = 0
         for line in data_lines:
             if options.limit and count >= options.limit:
                 remaining = len(data_lines) - count
-                print(f"\n{COLOR_YELLOW}... and {remaining} more images{COLOR_RESET}")
+                print(f"\n{colors.yellow}... and {remaining} more images{colors.reset}")
                 break
             print(line)
             count += 1
 
-    print(f"\n{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
+    print(f"\n{colors.blue}{'=' * 80}{colors.reset}\n")
 
 
-def show_resource_stats(sosreport_path):
+def show_resource_stats(sosreport_path, colors):
     """Show container resource statistics"""
     crictl_stats_path = os.path.join(sosreport_path, "sos_commands/crio/crictl_stats")
 
     if not os.path.exists(crictl_stats_path):
-        print(f"{COLOR_YELLOW}Warning: crictl stats output not found{COLOR_RESET}")
+        print(f"{colors.yellow}Warning: crictl stats output not found{colors.reset}")
         return
 
     lines = read_lines(crictl_stats_path)
     if not lines:
         return
 
-    print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}")
-    print(f"{COLOR_BLUE}Container Resource Statistics{COLOR_RESET}")
-    print(f"{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
+    print_section_header("Container Resource Statistics", colors)
 
     # Show top consumers
-    print(f"{COLOR_CYAN}Top Resource Consumers:{COLOR_RESET}\n")
+    print(f"{colors.cyan}Top Resource Consumers:{colors.reset}\n")
 
     for line in lines[:20]:  # Show first 20 lines including header
         print(line)
 
-    print(f"\n{COLOR_BLUE}{'=' * 80}{COLOR_RESET}\n")
+    print_section_footer(colors)
 
 
 def print_help_msg(op, no_pipe):
@@ -911,25 +907,25 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
 
         # Show all if requested
         if o.all:
-            show_cluster_info(sosreport_path)
-            show_pods_info(sosreport_path, o)
-            show_containers_info(sosreport_path, o)
-            show_images_info(sosreport_path, o)
-            show_resource_stats(sosreport_path)
+            show_cluster_info(sosreport_path, colors)
+            show_pods_info(sosreport_path, o, colors)
+            show_containers_info(sosreport_path, o, colors)
+            show_images_info(sosreport_path, o, colors)
+            show_resource_stats(sosreport_path, colors)
             return ""
 
         # Show specific information
         if o.pods:
-            show_pods_info(sosreport_path, o)
+            show_pods_info(sosreport_path, o, colors)
 
         if o.containers:
-            show_containers_info(sosreport_path, o)
+            show_containers_info(sosreport_path, o, colors)
 
         if o.images:
-            show_images_info(sosreport_path, o)
+            show_images_info(sosreport_path, o, colors)
 
         if o.stats:
-            show_resource_stats(sosreport_path)
+            show_resource_stats(sosreport_path, colors)
 
         return ""
 
@@ -938,7 +934,7 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
     if must_gather_available:
         show_cluster_version(must_gather_root, colors)
     elif sosreport_available:
-        show_cluster_info(base_path)
+        show_cluster_info(base_path, colors)
     else:
         print(f"{colors.red}Error: No OCP data found{colors.reset}")
         print("Please run this command from within a sosreport or must-gather directory")
