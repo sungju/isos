@@ -36,6 +36,80 @@ def get_size_str(size):
     return size_str
 
 
+def get_module_usage_bar(module_usage_list, total_size, width=80):
+    """
+    Generate a single-line bar graph showing module usage distribution with colors
+
+    Args:
+        module_usage_list: List of (module_name, pages) tuples for top modules
+        total_size: Total allocated size across all modules
+        width: Total width of bar in characters
+
+    Returns:
+        Tuple of (bar_string, legend_string)
+    """
+    if total_size == 0 or len(module_usage_list) == 0:
+        return ("", "")
+
+    # Symbols for different modules (up to 10 different symbols)
+    symbols = ['█', '▓', '▒', '░', '▪', '▫', '◆', '◇', '●', '○']
+
+    # Colors for each module (10 distinct colors)
+    colors = [
+        ansicolor.RED,
+        ansicolor.GREEN,
+        ansicolor.YELLOW,
+        ansicolor.BLUE,
+        ansicolor.MAGENTA,
+        ansicolor.CYAN,
+        ansicolor.LIGHTRED,
+        ansicolor.LIGHTGREEN,
+        ansicolor.LIGHTYELLOW,
+        ansicolor.LIGHTCYAN,
+    ]
+
+    bar_content = ""
+    legend_lines = []
+    reset = ansicolor.get_color(ansicolor.RESET)
+
+    # Build the bar content (without boundaries)
+    bar_length = 0
+    for idx, (mod_name, pages) in enumerate(module_usage_list):
+        if idx >= 10:  # Only show top 10
+            break
+
+        # Calculate how many characters this module should occupy
+        percentage = (pages * 100.0 / total_size)
+        chars = int((pages / total_size) * width)
+        bar_length += chars
+
+        # Use different symbol and color for each module
+        symbol = symbols[idx % len(symbols)]
+        color = ansicolor.get_color(colors[idx % len(colors)])
+
+        bar_content += color + (symbol * chars) + reset
+
+        # Build legend entry with color
+        legend_lines.append("%s%s%s %s (%.1f%%)" % (color, symbol, reset, mod_name, percentage))
+
+    # Fill remaining space with a dimmed character to show unused portion
+    if bar_length < width:
+        dim_color = ansicolor.get_color(ansicolor.BLACK)
+        bar_content += dim_color + ("·" * (width - bar_length)) + reset
+
+    # Add boundaries to the bar
+    bar = "[" + bar_content + "]"
+
+    # Format legend in columns (2 columns for better readability)
+    legend = "\nLegend:\n"
+    for i in range(0, len(legend_lines), 2):
+        left = legend_lines[i]
+        right = legend_lines[i + 1] if i + 1 < len(legend_lines) else ""
+        legend += "  %-50s  %s\n" % (left, right)
+
+    return (bar, legend)
+
+
 alloc_by_dict = {}
 alloc_type_dict = {}
 alloc_module_dict = {}
@@ -288,6 +362,17 @@ def handle_a_file(filename, options):
                     screen.get_pipe_aware_line("\nTotal allocated by modules : %s (%s kB)" % \
                               (get_size_str(sum_size * page_size),
                                '{:,.0f}'.format(sum_size * page_size / 1024)))
+
+            # Add bar graph visualization for top 10 modules (always show largest)
+            # Sort in descending order regardless of display options
+            top_modules_sorted = sorted(alloc_module_dict.items(),
+                                       key=operator.itemgetter(1), reverse=True)
+            top_modules = top_modules_sorted[:min(10, len(top_modules_sorted))]
+            bar, legend = get_module_usage_bar(top_modules, sum_size, width=80)
+            if bar:
+                result_str = result_str + screen.get_pipe_aware_line("\nModule Usage Distribution:")
+                result_str = result_str + screen.get_pipe_aware_line(bar)
+                result_str = result_str + screen.get_pipe_aware_line(legend)
 
 
     if len(alloc_type_dict) > 0:
