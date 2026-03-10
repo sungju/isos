@@ -1871,6 +1871,281 @@ Examples)
 
 sos_home=""
 is_cmd_stopped = None
+
+
+def get_meminfo_dict():
+    """
+    Parse /proc/meminfo from sosreport into a dictionary.
+
+    Returns:
+        dict: Dictionary with meminfo keys and values in KB
+    """
+    global sos_home
+    meminfo = {}
+
+    try:
+        with open(sos_home + "/proc/meminfo") as f:
+            for line in f:
+                if ':' in line:
+                    parts = line.split(':')
+                    key = parts[0].strip()
+                    value_str = parts[1].strip().split()[0]
+                    try:
+                        meminfo[key] = int(value_str)
+                    except:
+                        pass
+    except:
+        pass
+
+    return meminfo
+
+
+def show_overall_memory(options, no_pipe):
+    """
+    Show overall memory usage breakdown with bar graphs
+    Similar to pycrashext's meminfo --overall
+    """
+    global sos_home
+
+    result_str = ""
+
+    # Check if there are any OOM events in the log first
+    # If found, automatically display OOM analysis (similar to pycrashext)
+    try:
+        file_list = get_file_list(sos_home + "/var/log/messages*", False)
+        file_list = file_list + get_file_list(sos_home + "/sos_commands/logs/journalctl*", False)
+
+        # Count total OOM events across all files
+        total_oom_events = 0
+        files_with_oom = []
+        for file in file_list:
+            if not os.path.isfile(file):
+                continue
+            try:
+                file_oom_count = 0
+                with open(file) as f:
+                    for line in f:
+                        if "invoked oom-killer:" in line:
+                            total_oom_events += 1
+                            file_oom_count += 1
+                if file_oom_count > 0:
+                    files_with_oom.append((file, file_oom_count))
+            except:
+                pass
+
+        if total_oom_events > 0:
+            # Create a copy of options for OOM display
+            import copy
+
+            # Process each file that has OOM events, showing one event per file
+            for file, count in files_with_oom:
+                # Display separator for this file
+                result_str += screen.get_pipe_aware_line("\n")
+                result_str += screen.get_pipe_aware_line("=" * 80)
+                if count > 1:
+                    result_str += screen.get_pipe_aware_line("OOM EVENTS DETECTED in %s - %d events found,\n showing first one" %
+                                                              (os.path.basename(file), count))
+                else:
+                    result_str += screen.get_pipe_aware_line("OOM EVENTS DETECTED in %s - Displaying OOM Analysis" %
+                                                              os.path.basename(file))
+                result_str += screen.get_pipe_aware_line("=" * 80)
+
+                # Create options for this file with count=1
+                file_options = copy.copy(options)
+                file_options.graph = True
+                file_options.oom_count = 1
+
+                args_list = ['meminfo', file]
+                result_str += show_oom_events(file_options, args_list, no_pipe)
+                result_str += screen.get_pipe_aware_line("")
+    except Exception as e:
+        # Silently ignore errors in OOM detection to not break --overall display
+        pass
+
+    # Header
+    result_str += screen.get_pipe_aware_line("\n" + "=" * 80)
+    result_str += screen.get_pipe_aware_line("OVERALL MEMORY USAGE BREAKDOWN")
+    result_str += screen.get_pipe_aware_line("=" * 80)
+
+    # Parse /proc/meminfo
+    meminfo = get_meminfo_dict()
+
+    # Storage for memory categories
+    mem_categories = {}
+
+    # Get total memory
+    total_mem_kb = meminfo.get('MemTotal', 0)
+
+    if total_mem_kb == 0:
+        result_str += screen.get_pipe_aware_line("\nError: Could not determine total system memory")
+        return result_str
+
+    # Extract memory categories from meminfo dict
+    if 'MemFree' in meminfo and meminfo['MemFree'] > 0:
+        mem_categories['Free'] = meminfo['MemFree']
+
+    if 'Buffers' in meminfo and meminfo['Buffers'] > 0:
+        mem_categories['Buffers'] = meminfo['Buffers']
+
+    if 'Cached' in meminfo and meminfo['Cached'] > 0:
+        mem_categories['Cached'] = meminfo['Cached']
+
+    if 'Slab' in meminfo and meminfo['Slab'] > 0:
+        mem_categories['Slab'] = meminfo['Slab']
+
+    # Calculate HugePages total allocated (not just used)
+    if 'HugePages_Total' in meminfo and 'Hugepagesize' in meminfo:
+        huge_total = meminfo['HugePages_Total']
+        huge_pagesize_kb = meminfo['Hugepagesize']
+        if huge_total > 0:
+            hugepages_total_kb = huge_total * huge_pagesize_kb
+            if hugepages_total_kb > 0:
+                mem_categories['HugePages'] = hugepages_total_kb
+
+    # Get user-space memory usage from ps output
+    user_space_kb = 0
+    try:
+        ps_file = sos_home + "/ps"
+        if os.path.isfile(ps_file):
+            with open(ps_file) as f:
+                for line in f:
+                    words = line.split()
+                    if len(words) < 6:
+                        continue
+
+                    # Check if this looks like a ps output line (PID is numeric)
+                    # In ps aux format: USER PID %CPU %MEM VSZ RSS ...
+                    # PID is in column 1 (0-indexed)
+                    if len(words) > 1 and not words[1].isdigit():
+                        continue
+
+                    try:
+                        # RSS is in column 5 (0-indexed) in ps aux format
+                        # Format: USER PID %CPU %MEM VSZ RSS ...
+                        rss_kb = int(words[5])
+                        user_space_kb += rss_kb
+                    except (ValueError, IndexError):
+                        continue
+    except:
+        pass
+
+    # Store user-space in categories
+    if user_space_kb > 0:
+        mem_categories['User-Space'] = user_space_kb
+
+    # Calculate kernel space (everything else)
+    accounted_kb = sum(mem_categories.values())
+    kernel_other_kb = total_mem_kb - accounted_kb
+
+    if kernel_other_kb > 0:
+        mem_categories['Kernel-Other'] = kernel_other_kb
+    elif kernel_other_kb < 0:
+        result_str += screen.get_pipe_aware_line("\nWarning: Memory accounting shows negative User-Space")
+        result_str += screen.get_pipe_aware_line("This may indicate shared memory among applications or parsing errors")
+
+    # Sort categories by size (descending)
+    sorted_categories = sorted(mem_categories.items(), key=lambda x: x[1], reverse=True)
+
+    # Display header
+    result_str += screen.get_pipe_aware_line("\nTotal System Memory: %s\n" % get_size_str(total_mem_kb * 1024))
+
+    # Column headers
+    header_format = "%-15s %11s %8s  %s"
+    result_str += screen.get_pipe_aware_line(header_format % ("Category", "Size", "Percent", "Usage Bar"))
+    result_str += screen.get_pipe_aware_line("-" * 80)
+
+    # Display each category with bar graph
+    for category, size_kb in sorted_categories:
+        percentage = (size_kb * 100.0 / total_mem_kb) if total_mem_kb > 0 else 0
+        size_str = get_size_str(size_kb * 1024)
+        bar = get_memory_bar(percentage, TOTAL_BAR_WIDTH, no_pipe)
+
+        line = "%-15s %11s %7.2f%%  %s" % (category, size_str, percentage, bar)
+        result_str += screen.get_pipe_aware_line(line)
+
+    result_str += screen.get_pipe_aware_line("-" * 80)
+
+    # Summary
+    result_str += screen.get_pipe_aware_line("\nMemory Accounting:")
+    result_str += screen.get_pipe_aware_line("  Total Accounted: %s (%.2f%%)" %
+          (get_size_str(accounted_kb * 1024),
+           (accounted_kb * 100.0 / total_mem_kb) if total_mem_kb > 0 else 0))
+
+    # Additional details
+    result_str += screen.get_pipe_aware_line("\nKey Categories:")
+
+    category_descriptions = {
+        'User-Space': 'Application/process memory (RSS from all tasks)',
+        'Slab': 'Kernel slab allocator cache',
+        'HugePages': 'Huge pages allocated (total)',
+        'Cached': 'Page cache (file-backed pages)',
+        'Buffers': 'Buffer cache',
+        'Free': 'Available free memory',
+        'Kernel-Other': 'Kernel memory (page tables, stacks, vmalloc, etc.)'
+    }
+
+    for category, size_kb in sorted_categories:
+        if category in category_descriptions:
+            result_str += screen.get_pipe_aware_line("  %-15s : %s" % (category, category_descriptions[category]))
+
+    # Show HugePages allocation vs actual usage breakdown
+    if 'HugePages_Total' in meminfo and 'Hugepagesize' in meminfo:
+        hp_total = meminfo.get('HugePages_Total', 0)
+        hp_free = meminfo.get('HugePages_Free', 0)
+        hp_rsvd = meminfo.get('HugePages_Rsvd', 0)
+        hp_surp = meminfo.get('HugePages_Surp', 0)
+        hp_size_kb = meminfo.get('Hugepagesize', 0)
+
+        if hp_total > 0:
+            hp_used = hp_total - hp_free
+
+            # Calculate sizes in KB
+            hp_total_kb = hp_total * hp_size_kb
+            hp_used_kb = hp_used * hp_size_kb
+            hp_free_kb = hp_free * hp_size_kb
+            hp_rsvd_kb = hp_rsvd * hp_size_kb
+            hp_surp_kb = hp_surp * hp_size_kb
+
+            # Calculate percentages
+            used_percent = (hp_used * 100.0 / hp_total) if hp_total > 0 else 0
+            free_percent = (hp_free * 100.0 / hp_total) if hp_total > 0 else 0
+
+            result_str += screen.get_pipe_aware_line("\n" + "=" * 80)
+            result_str += screen.get_pipe_aware_line("HUGEPAGES ALLOCATION vs USAGE")
+            result_str += screen.get_pipe_aware_line("=" * 80)
+
+            # Bar graph showing used vs free
+            bar_width = 60
+            bar = get_memory_bar(used_percent, bar_width, no_pipe)
+
+            result_str += screen.get_pipe_aware_line("\nUtilization:")
+            result_str += screen.get_pipe_aware_line(bar)
+
+            # Legend
+            result_str += screen.get_pipe_aware_line("  █ Used: %s (%.2f%%)    ░ Free: %s (%.2f%%)" %
+                (get_size_str(hp_used_kb * 1024), used_percent,
+                 get_size_str(hp_free_kb * 1024), free_percent))
+
+            # Total allocated
+            result_str += screen.get_pipe_aware_line("  Total Allocated: %s (%d pages)" %
+                (get_size_str(hp_total_kb * 1024), hp_total))
+
+            # Page size info
+            result_str += screen.get_pipe_aware_line("\nHugePage Size: %s" % get_size_str(hp_size_kb * 1024))
+
+            # Reserved and Surplus (if any)
+            if hp_rsvd > 0:
+                result_str += screen.get_pipe_aware_line("Reserved: %d pages (%s)" %
+                    (hp_rsvd, get_size_str(hp_rsvd_kb * 1024)))
+            if hp_surp > 0:
+                result_str += screen.get_pipe_aware_line("Surplus: %d pages (%s)" %
+                    (hp_surp, get_size_str(hp_surp_kb * 1024)))
+
+    result_str += screen.get_pipe_aware_line("\n" + "=" * 80)
+
+    return result_str
+
+
 def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
         show_help=False, no_pipe=True):
     global is_cmd_stopped
@@ -1898,6 +2173,9 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
 
     op.add_option('-O', '--oom', dest='oom', action='store_true',
                   help='Shows OOM events')
+
+    op.add_option('--overall', dest='overall', action='store_true',
+                  help='Show overall memory usage breakdown with bar graphs')
 
     op.add_option('--oom-summary', dest='oom_summary', action='store_true',
                   help='Show OOM summary dashboard with pattern analysis')
@@ -1947,7 +2225,9 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
     screen.init_data(no_pipe, 1, is_cmd_stopped)
 
     result_str = ""
-    if o.slab: # show slabtop
+    if o.overall:
+        result_str = show_overall_memory(o, no_pipe)
+    elif o.slab: # show slabtop
         result_str = show_slabtop(o, no_pipe)
     elif o.balloon:
         result_str = show_mem_balloon(o, no_pipe)
