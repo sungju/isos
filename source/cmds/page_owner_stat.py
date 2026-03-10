@@ -368,7 +368,8 @@ def handle_a_file(filename, options):
             top_modules_sorted = sorted(alloc_module_dict.items(),
                                        key=operator.itemgetter(1), reverse=True)
             top_modules = top_modules_sorted[:min(10, len(top_modules_sorted))]
-            bar, legend = get_module_usage_bar(top_modules, sum_size, width=80)
+            # Width=78 so that with brackets [bar] it becomes 80 columns total
+            bar, legend = get_module_usage_bar(top_modules, sum_size, width=78)
             if bar:
                 result_str = result_str + screen.get_pipe_aware_line("\nModule Usage Distribution:")
                 result_str = result_str + screen.get_pipe_aware_line(bar)
