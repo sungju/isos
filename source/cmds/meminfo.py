@@ -2040,7 +2040,7 @@ def show_overall_memory(options, no_pipe):
     if kernel_other_kb > 0:
         mem_categories['Kernel-Other'] = kernel_other_kb
     elif kernel_other_kb < 0:
-        result_str += screen.get_pipe_aware_line("\nWarning: Memory accounting shows negative User-Space")
+        result_str += screen.get_pipe_aware_line("\nWarning: Memory accounting shows negative Kernel-Other")
         result_str += screen.get_pipe_aware_line("This may indicate shared memory among applications or parsing errors")
 
     # Sort categories by size (descending)
