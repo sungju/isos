@@ -156,16 +156,6 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
         return print_help_msg(op, no_pipe)
 
     screen.init_data(no_pipe, 1, is_cmd_stopped)
-
-    # Set up semantic column coloring for perf report output
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_1,   # Overhead percentage - RED (critical performance metric)
-            2: screen.COLOR_3,   # Command/process name - YELLOW (identifier)
-            3: screen.COLOR_6,   # Symbol/function name - CYAN (code path)
-            4: screen.COLOR_4,   # Additional info - BLUE (metadata)
-        }
-
     result_str = ""
     sos_home = env_vars['sos_home']
     file_list = args[1:]

@@ -58,12 +58,53 @@ def calc_total_mem(lines):
             pass
 
 
-def get_colored_line(line):
+def get_colored_line(line, no_pipe, is_header=False):
+    """
+    Apply context-based coloring to ps output line.
+
+    Args:
+        line: The ps output line
+        no_pipe: Whether outputting to terminal
+        is_header: True if this is the header line
+
+    Returns:
+        Colored line string
+    """
     words = line.split()
-    if words[1] == "-": # Don't need to help empty process
+    if len(words) < 2:
+        return line
+
+    if words[1] == "-":  # Don't need to show empty process
         return ""
 
-    return screen.get_colored_line(line)
+    if not no_pipe:
+        return line
+
+    # For header line, color with COLOR_HEADER
+    if is_header:
+        return screen.COLOR_HEADER + line + screen.COLOR_RESET
+
+    # For data lines, apply whole-line coloring based on resource usage
+    # Typical ps format: USER   PID  %CPU %MEM    VSZ   RSS TTY STAT START   TIME COMMAND
+    try:
+        # Check CPU and memory usage to determine line color
+        # words[2] = %CPU, words[3] = %MEM
+        if len(words) > 3:
+            cpu_val = float(words[2])
+            mem_val = float(words[3])
+
+            # High CPU or Memory - use CRITICAL color for entire line
+            if cpu_val > 50.0 or mem_val > 50.0:
+                return screen.COLOR_CRITICAL + line + screen.COLOR_RESET
+            # Medium CPU or Memory - use WARNING color for entire line
+            elif cpu_val > 20.0 or mem_val > 20.0:
+                return screen.COLOR_WARNING + line + screen.COLOR_RESET
+            # Low usage - no color (normal black text)
+    except (ValueError, IndexError):
+        # If parsing fails, just return the original line with no color
+        pass
+
+    return line
 
 
 def get_size_str(size, coloring = False):
@@ -119,18 +160,6 @@ def read_ps_basic(ps_path, no_pipe, options):
     set_color_table(no_pipe)
     screen.init_data(no_pipe, 1, is_cmd_stopped)
 
-    # Custom column colors for psinfo
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_3,   # YELLOW
-            2: screen.COLOR_2,   # GREEN
-            3: screen.COLOR_2,   # GREEN
-            4: screen.COLOR_2,   # GREEN
-            5: screen.COLOR_4,   # BLUE
-            6: screen.COLOR_1,   # RED
-            11: screen.COLOR_5,  # MAGENTA
-        }
-
     result_str = ""
     with open(ps_path) as f:
         lines = remove_empty_ps_line(f.readlines())
@@ -145,10 +174,12 @@ def read_ps_basic(ps_path, no_pipe, options):
                     print_count != total_lines)
 
         calc_total_mem(lines)
-        for line in lines:
+        for idx, line in enumerate(lines):
             if print_count == 0:
                 break
-            line = get_colored_line(line)
+            # First line is the header
+            is_header = (idx == 0)
+            line = get_colored_line(line, no_pipe, is_header)
             if line != "":
                 print_count = print_count - 1
                 if no_pipe:
@@ -164,9 +195,20 @@ def read_ps_basic(ps_path, no_pipe, options):
             else:
                 result_str = result_str + line + "\n"
 
-        total_str = ("\n\tTotal VSZ = %s, Total RSS = %s\n" % \
-                (get_size_str(total_vsz * 1024, True),
-                    get_size_str(total_rss * 1024, True)))
+        # Format total summary with context-based colors
+        if no_pipe:
+            total_str = ("\n\t%sTotal VSZ%s = %s, %sTotal RSS%s = %s\n" % (
+                screen.COLOR_TITLE, screen.COLOR_RESET,
+                get_size_str(total_vsz * 1024, True),
+                screen.COLOR_TITLE, screen.COLOR_RESET,
+                get_size_str(total_rss * 1024, True)
+            ))
+        else:
+            total_str = ("\n\tTotal VSZ = %s, Total RSS = %s\n" % (
+                get_size_str(total_vsz * 1024, False),
+                get_size_str(total_rss * 1024, False)
+            ))
+
         if no_pipe:
             print(total_str)
         else:
@@ -178,17 +220,31 @@ def read_ps_basic(ps_path, no_pipe, options):
 def show_ps_tree(sos_home, no_pipe, options):
     result_str = ""
     pid = options.process_details
+
+    # Color setup
+    title_color = screen.COLOR_TITLE if no_pipe else ""
+    info_color = screen.COLOR_INFO if no_pipe else ""
+    important_color = screen.COLOR_IMPORTANT if no_pipe else ""
+    reset_color = screen.COLOR_RESET if no_pipe else ""
+
     try:
         with open(sos_home + "/sos_commands/process/pidstat_-tl") as f:
             for line in f:
                 words = line.split()
                 if len(words) > 3 and words[2] == pid:
-                    result_str = result_str +\
-                        screen.get_pipe_aware_line(
-                            "CPU Usage: %s, usr: %s, sys: %s, guest: %s, wait: %s" %\
-                            (words[8], words[4], words[5], words[6], words[7]))
+                    formatted_line = (
+                        "%sCPU Usage:%s %s%s%s, %susr:%s %s, %ssys:%s %s, "
+                        "%sguest:%s %s, %swait:%s %s" % (
+                            title_color, reset_color,
+                            important_color, words[8], reset_color,
+                            info_color, reset_color, words[4],
+                            info_color, reset_color, words[5],
+                            info_color, reset_color, words[6],
+                            info_color, reset_color, words[7]
+                        )
+                    )
+                    result_str = result_str + screen.get_pipe_aware_line(formatted_line)
     except Exception as e:
-        #print(e)
         pass
 
     try:
@@ -196,16 +252,19 @@ def show_ps_tree(sos_home, no_pipe, options):
             for line in f:
                 words = line.split()
                 if len(words) > 7 and words[1] == pid:
-                    result_str = result_str + screen.get_pipe_aware_line(
-                            "MEM Usage: %s, VSZ: %s, RSS: %s" %\
-                            (words[3], get_size_str(int(words[4])),\
-                             get_size_str(int(words[5]))))
+                    formatted_line = (
+                        "%sMEM Usage:%s %s%s%s, %sVSZ:%s %s, %sRSS:%s %s" % (
+                            title_color, reset_color,
+                            important_color, words[3], reset_color,
+                            info_color, reset_color, get_size_str(int(words[4])),
+                            info_color, reset_color, get_size_str(int(words[5]))
+                        )
+                    )
+                    result_str = result_str + screen.get_pipe_aware_line(formatted_line)
                     break
         result_str = result_str + screen.get_pipe_aware_line("")
     except Exception as e:
-        #print(e)
         pass
-
 
     try:
         with open(sos_home + "/sos_commands/process/ps_-elfL") as f:
@@ -217,30 +276,29 @@ def show_ps_tree(sos_home, no_pipe, options):
                     pstate = words[1]
                     if words[3] == words[5]: # thread leader
                         cmd_str = line[line.find(words[15]) + len(words[15]):].strip()
-                        result_str = result_str +\
-                                screen.get_pipe_aware_line(
-                                        "%s (%s) [%s] by %s" % (cmd_str, pid, pstate, words[2]))
+                        formatted_line = "%s%s%s (%s) [%s] by %s" % (
+                            screen.COLOR_HIGHLIGHT if no_pipe else "",
+                            cmd_str,
+                            reset_color,
+                            pid, pstate, words[2]
+                        )
+                        result_str = result_str + screen.get_pipe_aware_line(formatted_line)
                     else:
                         wchan = words[12]
-                        result_str = result_str + \
-                                screen.get_pipe_aware_line(
-                                        "\t+- %s (%s) [%s]" % (words[5], wchan, pstate))
-
+                        result_str = result_str + screen.get_pipe_aware_line(
+                            "\t+- %s (%s) [%s]" % (words[5], wchan, pstate))
     except Exception as e:
-        #print(e)
         pass
-
 
     proc_dir = sos_home + ("/proc/%s" % (pid))
     try:
         with open(proc_dir + "/stack") as f:
-            result_str = result_str + screen.get_pipe_aware_line("\nCall Trace:\n")
+            title_line = "%sCall Trace:%s\n" % (title_color, reset_color)
+            result_str = result_str + screen.get_pipe_aware_line("\n" + title_line)
             for line in f:
                 result_str = result_str + screen.get_pipe_aware_line("  " + line)
     except Exception as e:
-        #print(e)
         pass
-
 
     try:
         with open(proc_dir + "/limits") as f:
@@ -248,10 +306,7 @@ def show_ps_tree(sos_home, no_pipe, options):
             for line in f:
                 result_str = result_str + screen.get_pipe_aware_line(line)
     except Exception as e:
-        #print(e)
         pass
-
-
 
     return result_str
 

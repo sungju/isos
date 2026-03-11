@@ -206,14 +206,6 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
         reverse_print = False
 
     screen.init_data(no_pipe, 1, is_cmd_stopped)
-
-    # Set up semantic column coloring for trace timing data
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_1,   # Delay time - RED (critical performance metric)
-            2: screen.COLOR_3,   # Function name - YELLOW (identifier)
-        }
-
     if not o.time and 'trace.dat' not in data_list and isfile('trace.dat'):
         if len(data_list) == 0:
             data_list.append('trace.dat')

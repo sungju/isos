@@ -524,7 +524,7 @@ def show_summary(sos_home, no_pipe):
     if default_route:
         route_header = "Default Route:"
         if no_pipe:
-            print(ansicolor.get_color(screen.COLOR_3) + route_header + ansicolor.get_color(screen.COLOR_RESET))
+            print(screen.COLOR_TITLE + route_header + screen.COLOR_RESET)
             print("  " + default_route)
             print("")
         else:
@@ -535,7 +535,7 @@ def show_summary(sos_home, no_pipe):
     if ss_info['total'] > 0:
         conn_header = "Connection Summary:"
         if no_pipe:
-            print(ansicolor.get_color(screen.COLOR_3) + conn_header + ansicolor.get_color(screen.COLOR_RESET))
+            print(screen.COLOR_TITLE + conn_header + screen.COLOR_RESET)
         else:
             result_str += conn_header + "\n"
 
@@ -562,13 +562,6 @@ def show_interface_detail(sos_home, device, no_pipe):
     """Display detailed information for a specific interface"""
     result_str = ""
 
-    # Set up column coloring for detailed view
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_3,   # Labels - YELLOW
-            2: screen.COLOR_6,   # Values - CYAN
-        }
-
     # Parse all data sources
     ip_info = parse_ip_address(sos_home)
     stats_info = parse_ip_link_stats(sos_home)
@@ -581,7 +574,7 @@ def show_interface_detail(sos_home, device, no_pipe):
     if device not in ip_info:
         error_msg = "Interface '%s' not found" % device
         if no_pipe:
-            print(ansicolor.get_color(screen.COLOR_1) + error_msg + ansicolor.get_color(screen.COLOR_RESET))
+            print(screen.COLOR_CRITICAL + error_msg + screen.COLOR_RESET)
         else:
             result_str += error_msg + "\n"
         return result_str
@@ -592,7 +585,7 @@ def show_interface_detail(sos_home, device, no_pipe):
     # Interface header
     header = "Interface: %s" % device
     if no_pipe:
-        print(ansicolor.get_color(screen.COLOR_3) + header + ansicolor.get_color(screen.COLOR_RESET))
+        print(screen.COLOR_TITLE + header + screen.COLOR_RESET)
     else:
         result_str += header + "\n"
 
@@ -725,28 +718,28 @@ def show_interface_detail(sos_home, device, no_pipe):
 def colorize_ip(ip_str, no_pipe):
     """Colorize an IP address"""
     if no_pipe:
-        return ansicolor.get_color(screen.COLOR_6) + ip_str + ansicolor.get_color(screen.COLOR_RESET)
+        return screen.COLOR_HEADER + ip_str + screen.COLOR_RESET
     return ip_str
 
 
 def colorize_gateway(gw_str, no_pipe):
     """Colorize a gateway IP"""
     if no_pipe:
-        return ansicolor.get_color(screen.COLOR_2) + gw_str + ansicolor.get_color(screen.COLOR_RESET)
+        return screen.COLOR_SUCCESS + gw_str + screen.COLOR_RESET
     return gw_str
 
 
 def colorize_device(dev_str, no_pipe):
     """Colorize a device name"""
     if no_pipe:
-        return ansicolor.get_color(screen.COLOR_3) + dev_str + ansicolor.get_color(screen.COLOR_RESET)
+        return screen.COLOR_TITLE + dev_str + screen.COLOR_RESET
     return dev_str
 
 
 def colorize_keyword(keyword, no_pipe, color=screen.COLOR_14):
     """Colorize a keyword"""
     if no_pipe:
-        return ansicolor.get_color(color) + keyword + ansicolor.get_color(screen.COLOR_RESET)
+        return ansicolor.get_color(color) + keyword + screen.COLOR_RESET
     return keyword
 
 
@@ -940,22 +933,13 @@ def show_routes(sos_home, no_pipe, descriptive=False):
     result_str = ""
     path = sos_home + "/sos_commands/networking/ip_route_show_table_all"
 
-    # Set up column coloring for route components
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_6,   # Destination/IP - CYAN
-            2: screen.COLOR_2,   # Gateway - GREEN
-            3: screen.COLOR_3,   # Device - YELLOW
-            4: screen.COLOR_4,   # Metric - BLUE
-        }
-
     # Header
     header = "Routing Table"
     if descriptive:
         header += " (Descriptive Mode)"
 
     if no_pipe:
-        print(ansicolor.get_color(screen.COLOR_3) + "┏━━ " + header + " ━━" + ansicolor.get_color(screen.COLOR_RESET))
+        print(screen.COLOR_TITLE + "┏━━ " + header + " ━━" + screen.COLOR_RESET)
     else:
         result_str += header + "\n"
         result_str += "=" * 80 + "\n"
@@ -987,15 +971,15 @@ def show_routes(sos_home, no_pipe, descriptive=False):
             if default_routes:
                 section_header = "┃"
                 if no_pipe:
-                    print(ansicolor.get_color(screen.COLOR_2) + section_header + ansicolor.get_color(screen.COLOR_RESET))
-                    print(ansicolor.get_color(screen.COLOR_2) + "┣━━ Internet Gateway" + ansicolor.get_color(screen.COLOR_RESET))
+                    print(screen.COLOR_SUCCESS + section_header + screen.COLOR_RESET)
+                    print(screen.COLOR_SUCCESS + "┣━━ Internet Gateway" + screen.COLOR_RESET)
                 else:
                     result_str += "\n[Internet Gateway]\n"
 
                 if descriptive:
                     desc_note = "┃   These routes determine how traffic to the internet is handled."
                     if no_pipe:
-                        print(ansicolor.get_color(screen.COLOR_14) + desc_note + ansicolor.get_color(screen.COLOR_RESET))
+                        print(screen.COLOR_INFO + desc_note + screen.COLOR_RESET)
                     else:
                         result_str += "These routes determine how traffic to the internet is handled.\n"
 
@@ -1023,7 +1007,7 @@ def show_routes(sos_home, no_pipe, descriptive=False):
                             explanation = "┃   │   " + explain_route(route_data)
 
                         if no_pipe:
-                            print(ansicolor.get_color(screen.COLOR_14) + explanation + ansicolor.get_color(screen.COLOR_RESET))
+                            print(screen.COLOR_INFO + explanation + screen.COLOR_RESET)
                         else:
                             result_str += "    " + explain_route(route_data) + "\n"
 
@@ -1031,15 +1015,15 @@ def show_routes(sos_home, no_pipe, descriptive=False):
             if network_routes:
                 section_header = "┃"
                 if no_pipe:
-                    print(ansicolor.get_color(screen.COLOR_6) + section_header + ansicolor.get_color(screen.COLOR_RESET))
-                    print(ansicolor.get_color(screen.COLOR_6) + "┣━━ Direct Networks" + ansicolor.get_color(screen.COLOR_RESET))
+                    print(screen.COLOR_HEADER + section_header + screen.COLOR_RESET)
+                    print(screen.COLOR_HEADER + "┣━━ Direct Networks" + screen.COLOR_RESET)
                 else:
                     result_str += "\n[Direct Networks]\n"
 
                 if descriptive:
                     desc_note = "┃   These are directly connected networks (no gateway needed)."
                     if no_pipe:
-                        print(ansicolor.get_color(screen.COLOR_14) + desc_note + ansicolor.get_color(screen.COLOR_RESET))
+                        print(screen.COLOR_INFO + desc_note + screen.COLOR_RESET)
                     else:
                         result_str += "These are directly connected networks (no gateway needed).\n"
 
@@ -1067,7 +1051,7 @@ def show_routes(sos_home, no_pipe, descriptive=False):
                             explanation = "┃   │   " + explain_route(route_data)
 
                         if no_pipe:
-                            print(ansicolor.get_color(screen.COLOR_14) + explanation + ansicolor.get_color(screen.COLOR_RESET))
+                            print(screen.COLOR_INFO + explanation + screen.COLOR_RESET)
                         else:
                             result_str += "    " + explain_route(route_data) + "\n"
 
@@ -1075,15 +1059,15 @@ def show_routes(sos_home, no_pipe, descriptive=False):
             if local_routes:
                 section_header = "┃"
                 if no_pipe:
-                    print(ansicolor.get_color(screen.COLOR_8) + section_header + ansicolor.get_color(screen.COLOR_RESET))
-                    print(ansicolor.get_color(screen.COLOR_8) + "┗━━ Local Routes (" + str(len(local_routes)) + " entries)" + ansicolor.get_color(screen.COLOR_RESET))
+                    print(screen.COLOR_INFO + section_header + screen.COLOR_RESET)
+                    print(screen.COLOR_INFO + "┗━━ Local Routes (" + str(len(local_routes)) + " entries)" + screen.COLOR_RESET)
                 else:
                     result_str += "\n[Local Routes]\n"
 
                 if descriptive:
                     desc_note = "    These routes handle local traffic (broadcasts, local IPs, loopback)."
                     if no_pipe:
-                        print(ansicolor.get_color(screen.COLOR_14) + desc_note + ansicolor.get_color(screen.COLOR_RESET))
+                        print(screen.COLOR_INFO + desc_note + screen.COLOR_RESET)
                     else:
                         result_str += "These routes handle local traffic (broadcasts, local IPs, loopback).\n"
 
@@ -1112,27 +1096,27 @@ def show_routes(sos_home, no_pipe, descriptive=False):
                             explanation = "    │   " + explain_route(route_data)
 
                         if no_pipe:
-                            print(ansicolor.get_color(screen.COLOR_14) + explanation + ansicolor.get_color(screen.COLOR_RESET))
+                            print(screen.COLOR_INFO + explanation + screen.COLOR_RESET)
                         else:
                             result_str += "      " + explain_route(route_data) + "\n"
 
                     if len(local_routes) > show_count:
                         remaining = "    ... (%d more local routes)" % (len(local_routes) - show_count)
                         if no_pipe:
-                            print(ansicolor.get_color(screen.COLOR_8) + remaining + ansicolor.get_color(screen.COLOR_RESET))
+                            print(screen.COLOR_INFO + remaining + screen.COLOR_RESET)
                         else:
                             result_str += remaining + "\n"
                 else:
                     # Non-descriptive mode - just show count
                     hint = "    Use -d to show details"
                     if no_pipe:
-                        print(ansicolor.get_color(screen.COLOR_8) + hint + ansicolor.get_color(screen.COLOR_RESET))
+                        print(screen.COLOR_INFO + hint + screen.COLOR_RESET)
 
             # Add legend in descriptive mode
             if descriptive and no_pipe:
                 print("")
                 legend = "┏━━ Legend ━━"
-                print(ansicolor.get_color(screen.COLOR_3) + legend + ansicolor.get_color(screen.COLOR_RESET))
+                print(screen.COLOR_TITLE + legend + screen.COLOR_RESET)
                 print("┃  " + colorize_keyword("proto static", no_pipe, screen.COLOR_3) + "  = Manually configured by administrator")
                 print("┃  " + colorize_keyword("proto kernel", no_pipe, screen.COLOR_14) + "  = Auto-configured by kernel when IP assigned")
                 print("┃  " + colorize_keyword("proto dhcp", no_pipe, screen.COLOR_6) + "    = Obtained via DHCP")
@@ -1156,18 +1140,10 @@ def show_connections(sos_home, no_pipe):
     result_str = ""
     path = sos_home + "/sos_commands/networking/ss_-peaonmi"
 
-    # Set up column coloring
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_3,   # Port - YELLOW
-            2: screen.COLOR_4,   # Protocol - BLUE
-            3: screen.COLOR_6,   # Process name - CYAN
-        }
-
     # Header
     header = "Connection Analysis"
     if no_pipe:
-        print(ansicolor.get_color(screen.COLOR_3) + header + ansicolor.get_color(screen.COLOR_RESET))
+        print(screen.COLOR_TITLE + header + screen.COLOR_RESET)
         print("=" * 80)
     else:
         result_str += header + "\n"
@@ -1223,38 +1199,36 @@ def show_connections(sos_home, no_pipe):
         if tcp_states:
             tcp_header = "\nTCP Connection States:"
             if no_pipe:
-                print(ansicolor.get_color(screen.COLOR_6) + tcp_header + ansicolor.get_color(screen.COLOR_RESET))
+                print(screen.COLOR_HEADER + tcp_header + screen.COLOR_RESET)
                 print("  " + "-" * 40)
             else:
                 result_str += tcp_header + "\n"
                 result_str += "  " + "-" * 40 + "\n"
 
-            # Set up column coloring for state counts
-            if no_pipe:
-                screen.column_color = {
-                    1: screen.COLOR_3,   # State name - YELLOW
-                    2: screen.COLOR_6,   # Count - CYAN
-                }
-
             for state in sorted(tcp_states.keys()):
                 count = tcp_states[state]
-                state_line = "  %-15s %d" % (state, count)
                 if no_pipe:
-                    colored_line = screen.get_colored_line(state_line)
-                    # Highlight important states
+                    # Context-based coloring: highlight important states
                     if state == 'ESTAB' or state == 'ESTABLISHED':
-                        colored_line = colored_line.replace(state, ansicolor.get_color(screen.COLOR_2) + state + ansicolor.get_color(screen.COLOR_3))
+                        state_color = screen.COLOR_SUCCESS
                     elif state == 'LISTEN':
-                        colored_line = colored_line.replace(state, ansicolor.get_color(screen.COLOR_4) + state + ansicolor.get_color(screen.COLOR_3))
-                    print(colored_line)
+                        state_color = screen.COLOR_INFO
+                    else:
+                        state_color = screen.COLOR_IMPORTANT
+
+                    colored_state = state_color + "%-15s" % state + screen.COLOR_RESET
+                    colored_count = screen.COLOR_HIGHLIGHT + str(count) + screen.COLOR_RESET
+                    state_line = "  %s %s" % (colored_state, colored_count)
+                    print(state_line)
                 else:
+                    state_line = "  %-15s %d" % (state, count)
                     result_str += state_line + "\n"
 
         # Display UDP count
         if udp_count > 0:
             udp_line = "\nUDP Sockets: %d" % udp_count
             if no_pipe:
-                print(ansicolor.get_color(screen.COLOR_6) + udp_line + ansicolor.get_color(screen.COLOR_RESET))
+                print(screen.COLOR_HEADER + udp_line + screen.COLOR_RESET)
             else:
                 result_str += udp_line + "\n"
 
@@ -1262,22 +1236,14 @@ def show_connections(sos_home, no_pipe):
         if listening_ports:
             listen_header = "\nListening Ports:"
             if no_pipe:
-                print(ansicolor.get_color(screen.COLOR_6) + listen_header + ansicolor.get_color(screen.COLOR_RESET))
+                print(screen.COLOR_HEADER + listen_header + screen.COLOR_RESET)
             else:
                 result_str += listen_header + "\n"
-
-            # Set up column coloring for listening ports table
-            if no_pipe:
-                screen.column_color = {
-                    1: screen.COLOR_3,   # Port - YELLOW
-                    2: screen.COLOR_4,   # Protocol - BLUE
-                    3: screen.COLOR_6,   # Process name - CYAN
-                }
 
             # Table header
             table_header = "  %-8s %-6s %s" % ("PORT", "PROTO", "PROCESS")
             if no_pipe:
-                print(ansicolor.get_color(screen.COLOR_14) + table_header + ansicolor.get_color(screen.COLOR_RESET))
+                print(screen.COLOR_HEADER + table_header + screen.COLOR_RESET)
                 print("  " + "-" * 60)
             else:
                 result_str += table_header + "\n"
@@ -1289,18 +1255,22 @@ def show_connections(sos_home, no_pipe):
             # Show first 20
             for port, (process, proto) in sorted_ports[:20]:
                 process_name = process if process else 'unknown'
-                port_line = "  %-8s %-6s %s" % (port, proto, process_name)
 
                 if no_pipe:
-                    colored_line = screen.get_colored_line(port_line)
-                    print(colored_line)
+                    # Apply context-based coloring
+                    colored_port = screen.COLOR_IMPORTANT + port + screen.COLOR_RESET
+                    colored_proto = screen.COLOR_INFO + proto + screen.COLOR_RESET
+                    colored_process = screen.COLOR_HIGHLIGHT + process_name + screen.COLOR_RESET
+                    port_line = "  %-14s %-12s %s" % (colored_port, colored_proto, colored_process)
+                    print(port_line)
                 else:
+                    port_line = "  %-8s %-6s %s" % (port, proto, process_name)
                     result_str += port_line + "\n"
 
             if len(sorted_ports) > 20:
                 remaining = "  ... (%d more ports)" % (len(sorted_ports) - 20)
                 if no_pipe:
-                    print(ansicolor.get_color(screen.COLOR_8) + remaining + ansicolor.get_color(screen.COLOR_RESET))
+                    print(screen.COLOR_INFO + remaining + screen.COLOR_RESET)
                 else:
                     result_str += remaining + "\n"
 
@@ -1317,19 +1287,10 @@ def show_connections(sos_home, no_pipe):
 def show_statistics(sos_home, no_pipe):
     """Display network protocol statistics"""
     result_str = ""
-    path = sos_home + "/sos_commands/networking/netstat_-s"
-
-    # Set up column coloring
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_6,   # Stat numbers - CYAN
-            2: screen.COLOR_14,  # Stat descriptions - default
-        }
-
-    # Header
+    path = sos_home + "/sos_commands/networking/netstat_-s"    # Header
     header = "Network Protocol Statistics"
     if no_pipe:
-        print(ansicolor.get_color(screen.COLOR_3) + header + ansicolor.get_color(screen.COLOR_RESET))
+        print(screen.COLOR_TITLE + header + screen.COLOR_RESET)
         print("=" * 80)
     else:
         result_str += header + "\n"
@@ -1361,7 +1322,7 @@ def show_statistics(sos_home, no_pipe):
                 if proto in stats:
                     proto_header = "\n%s Statistics:" % proto
                     if no_pipe:
-                        print(ansicolor.get_color(screen.COLOR_6) + proto_header + ansicolor.get_color(screen.COLOR_RESET))
+                        print(screen.COLOR_HEADER + proto_header + screen.COLOR_RESET)
                     else:
                         result_str += proto_header + "\n"
 
@@ -1383,7 +1344,7 @@ def show_statistics(sos_home, no_pipe):
                     # Show error stats in red
                     for stat in error_stats[:10]:  # Limit to 10
                         if no_pipe:
-                            print(ansicolor.get_color(screen.COLOR_1) + "  " + stat + ansicolor.get_color(screen.COLOR_RESET))
+                            print(screen.COLOR_CRITICAL + "  " + stat + screen.COLOR_RESET)
                         else:
                             result_str += "  " + stat + "\n"
 
@@ -1407,21 +1368,10 @@ def show_statistics(sos_home, no_pipe):
 def show_networkmanager(sos_home, no_pipe):
     """Display NetworkManager information"""
     result_str = ""
-    dev_path = sos_home + "/sos_commands/networkmanager/nmcli_dev"
-
-    # Set up column coloring
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_3,   # Device - YELLOW
-            2: screen.COLOR_2,   # Status - GREEN
-            3: screen.COLOR_6,   # Connection - CYAN
-            4: screen.COLOR_4,   # Type - BLUE
-        }
-
-    # Header
+    dev_path = sos_home + "/sos_commands/networkmanager/nmcli_dev"    # Header
     header = "NetworkManager Status"
     if no_pipe:
-        print(ansicolor.get_color(screen.COLOR_3) + header + ansicolor.get_color(screen.COLOR_RESET))
+        print(screen.COLOR_TITLE + header + screen.COLOR_RESET)
         print("=" * 80)
     else:
         result_str += header + "\n"
@@ -1432,7 +1382,7 @@ def show_networkmanager(sos_home, no_pipe):
         with open(dev_path) as f:
             devices_header = "\nManaged Devices:"
             if no_pipe:
-                print(ansicolor.get_color(screen.COLOR_6) + devices_header + ansicolor.get_color(screen.COLOR_RESET))
+                print(screen.COLOR_HEADER + devices_header + screen.COLOR_RESET)
             else:
                 result_str += devices_header + "\n"
 
@@ -1448,7 +1398,7 @@ def show_networkmanager(sos_home, no_pipe):
                 # Print header with separator
                 if line.startswith('DEVICE'):
                     if no_pipe:
-                        print(ansicolor.get_color(screen.COLOR_14) + "  " + line + ansicolor.get_color(screen.COLOR_RESET))
+                        print(screen.COLOR_INFO + "  " + line + screen.COLOR_RESET)
                         print("  " + "-" * 70)
                     else:
                         result_str += "  " + line + "\n"
@@ -1461,7 +1411,7 @@ def show_networkmanager(sos_home, no_pipe):
                     colored_line = screen.get_colored_line("  " + line)
                     # Highlight connected state
                     if 'connected' in line and 'disconnected' not in line:
-                        colored_line = colored_line.replace('connected', ansicolor.get_color(screen.COLOR_2) + 'connected' + ansicolor.get_color(screen.COLOR_RESET))
+                        colored_line = colored_line.replace('connected', screen.COLOR_SUCCESS + 'connected' + screen.COLOR_RESET)
                     print(colored_line)
                 else:
                     result_str += "  " + line + "\n"
@@ -1479,7 +1429,7 @@ def show_networkmanager(sos_home, no_pipe):
         with open(con_path) as f:
             connections_header = "\nConnections:"
             if no_pipe:
-                print(ansicolor.get_color(screen.COLOR_6) + connections_header + ansicolor.get_color(screen.COLOR_RESET))
+                print(screen.COLOR_HEADER + connections_header + screen.COLOR_RESET)
             else:
                 result_str += connections_header + "\n"
 
@@ -1509,20 +1459,11 @@ def show_arp(sos_home, no_pipe):
     # Header
     header = "ARP Table"
     if no_pipe:
-        print(ansicolor.get_color(screen.COLOR_3) + header + ansicolor.get_color(screen.COLOR_RESET))
+        print(screen.COLOR_TITLE + header + screen.COLOR_RESET)
         print("=" * 80)
     else:
         result_str += header + "\n"
         result_str += "=" * 80 + "\n"
-
-    # Set up column coloring
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_6,   # IP address - CYAN
-            2: screen.COLOR_3,   # MAC address - YELLOW
-            3: screen.COLOR_4,   # Device - BLUE
-        }
-
     try:
         with open(path) as f:
             entries = []
@@ -1567,7 +1508,7 @@ def show_arp(sos_home, no_pipe):
                 # Display table header
                 table_header = "\n%-18s %-20s %-12s %s" % ("IP_ADDRESS", "MAC_ADDRESS", "STATE", "DEVICE")
                 if no_pipe:
-                    print(ansicolor.get_color(screen.COLOR_6) + table_header + ansicolor.get_color(screen.COLOR_RESET))
+                    print(screen.COLOR_HEADER + table_header + screen.COLOR_RESET)
                     print("-" * 70)
                 else:
                     result_str += table_header + "\n"
@@ -1613,21 +1554,11 @@ def show_neighbor(sos_home, no_pipe):
     # Header
     header = "Neighbor Table (NDP/ARP)"
     if no_pipe:
-        print(ansicolor.get_color(screen.COLOR_3) + header + ansicolor.get_color(screen.COLOR_RESET))
+        print(screen.COLOR_TITLE + header + screen.COLOR_RESET)
         print("=" * 80)
     else:
         result_str += header + "\n"
         result_str += "=" * 80 + "\n"
-
-    # Set up column coloring
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_6,   # IP address - CYAN
-            2: screen.COLOR_3,   # MAC address - YELLOW
-            3: screen.COLOR_2,   # State - GREEN
-            4: screen.COLOR_4,   # Device - BLUE
-        }
-
     try:
         with open(path) as f:
             entries = []
@@ -1677,7 +1608,7 @@ def show_neighbor(sos_home, no_pipe):
                 # Display table header
                 table_header = "\n%-40s %-20s %-12s %-10s %s" % ("IP_ADDRESS", "MAC_ADDRESS", "STATE", "DEVICE", "REF")
                 if no_pipe:
-                    print(ansicolor.get_color(screen.COLOR_6) + table_header + ansicolor.get_color(screen.COLOR_RESET))
+                    print(screen.COLOR_HEADER + table_header + screen.COLOR_RESET)
                     print("-" * 90)
                 else:
                     result_str += table_header + "\n"
@@ -1690,11 +1621,11 @@ def show_neighbor(sos_home, no_pipe):
                     if no_pipe:
                         # Color code based on state
                         if state == "REACHABLE":
-                            print(ansicolor.get_color(screen.COLOR_2) + entry_line + ansicolor.get_color(screen.COLOR_RESET))
+                            print(screen.COLOR_SUCCESS + entry_line + screen.COLOR_RESET)
                         elif state == "STALE":
-                            print(ansicolor.get_color(screen.COLOR_3) + entry_line + ansicolor.get_color(screen.COLOR_RESET))
+                            print(screen.COLOR_TITLE + entry_line + screen.COLOR_RESET)
                         elif state == "FAILED" or state == "INCOMPLETE":
-                            print(ansicolor.get_color(screen.COLOR_1) + entry_line + ansicolor.get_color(screen.COLOR_RESET))
+                            print(screen.COLOR_CRITICAL + entry_line + screen.COLOR_RESET)
                         else:
                             print(entry_line)
                     else:
@@ -1715,7 +1646,7 @@ def show_neighbor(sos_home, no_pipe):
                 if states:
                     state_summary = "\nState breakdown:"
                     if no_pipe:
-                        print(ansicolor.get_color(screen.COLOR_6) + state_summary + ansicolor.get_color(screen.COLOR_RESET))
+                        print(screen.COLOR_HEADER + state_summary + screen.COLOR_RESET)
                     else:
                         result_str += state_summary + "\n"
 
@@ -1746,22 +1677,10 @@ def show_neighbor(sos_home, no_pipe):
 
 def show_interface_list(sos_home, no_pipe):
     """Display simple interface list"""
-    result_str = ""
-
-    # Set up column coloring
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_3,   # Interface - YELLOW
-            2: screen.COLOR_2,   # State - GREEN
-            3: screen.COLOR_6,   # IP address - CYAN
-            4: screen.COLOR_14,  # MAC address - default
-            5: screen.COLOR_4,   # MTU - BLUE
-        }
-
-    # Header
+    result_str = ""    # Header
     header = "Network Interfaces"
     if no_pipe:
-        print(ansicolor.get_color(screen.COLOR_3) + header + ansicolor.get_color(screen.COLOR_RESET))
+        print(screen.COLOR_TITLE + header + screen.COLOR_RESET)
         print("=" * 80)
     else:
         result_str += header + "\n"
@@ -1774,7 +1693,7 @@ def show_interface_list(sos_home, no_pipe):
     if ip_info:
         table_header = "\n%-12s %-8s %-18s %-15s %s" % ("INTERFACE", "STATE", "IP_ADDRESS", "MAC_ADDRESS", "MTU")
         if no_pipe:
-            print(ansicolor.get_color(screen.COLOR_6) + table_header + ansicolor.get_color(screen.COLOR_RESET))
+            print(screen.COLOR_HEADER + table_header + screen.COLOR_RESET)
             print("-" * 70)
         else:
             result_str += table_header + "\n"
@@ -1799,7 +1718,7 @@ def show_interface_list(sos_home, no_pipe):
                 colored_line = screen.get_colored_line(iface_line)
                 # Override state color based on UP/DOWN
                 if info['state'] == 'DOWN':
-                    colored_line = colored_line.replace(info['state'], ansicolor.get_color(screen.COLOR_1) + info['state'] + ansicolor.get_color(screen.COLOR_2))
+                    colored_line = colored_line.replace(info['state'], screen.COLOR_CRITICAL + info['state'] + screen.COLOR_SUCCESS)
                 print(colored_line)
             else:
                 result_str += iface_line + "\n"

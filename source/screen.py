@@ -20,7 +20,7 @@ no_pipe = True
 is_cmd_stopped = None
 header_start_idx = 0
 
-# Color constants - initialized by set_color_table()
+# Legacy color constants - deprecated, use context colors instead
 COLOR_1 = ""
 COLOR_2 = ""
 COLOR_3 = ""
@@ -37,8 +37,19 @@ COLOR_13 = ""
 COLOR_14 = ""
 COLOR_RESET = ""
 
-# Column color mapping (column number -> color code)
+# Column color mapping (column number -> color code) - DEPRECATED
 column_color = {}
+
+# Context-based color constants (preferred approach)
+COLOR_TITLE = ""        # Section titles and headers
+COLOR_HEADER = ""       # Table/list headers
+COLOR_CONTENT = ""      # Normal content (usually no color)
+COLOR_IMPORTANT = ""    # Important values that need attention
+COLOR_WARNING = ""      # Warning level issues
+COLOR_CRITICAL = ""     # Critical/error level issues
+COLOR_SUCCESS = ""      # Success/positive indicators
+COLOR_INFO = ""         # Metadata and secondary information
+COLOR_HIGHLIGHT = ""    # Highlighted/emphasized text
 
 
 def init_data(l_no_pipe, l_header_start_idx, l_is_cmd_stopped):
@@ -68,17 +79,22 @@ def set_color_table():
     Set up color mapping based on pipe status.
 
     When output goes to terminal (no_pipe=True), initializes ANSI color
-    codes for 14 different colors. When output is piped (no_pipe=False),
-    sets all colors to empty strings.
+    codes for both legacy column colors and new context-based colors.
+    When output is piped (no_pipe=False), sets all colors to empty strings.
 
-    Sets global variables: COLOR_1 through COLOR_14, COLOR_RESET, column_color
+    Sets global variables:
+    - Legacy: COLOR_1 through COLOR_14, COLOR_RESET, column_color
+    - Context-based: COLOR_TITLE, COLOR_HEADER, COLOR_CONTENT, etc.
     """
     global COLOR_1, COLOR_2, COLOR_3, COLOR_4, COLOR_5, COLOR_6
     global COLOR_7, COLOR_8, COLOR_9, COLOR_10, COLOR_11, COLOR_12
     global COLOR_13, COLOR_14, COLOR_RESET
+    global COLOR_TITLE, COLOR_HEADER, COLOR_CONTENT, COLOR_IMPORTANT
+    global COLOR_WARNING, COLOR_CRITICAL, COLOR_SUCCESS, COLOR_INFO, COLOR_HIGHLIGHT
     global column_color, no_pipe
 
     if no_pipe:
+        # Legacy colors (deprecated)
         COLOR_1  = ansicolor.get_color(ansicolor.RED)
         COLOR_2  = ansicolor.get_color(ansicolor.GREEN)
         COLOR_3  = ansicolor.get_color(ansicolor.YELLOW)
@@ -95,6 +111,17 @@ def set_color_table():
         COLOR_14 = ansicolor.get_color(ansicolor.LIGHTCYAN)
         COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
 
+        # Context-based colors (preferred)
+        COLOR_TITLE = ansicolor.get_color(ansicolor.LIGHTCYAN)      # Section titles
+        COLOR_HEADER = ansicolor.get_color(ansicolor.CYAN)          # Table headers
+        COLOR_CONTENT = ""                                           # Normal text (no color)
+        COLOR_IMPORTANT = ansicolor.get_color(ansicolor.LIGHTYELLOW) # Important values
+        COLOR_WARNING = ansicolor.get_color(ansicolor.YELLOW)        # Warnings
+        COLOR_CRITICAL = ansicolor.get_color(ansicolor.LIGHTRED)     # Critical/errors
+        COLOR_SUCCESS = ansicolor.get_color(ansicolor.LIGHTGREEN)    # Success indicators
+        COLOR_INFO = ansicolor.get_color(ansicolor.MAGENTA)          # Metadata/secondary info
+        COLOR_HIGHLIGHT = ansicolor.get_color(ansicolor.LIGHTMAGENTA) # Emphasis
+
         column_color = {
             1: COLOR_1,   2: COLOR_2,   3: COLOR_3,   4: COLOR_4,
             5: COLOR_5,   6: COLOR_6,   7: COLOR_7,   8: COLOR_8,
@@ -107,6 +134,11 @@ def set_color_table():
         COLOR_5 = COLOR_6 = COLOR_7 = COLOR_8 = ""
         COLOR_9 = COLOR_10 = COLOR_11 = COLOR_12 = ""
         COLOR_13 = COLOR_14 = COLOR_RESET = ""
+
+        COLOR_TITLE = COLOR_HEADER = COLOR_CONTENT = ""
+        COLOR_IMPORTANT = COLOR_WARNING = COLOR_CRITICAL = ""
+        COLOR_SUCCESS = COLOR_INFO = COLOR_HIGHLIGHT = ""
+
         column_color = {}
 
 

@@ -498,15 +498,6 @@ def page_owner_stat(input_str, env_vars, is_cmd_stopped_func,\
     result_str = ""
     sos_home = env_vars['sos_home']
     screen.init_data(no_pipe, 0, is_cmd_stopped)
-
-    # Set up semantic column coloring for page owner statistics
-    if no_pipe:
-        screen.column_color = {
-            1: screen.COLOR_1,   # Size - RED (critical memory allocation)
-            2: screen.COLOR_6,   # Call trace/Module/Type - CYAN (path/identifier)
-            3: screen.COLOR_3,   # Module name - YELLOW (identifier)
-        }
-
     for file_path in args[1:]:
         try:
             result_str = result_str + handle_a_file(file_path, o)
