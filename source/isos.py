@@ -75,6 +75,7 @@ Copyright: 2024
 # --------------------------------------------------------------------
 
 import sys
+import ast
 import os
 import re
 from os.path import expanduser, isfile, isdir, join
@@ -176,6 +177,63 @@ class CtrlCKeyboardInterrupt(KeyboardInterrupt):
         super().__init__()
 
 
+def safe_eval_expr(expr):
+    """
+    Evaluate a numeric expression in a safe AST-based evaluator.
+    """
+    allowed_bin_ops = (
+        ast.Add,
+        ast.Sub,
+        ast.Mult,
+        ast.Div,
+        ast.FloorDiv,
+        ast.Mod,
+        ast.Pow,
+    )
+    allowed_unary_ops = (
+        ast.UAdd,
+        ast.USub,
+    )
+
+    def _eval(node):
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+        if isinstance(node, ast.Constant):
+            if not isinstance(node.value, (int, float)):
+                raise ValueError("Only numeric values are supported")
+            return node.value
+        if isinstance(node, ast.BinOp):
+            if not isinstance(node.op, allowed_bin_ops):
+                raise ValueError("Unsupported operator")
+            left = _eval(node.left)
+            right = _eval(node.right)
+            if isinstance(node.op, ast.Add):
+                return left + right
+            if isinstance(node.op, ast.Sub):
+                return left - right
+            if isinstance(node.op, ast.Mult):
+                return left * right
+            if isinstance(node.op, ast.Div):
+                return left / right
+            if isinstance(node.op, ast.FloorDiv):
+                return left // right
+            if isinstance(node.op, ast.Mod):
+                return left % right
+            if isinstance(node.op, ast.Pow):
+                return left ** right
+            raise ValueError("Unsupported operator")
+        if isinstance(node, ast.UnaryOp):
+            if not isinstance(node.op, allowed_unary_ops):
+                raise ValueError("Unsupported unary operator")
+            operand = _eval(node.operand)
+            if isinstance(node.op, ast.UAdd):
+                return +operand
+            return -operand
+        raise ValueError("Invalid expression")
+
+    return _eval(ast.parse(expr, mode="eval"))
+
+
 # ====================================================================
 # Key Bindings
 # ====================================================================
@@ -203,6 +261,8 @@ modules = []
 
 # Command name -> function mapping for extensions
 mod_command_set = {}
+mod_command_origin = {}
+mod_aliases_seen = set()
 
 # Environment variables (sos_home is the most important)
 env_vars = {
@@ -246,6 +306,7 @@ def load_commands():
         if ISOS_CMD_PATH environment variable not set.
     """
     global modules
+    global mod_aliases_seen
 
     try:
         cmd_path_list = os.environ["ISOS_CMD_PATH"]
@@ -253,6 +314,7 @@ def load_commands():
         cmd_path_list = DEFAULT_CMD_PATH
 
     mod_command_set.clear()
+    mod_aliases_seen.clear()
     path_list = cmd_path_list.split(':')
     for path in path_list:
         try:
@@ -279,7 +341,7 @@ def load_commands_in_a_path(source_path):
 
     # Find all .py files
     pysearchre = re.compile('.py$', re.IGNORECASE)
-    cmdfiles = filter(pysearchre.search, os.listdir(source_path))
+    cmdfiles = sorted(filter(pysearchre.search, os.listdir(source_path)))
     form_module = lambda fp: '.' + os.path.splitext(fp)[0]
     cmds = map(form_module, cmdfiles)
 
@@ -310,13 +372,23 @@ def add_command_module(new_module):
     global mod_command_set
 
     try:
+        module_name = new_module.__name__
         cmd_set = new_module.get_command_info()
         for cmd_str in cmd_set:
+            if not isinstance(cmd_set[cmd_str], type(lambda: None)):
+                print("Ignoring '%s' from %s: invalid command handler type" % (cmd_str, module_name))
+                continue
             func = cmd_set[cmd_str]
             if cmd_str in mod_command_set:
-                print("Replacing %s from %s" % (cmd_str, mod_command_set[cmd_str]))
+                prev_mod = mod_command_origin.get(cmd_str, "unknown")
+                print("Replacing command '%s' from %s" % (cmd_str, prev_mod))
+            if cmd_str in command_set:
+                print("Warning: extension command '%s' shadows a built-in command" % (cmd_str))
             mod_command_set[cmd_str] = func
-        modules.append(new_module)
+            mod_command_origin[cmd_str] = module_name
+        if module_name not in mod_aliases_seen:
+            modules.append(new_module)
+            mod_aliases_seen.add(module_name)
     except Exception as e:
         print("Failed to add command from %s: %s" % (new_module, str(e)))
 
@@ -537,15 +609,19 @@ def eval_expr(input_str, env_vars, is_cmd_stopped=None,
         eval 53828382/1024/1024
         # Returns: "51.33"
 
-    Warning:
-        Uses Python's eval() - only use with trusted input
     """
     if show_help:
         result = "Calculate expression\n\neval <expression>\n\nExample) eval 53828382/1024/1024\n51.33"
         return result
 
-    input_str = input_str.replace("eval ", "")
-    return "%.2f" % (eval(input_str))
+    expression = input_str.replace("eval ", "", 1).strip()
+    if len(expression) == 0:
+        return "Usage: eval <expression>"
+
+    try:
+        return "%.2f" % (safe_eval_expr(expression))
+    except Exception as e:
+        return "Invalid expression: %s" % str(e)
 
 
 def change_dir(input_str, env_vars, is_cmd_stopped,
@@ -1059,7 +1135,11 @@ def handle_input(input_str):
         orig_input_str = input_str
         print("%s%s" % (get_prompt_str()[0], input_str))
 
-    last_args = shlex.split(input_str)
+    try:
+        last_args = shlex.split(input_str)
+    except Exception as e:
+        print("Error parsing input: %s" % str(e))
+        return ""
     shell_part = ""
 
     # Extract pipe portion
@@ -1205,12 +1285,18 @@ def parse_history(input_str):
         if word.startswith("!") and word[1:].isdecimal():
             # !N - run from original directory
             hidx = int(word[1:], 10) - 1
+            if hidx < 0 or hidx >= len(history_cmds):
+                print("History index %d is out of range" % (hidx + 1))
+                return "", ""
             input_str = input_str.replace(word, history_cmds[hidx])
             run_path = history_cwds[hidx]
             modified = True
         elif word.startswith("?") and word[1:].isdecimal():
             # ?N - run from current directory
             hidx = int(word[1:], 10) - 1
+            if hidx < 0 or hidx >= len(history_cmds):
+                print("History index %d is out of range" % (hidx + 1))
+                return "", ""
             input_str = input_str.replace(word, history_cmds[hidx])
             modified = True
 
