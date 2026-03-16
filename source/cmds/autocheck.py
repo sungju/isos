@@ -69,6 +69,27 @@ def get_system_info():
         pass
 
 
+def _is_module_path_trusted(path):
+    """
+    Return True if a module load path is safe to import from.
+
+    A path is considered untrusted if it is world-writable (mode & 0o002),
+    which means any user on the system could plant malicious .py files there.
+    Prints a warning and returns False for untrusted paths.
+    """
+    try:
+        real_path = os.path.realpath(path)
+        if not os.path.isdir(real_path):
+            return False
+        mode = os.stat(real_path).st_mode
+        if mode & 0o002:
+            print("Security warning: skipping module path '%s' — directory is world-writable" % path)
+            return False
+    except OSError:
+        return False
+    return True
+
+
 def load_rules():
     global modules
 
@@ -85,8 +106,11 @@ def load_rules():
     modules = []
     for path in path_list:
         try:
-            if os.path.exists(path + "/rules"):
-                source_path = path + "/rules"
+            rules_path = path + "/rules"
+            if os.path.exists(rules_path):
+                if not _is_module_path_trusted(rules_path):
+                    continue
+                source_path = rules_path
                 load_rules_in_a_path(source_path)
         except Exception as e:
             print(e)

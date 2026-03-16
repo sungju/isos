@@ -289,6 +289,27 @@ page_size = DEFAULT_PAGE_SIZE
 # Module Loading
 # ====================================================================
 
+def _is_module_path_trusted(path):
+    """
+    Return True if a module load path is safe to import from.
+
+    A path is considered untrusted if it is world-writable (mode & 0o002),
+    which means any user on the system could plant malicious .py files there.
+    Prints a warning and returns False for untrusted paths.
+    """
+    try:
+        real_path = os.path.realpath(path)
+        if not os.path.isdir(real_path):
+            return False
+        mode = os.stat(real_path).st_mode
+        if mode & 0o002:
+            print("Security warning: skipping module path '%s' — directory is world-writable" % path)
+            return False
+    except OSError:
+        return False
+    return True
+
+
 def load_commands():
     """
     Load command extension modules from ISOS_CMD_PATH.
@@ -320,6 +341,8 @@ def load_commands():
         try:
             source_path = path + "/cmds"
             if os.path.exists(source_path):
+                if not _is_module_path_trusted(source_path):
+                    continue
                 load_commands_in_a_path(source_path)
         except (IOError, OSError) as e:
             print("Couldn't find %s/cmds directory: %s" % (path, str(e)))
@@ -983,9 +1006,9 @@ def run_shell_command(input_str, pipe_input="", no_pipe=False):
     Execute shell command with optional piped input.
 
     Args:
-        input_str: Shell command to execute
+        input_str: Shell command to execute (string or list of args)
         pipe_input: String to pipe as stdin (default empty)
-        no_pipe: If True, run with os.system() for full terminal output
+        no_pipe: If True, run with subprocess for full terminal output
 
     Returns:
         Command output as string, or empty string if no_pipe=True
@@ -1000,16 +1023,20 @@ def run_shell_command(input_str, pipe_input="", no_pipe=False):
         # Run interactive command
         run_shell_command("vi file.txt", no_pipe=True)
     """
+    # Accept pre-split argument lists to avoid shell injection when callers
+    # build commands with untrusted file paths or values.
+    use_shell = isinstance(input_str, str)
+
     if len(pipe_input.strip()) != 0:
         input_bytes = pipe_input.encode('utf-8')
-        p = Popen(input_str, shell=True, stdout=PIPE, stdin=PIPE, stderr=STDOUT)
+        p = Popen(input_str, shell=use_shell, stdout=PIPE, stdin=PIPE, stderr=STDOUT)
         stdout_result = p.communicate(input=input_bytes)[0]
         return stdout_result.decode()
     elif no_pipe == True:
-        os.system(input_str)
+        subprocess.run(input_str, shell=use_shell)
         return ""
     else:
-        p = Popen(input_str, shell=True, stdout=PIPE, stderr=STDOUT, text=True)
+        p = Popen(input_str, shell=use_shell, stdout=PIPE, stderr=STDOUT, text=True)
         result_str, errors = p.communicate()
         return result_str
 
@@ -1214,6 +1241,29 @@ def handle_input(input_str):
 
     # Handle output redirection
     if ofile_name != "":
+        # Restrict redirect targets to the sosreport directory or /tmp.
+        # Absolute paths outside these roots require explicit confirmation.
+        safe_roots = []
+        sos_home_val = env_vars.get("sos_home", "") if env_vars else ""
+        if sos_home_val:
+            safe_roots.append(os.path.realpath(sos_home_val))
+        safe_roots.append(os.path.realpath("/tmp"))
+
+        resolved = os.path.realpath(
+            os.path.join(os.getcwd(), ofile_name) if not os.path.isabs(ofile_name) else ofile_name
+        )
+        in_safe_root = any(
+            resolved.startswith(root + os.sep) or resolved == root
+            for root in safe_roots
+        )
+        if not in_safe_root:
+            confirm = input(
+                "Warning: redirect target '%s' is outside the sosreport directory. Write anyway? [y/N] " % ofile_name
+            ).strip().lower()
+            if confirm != 'y':
+                print("Redirect cancelled.")
+                return
+
         try:
             with open(ofile_name, 'w') as f:
                 f.write(result_str)

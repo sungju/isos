@@ -34,13 +34,14 @@ def get_pipe_aware_line(line, no_pipe):
     return line
 
 
-def run_perf_report(perf_cmd_str, no_pipe, options):
-    result = run_shell_command(perf_cmd_str, "", no_pipe=False)
+def run_perf_report(perf_cmd_args, no_pipe, options):
+    result = run_shell_command(perf_cmd_args, "", no_pipe=False)
     lines = result.splitlines()
     total_lines = len(lines)
     result_str = ""
 
-    line = screen.get_colored_line(perf_cmd_str + "\n" + "=" * 78)
+    display_cmd = " ".join(perf_cmd_args) if isinstance(perf_cmd_args, list) else perf_cmd_args
+    line = screen.get_colored_line(display_cmd + "\n" + "=" * 78)
     if no_pipe:
         print(line)
     else:
@@ -163,38 +164,37 @@ def run_perf(input_str, env_vars, is_cmd_stopped_func,\
         file_list = ['perf.data']
     for file_path in file_list:
         try:
-            perf_cmd_str = "perf report --stdio -f"
+            if o.sortby == 5:
+                perf_cmd_args = ["perf", "script", "--stdio", "-f"]
+            else:
+                perf_cmd_args = ["perf", "report", "--stdio", "-f"]
+
             if not o.debugsymbol:
-                perf_cmd_str = perf_cmd_str +\
-                        (" --kallsyms=%s/proc/kallsyms -i %s" % \
-                        (sos_home, file_path))
+                perf_cmd_args += ["--kallsyms=%s/proc/kallsyms" % sos_home, "-i", file_path]
 
             if o.show_meta:
-                perf_cmd_str = perf_cmd_str + " --header"
+                perf_cmd_args.append("--header")
             if o.quiet:
-                perf_cmd_str = perf_cmd_str + " -q"
+                perf_cmd_args.append("-q")
 
             if o.depth > 0:
-                perf_cmd_str = perf_cmd_str + (" --max-stack %d" % (o.depth))
+                perf_cmd_args += ["--max-stack", str(o.depth)]
 
             if o.sortby == 0:
-                perf_cmd_str = perf_cmd_str + " -s overhead_sys,comm --show-cpu-utilization"
+                perf_cmd_args += ["-s", "overhead_sys,comm", "--show-cpu-utilization"]
             elif o.sortby == 1:
-                perf_cmd_str = perf_cmd_str + " --no-children -s comm,dso"
+                perf_cmd_args += ["--no-children", "-s", "comm,dso"]
             elif o.sortby == 2:
-                perf_cmd_str = perf_cmd_str + " -s overhead,overhead_us,overhead_sys,comm"
+                perf_cmd_args += ["-s", "overhead,overhead_us,overhead_sys,comm"]
             elif o.sortby == 3:
-                perf_cmd_str = perf_cmd_str + " -s overhead"
+                perf_cmd_args += ["-s", "overhead"]
             elif o.sortby == 4:
-                perf_cmd_str = perf_cmd_str + " --tasks"
-            elif o.sortby == 5:
-                perf_cmd_str = perf_cmd_str.replace(" report --stdio ",\
-                        " script ", 1)
+                perf_cmd_args.append("--tasks")
 
             if o.graph:
-                perf_cmd_str = perf_cmd_str + " --hierarchy"
+                perf_cmd_args.append("--hierarchy")
 
-            result_str = result_str + run_perf_report(perf_cmd_str, no_pipe, o)
+            result_str = result_str + run_perf_report(perf_cmd_args, no_pipe, o)
         except Exception as e:
             print(e)
             result_str = result_str + get_pipe_aware_line("perf file '%s' cannot read" % (file_path), no_pipe)

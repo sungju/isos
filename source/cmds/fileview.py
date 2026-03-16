@@ -3,6 +3,7 @@ import time
 from optparse import OptionParser
 from io import StringIO
 import glob
+import os
 from os.path import expanduser, isfile, isdir, join
 
 import ansicolor
@@ -100,10 +101,28 @@ Example)
 
 
 is_cmd_stopped = None
+sos_home = ""
+
+
+def is_path_safe(path, safe_root):
+    """
+    Return True if the resolved real path of `path` is within `safe_root`.
+    Rejects absolute paths that escape safe_root and any path with .. components
+    that resolve outside it.
+    """
+    if not safe_root:
+        return True
+    real_safe = os.path.realpath(safe_root)
+    real_path = os.path.realpath(os.path.join(os.getcwd(), path) if not os.path.isabs(path) else path)
+    return real_path.startswith(real_safe + os.sep) or real_path == real_safe
+
+
 def run_fileview(input_str, env_vars, is_cmd_stopped_func,\
         show_help=False, no_pipe=True):
     global is_cmd_stopped
+    global sos_home
     is_cmd_stopped = is_cmd_stopped_func
+    sos_home = env_vars.get('sos_home', '') if env_vars else ''
 
     usage = "Usage: cat [options]"
     op = OptionParser(usage=usage, add_help_option=False)
@@ -122,7 +141,12 @@ def run_fileview(input_str, env_vars, is_cmd_stopped_func,\
     result_str = ''
     file_list = []
     for fname in args[1:]:
-        file_list = file_list + get_file_list(fname)
+        expanded = get_file_list(fname)
+        for f in expanded:
+            if not is_path_safe(f, sos_home):
+                result_str += "Access denied: '%s' is outside the sosreport directory\n" % f
+            else:
+                file_list.append(f)
 
     for afile in file_list:
         result_str = result_str + show_file_content(afile, no_pipe, o, show_name=len(file_list) > 1)

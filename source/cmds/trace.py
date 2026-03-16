@@ -9,6 +9,17 @@ from os.path import isfile, join
 from isos import run_shell_command, column_strings
 import screen
 
+
+def _is_path_safe(path, safe_root):
+    """Return True if path resolves within safe_root."""
+    if not safe_root:
+        return True
+    real_safe = os.path.realpath(safe_root)
+    real_path = os.path.realpath(
+        os.path.join(os.getcwd(), path) if not os.path.isabs(path) else path
+    )
+    return real_path.startswith(real_safe + os.sep) or real_path == real_safe
+
 def description():
     return "Shows trace-cmd related data"
 
@@ -140,7 +151,7 @@ Examples:
         print(cmd_examples)
         return ""
 
-sos_home=""
+sos_home = ""
 is_cmd_stopped = None
 def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
         show_help=False, no_pipe=True):
@@ -224,22 +235,35 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
             ofile = ofile.replace("%f", file_path)
             #ofile = ofile.replace("%f", os.path.splitext(os.path.basename(file_path))[0])
             if o.profile:
-                result = run_shell_command("trace-cmd report --profile %s" % (file_path),
+                result = run_shell_command(
+                        ["trace-cmd", "report", "--profile", file_path],
                         "", no_pipe=False)
                 result = column_strings(result, " ")
                 if ofile != "":
-                    with open(ofile, "w") as f:
-                        f.write(result)
+                    if not _is_path_safe(ofile, sos_home):
+                        result_str = result_str + screen.get_pipe_aware_line(
+                            "Error: output path '%s' is outside the sosreport directory" % ofile)
+                    else:
+                        with open(ofile, "w") as f:
+                            f.write(result)
                         result = ""
 
                 for line in result.splitlines():
                     result_str = result_str + screen.get_pipe_aware_line(line)
             else: # elif o.graph: # If nothing specified, let's consider funcgraph
+                cmd_args = ["trace-cmd", "report", "-O", "fgraph:tailprint", file_path]
                 if ofile != "":
-                    ofile = " > " + ofile
-
-                result = run_shell_command("trace-cmd report -O fgraph:tailprint %s %s" % (file_path, ofile),
-                        "", no_pipe=no_pipe)
+                    if not _is_path_safe(ofile, sos_home):
+                        result_str = result_str + screen.get_pipe_aware_line(
+                            "Error: output path '%s' is outside the sosreport directory" % ofile)
+                    else:
+                        # Write output to file directly rather than via shell redirect
+                        result = run_shell_command(cmd_args, "", no_pipe=False)
+                        with open(ofile, "w") as f:
+                            f.write(result)
+                        result = ""
+                else:
+                    result = run_shell_command(cmd_args, "", no_pipe=no_pipe)
                 result_str = result_str + screen.get_pipe_aware_line(result)
 
         except Exception as e:
