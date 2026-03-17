@@ -616,17 +616,45 @@ def build_process_filter_pattern(filter_str):
         return None
 
 
-def parse_oom_timestamp(line):
-    """Extract timestamp from log line"""
+def detect_oom_file_format(file_path):
+    """Detect the log format of a file containing OOM events.
+
+    Returns 'vmcore-dmesg' if lines start with [timestamp] pattern,
+    'syslog' otherwise.
+    """
     try:
-        # Try standard syslog format: "Feb 22 10:15:30"
-        match = re.match(r'(\w+\s+\d+\s+\d+:\d+:\d+)', line)
-        if match:
-            timestamp_str = match.group(1)
-            # Add current year for parsing
-            current_year = datetime.now().year
-            timestamp = datetime.strptime(timestamp_str + " " + str(current_year), "%b %d %H:%M:%S %Y")
-            return timestamp
+        with open(file_path) as f:
+            for i, line in enumerate(f):
+                if i >= 10:
+                    break
+                if re.match(r'^\[\s*\d+\.\d+\]', line):
+                    return 'vmcore-dmesg'
+                if 'kernel:' in line:
+                    return 'syslog'
+    except:
+        pass
+    return 'syslog'
+
+
+def parse_oom_timestamp(line, format='syslog'):
+    """Extract timestamp from log line.
+
+    Returns a datetime for syslog format, or None for vmcore-dmesg
+    (jiffies cannot be reliably converted to wall-clock time without
+    boot time reference, so timestamp-based analysis is skipped).
+    """
+    try:
+        if format == 'vmcore-dmesg':
+            return None
+        else:
+            # Try standard syslog format: "Feb 22 10:15:30"
+            match = re.match(r'(\w+\s+\d+\s+\d+:\d+:\d+)', line)
+            if match:
+                timestamp_str = match.group(1)
+                # Add current year for parsing
+                current_year = datetime.now().year
+                timestamp = datetime.strptime(timestamp_str + " " + str(current_year), "%b %d %H:%M:%S %Y")
+                return timestamp
     except:
         pass
     return None
@@ -644,6 +672,25 @@ def extract_invoker_process(line):
     return "unknown"
 
 
+def extract_stack_trace_info(line):
+    """Extract function name and module from vmcore-dmesg stack trace line.
+
+    Parses: [timestamp]  function_name+0xoffset/0xsize [module]
+    Returns: (function_name, module) tuple, or (None, None) if no match.
+
+    TODO: Integrate into show_oom_events when adding vmcore-dmesg detail view.
+    Call on each oom_invoked line for vmcore-dmesg format to display annotated
+    stack traces with resolved function names and modules.
+    """
+    try:
+        match = re.search(r'\[[\d.]+\]\s+(\w+)\+0x[\da-f]+/0x[\da-f]+(?:\s+\[([^\]]+)\])?', line)
+        if match:
+            return (match.group(1), match.group(2))
+    except:
+        pass
+    return (None, None)
+
+
 def collect_oom_events(file_list, op):
     """Collect all OOM events with metadata for analysis"""
     oom_events = []
@@ -653,6 +700,8 @@ def collect_oom_events(file_list, op):
         if not isfile(file):
             continue
 
+        file_format = detect_oom_file_format(file)
+
         try:
             with open(file) as f:
                 oom_data = None
@@ -661,7 +710,7 @@ def collect_oom_events(file_list, op):
                 pid_index = -1
                 pname_index = -1
 
-                trim_word = ' kernel: '
+                trim_word = '] ' if file_format == 'vmcore-dmesg' else ' kernel: '
                 if op.trim_word != "":
                     trim_word = op.trim_word
 
@@ -676,9 +725,12 @@ def collect_oom_events(file_list, op):
                     trim_ends_idx = line.find(trim_word) + len(trim_word)
 
                     # Detect OOM event start
-                    if "invoked oom-killer:" in line:
+                    oom_start = "invoked oom-killer:" in line
+                    if file_format == 'vmcore-dmesg' and not oom_start and oom_data is None:
+                        oom_start = "Out of memory:" in line
+                    if oom_start:
                         oom_data = {
-                            'timestamp': parse_oom_timestamp(line),
+                            'timestamp': parse_oom_timestamp(line, file_format),
                             'invoker': extract_invoker_process(line),
                             'file': file,
                             'line': line.strip(),
@@ -984,6 +1036,10 @@ def show_oom_events(op, args, no_pipe):
         file_list = get_file_list(sos_home + "/var/log/messages*", False)
         file_list = file_list + \
                 get_file_list(sos_home + "/sos_commands/logs/journalctl*", False)
+        file_list = file_list + \
+                get_file_list(sos_home + "/var/log/vmcore-dmesg.txt*", False)
+        file_list = file_list + \
+                get_file_list(sos_home + "/*vmcore-dmesg.txt*", False)
 
     # If summary mode is requested, collect all OOM events and show dashboard
     if op.oom_summary:
@@ -1027,6 +1083,7 @@ def show_oom_events(op, args, no_pipe):
         if not isfile(file):
             print("Not a file : '%s'" % (file))
             continue
+        file_format = detect_oom_file_format(file)
         try:
             with open(file) as f:
                 result_str = result_str +\
@@ -1047,7 +1104,7 @@ def show_oom_events(op, args, no_pipe):
                 cgroup_dict = {}
                 total_usage = 0
                 for line in chain(f, [""]):
-                    trim_word = ' kernel: '
+                    trim_word = '] ' if file_format == 'vmcore-dmesg' else ' kernel: '
                     if op.trim_word != "":
                         trim_word = op.trim_word
                     if op.trim_idx != 0:
@@ -1058,7 +1115,10 @@ def show_oom_events(op, args, no_pipe):
                     if trim_word not in line:
                         trim_word = '] '
                     trim_ends_idx = line.find(trim_word) + len(trim_word)
-                    if "invoked oom-killer:" in line:
+                    oom_line_detected = "invoked oom-killer:" in line
+                    if file_format == 'vmcore-dmesg' and not oom_line_detected and not oom_invoked:
+                        oom_line_detected = "Out of memory:" in line
+                    if oom_line_detected:
                         # Check if we've hit the count limit
                         if op.oom_count > 0 and oom_event_counter >= op.oom_count:
                             break
@@ -1846,6 +1906,12 @@ Examples)
     To control how many top memory consumers are shown per event:
 
     example.com> meminfo -O --oom-top 20
+
+    vmcore-dmesg.txt format is also supported (kernel dmesg captured before crash):
+
+    example.com> meminfo -O /path/to/vmcore-dmesg.txt
+    Format: [342389.669262] process invoked oom-killer: ...
+    The file is also auto-detected in the sosreport under var/log/vmcore-dmesg.txt.
 
     To show OOM events with bar chart visualization:
 
