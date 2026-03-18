@@ -332,12 +332,16 @@ def display_pcap_summary(filepath, analysis, result):
 # Main Command
 # ============================================================================
 
-def run_pcapinfo(obj_list, cmd_options="", no_pipe=True):
+def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
+                show_help=False, no_pipe=True):
     """Main entry point for pcapinfo command."""
     global sos_home, is_cmd_stopped
 
     # Set interruption callback
-    is_cmd_stopped = screen.is_exit_requested
+    is_cmd_stopped = is_cmd_stopped_func
+
+    # Extract options from input string
+    cmd_options = input_str.replace("pcapinfo", "").strip()
 
     # Parse options
     parser = OptionParser(usage="pcapinfo [options]")
@@ -352,7 +356,7 @@ def run_pcapinfo(obj_list, cmd_options="", no_pipe=True):
     parser.add_option("-s", "--summary", dest="summary", action="store_true",
                      default=True, help="Show summary statistics (default)")
 
-    (options, args) = parser.parse_args(cmd_options.split())
+    (options, args) = parser.parse_args(cmd_options.split()) if cmd_options else parser.parse_args([])
 
     # Initialize output
     result = screen.init_data(no_pipe)
