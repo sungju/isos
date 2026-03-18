@@ -717,18 +717,18 @@ def display_packet_trace(packets, no_pipe):
 
     # Add packet rows
     for pkt in packets:
-        # Truncate fields if too long
+        # Truncate fields if too long (but not Info - let TableFormatter handle it)
         src = pkt['src'][:24] if len(pkt['src']) > 24 else pkt['src']
         dst = pkt['dst'][:24] if len(pkt['dst']) > 24 else pkt['dst']
-        info = pkt['info'][:29] if len(pkt['info']) > 29 else pkt['info']
         proto = pkt['proto']
 
         # Determine protocol color for Proto column (column index 4)
         proto_upper = proto.upper()
         proto_color = PROTO_COLOR_MAP.get(proto_upper, 'white')
 
-        # Colorize TCP flags in Info field
-        colored_info = colorize_info(info, no_pipe)
+        # Colorize TCP flags in Info field BEFORE any truncation
+        # TableFormatter will handle width enforcement in an ANSI-aware manner
+        colored_info = colorize_info(pkt['info'], no_pipe)
 
         # Add row with protocol-specific coloring
         table.add_row(
