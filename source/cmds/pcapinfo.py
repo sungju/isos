@@ -726,9 +726,10 @@ def display_packet_trace(packets, no_pipe):
         proto_upper = proto.upper()
         proto_color = PROTO_COLOR_MAP.get(proto_upper, 'white')
 
-        # Colorize TCP flags in Info field BEFORE any truncation
-        # TableFormatter will handle width enforcement in an ANSI-aware manner
-        colored_info = colorize_info(pkt['info'], no_pipe)
+        # TEMPORARY FIX: Disable Info field coloring to prevent ANSI bleeding
+        # Rich library cannot safely truncate text with embedded raw ANSI codes
+        # TODO: Convert colorize_info() to use Rich markup instead of raw ANSI
+        colored_info = pkt['info']
 
         # Add row with protocol-specific coloring
         table.add_row(
