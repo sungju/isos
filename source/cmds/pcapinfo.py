@@ -136,6 +136,135 @@ def is_text_tcpdump(filepath):
     return False
 
 
+def get_packet_trace_tshark(filepath, options):
+    """
+    Get packet-by-packet trace using tshark.
+    Returns: list of packet dicts with timestamp, src, dst, proto, info
+    """
+    packets = []
+
+    try:
+        # Build tshark command for packet listing
+        cmd = ['tshark', '-r', filepath, '-n', '-t', 'ad']
+
+        # Apply IP filter if specified
+        if hasattr(options, 'ip') and options.ip:
+            cmd.extend(['-Y', f'ip.addr=={options.ip}'])
+
+        # Limit packet count
+        if hasattr(options, 'limit') and options.limit:
+            cmd.extend(['-c', str(options.limit)])
+
+        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=30)
+
+        for line in output.splitlines():
+            if is_cmd_stopped and is_cmd_stopped():
+                break
+
+            # Parse tshark output format:
+            # "1 2026-03-18 12:34:56.789 192.168.1.1 → 192.168.1.2 TCP 74 443 → 8080 [SYN]"
+            parts = line.split(None, 6)
+            if len(parts) >= 6:
+                packets.append({
+                    'num': parts[0],
+                    'timestamp': f"{parts[1]} {parts[2]}",
+                    'src': parts[3],
+                    'dst': parts[4] if parts[4] != '→' else parts[5],
+                    'proto': parts[5] if parts[4] == '→' else parts[4],
+                    'info': parts[6] if len(parts) > 6 else ''
+                })
+
+    except subprocess.TimeoutExpired:
+        pass
+    except subprocess.CalledProcessError:
+        pass
+    except Exception:
+        pass
+
+    return packets
+
+
+def get_packet_trace_text(filepath, options):
+    """
+    Get packet-by-packet trace from text tcpdump file.
+    Returns: list of packet dicts
+    """
+    packets = []
+    packet_count = 0
+    limit = options.limit if hasattr(options, 'limit') else 100
+
+    try:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                if is_cmd_stopped and is_cmd_stopped():
+                    break
+
+                if packet_count >= limit:
+                    break
+
+                # Extract timestamp
+                ts_match = re.search(r'(\d{2}:\d{2}:\d{2}\.\d+)', line)
+                if not ts_match:
+                    continue
+
+                timestamp = ts_match.group(1)
+
+                # Extract IP conversation: "IP src.port > dst.port" or "IP src > dst"
+                ip_match = re.search(r'IP6?\s+(\d+\.\d+\.\d+\.\d+)(?:\.(\d+))?\s+>\s+(\d+\.\d+\.\d+\.\d+)(?:\.(\d+))?', line)
+                if not ip_match:
+                    # Try hostname format
+                    ip_match = re.search(r'IP6?\s+([^\s:>]+?)(?:\.(\d+))?\s+>\s+([^\s:]+?)(?:\.(\d+))?:', line)
+
+                if ip_match:
+                    src_ip = ip_match.group(1)
+                    src_port = ip_match.group(2) if ip_match.group(2) else ''
+                    dst_ip = ip_match.group(3)
+                    dst_port = ip_match.group(4) if ip_match.group(4) else ''
+
+                    # Apply IP filter if specified
+                    if hasattr(options, 'ip') and options.ip:
+                        if options.ip not in [src_ip, dst_ip]:
+                            continue
+
+                    # Extract protocol and info
+                    proto = 'IP'
+                    if 'TCP' in line:
+                        proto = 'TCP'
+                    elif 'UDP' in line:
+                        proto = 'UDP'
+                    elif 'ICMP' in line:
+                        proto = 'ICMP'
+
+                    # Extract flags and length
+                    info_parts = []
+                    flags_match = re.search(r'Flags \[([^\]]+)\]', line)
+                    if flags_match:
+                        info_parts.append(f"[{flags_match.group(1)}]")
+
+                    length_match = re.search(r'length\s+(\d+)', line)
+                    if length_match:
+                        info_parts.append(f"len={length_match.group(1)}")
+
+                    # Build source and destination with ports
+                    src = f"{src_ip}:{src_port}" if src_port else src_ip
+                    dst = f"{dst_ip}:{dst_port}" if dst_port else dst_ip
+
+                    packet_count += 1
+                    packets.append({
+                        'num': str(packet_count),
+                        'timestamp': timestamp,
+                        'src': src,
+                        'dst': dst,
+                        'proto': proto,
+                        'info': ' '.join(info_parts)
+                    })
+
+    except Exception:
+        pass
+
+    return packets
+
+
 def parse_text_tcpdump(filepath, options):
     """
     Parse text-mode tcpdump output and extract conversations.
@@ -368,7 +497,10 @@ Examples:
     > pcapinfo -l           # List pcap files only
     > pcapinfo -f FILE      # Analyze specific pcap file (binary or text)
     > pcapinfo -c           # Show conversation analysis
+    > pcapinfo -t           # Show packet-by-packet trace
+    > pcapinfo -t -n 50     # Show first 50 packets
     > pcapinfo -i 10.0.0.1  # Show conversations with specific IP
+    > pcapinfo -t -i 10.0.0.1  # Packet trace for specific IP only
     > pcapinfo -c -i 10.0.0.1  # Conversation analysis for specific IP
     > pcapinfo -p tcp       # Filter by protocol (with tshark)
     > pcapinfo -h           # Show this help message
@@ -377,6 +509,8 @@ Note:
     - Supports binary pcap/pcapng files and text-mode tcpdump output
     - Text format: reads tcpdump -nn output directly
     - IP filtering works with both binary and text files
+    - Packet trace (-t) shows individual packets in conversation
+    - Use -n to limit number of packets displayed (default: 100)
 '''
     result_str = op.format_help() + cmd_examples
     return result_str
@@ -489,6 +623,32 @@ def display_pcap_summary(filepath, analysis, no_pipe, options=None):
     return result_str
 
 
+def display_packet_trace(packets, no_pipe):
+    """Display packet-by-packet trace."""
+    result_str = ""
+
+    if not packets:
+        result_str += "No packets found.\n\n"
+        return result_str
+
+    result_str += screen.COLOR_HEADER + "Packet Trace:" + screen.COLOR_RESET + "\n"
+    result_str += f"{'#':<6} {'Timestamp':<20} {'Source':<25} {'Dest':<25} {'Proto':<8} {'Info':<30}\n"
+    result_str += "-" * 120 + "\n"
+
+    for pkt in packets:
+        # Truncate fields if too long
+        src = pkt['src'][:24] if len(pkt['src']) > 24 else pkt['src']
+        dst = pkt['dst'][:24] if len(pkt['dst']) > 24 else pkt['dst']
+        info = pkt['info'][:29] if len(pkt['info']) > 29 else pkt['info']
+
+        result_str += f"{pkt['num']:<6} {pkt['timestamp']:<20} {src:<25} {dst:<25} {pkt['proto']:<8} {info:<30}\n"
+
+    result_str += "\n"
+    result_str += f"Showing {len(packets)} packet(s)\n\n"
+
+    return result_str
+
+
 # ============================================================================
 # Main Command
 # ============================================================================
@@ -516,6 +676,10 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
                   default=False, help="Show conversation analysis")
     op.add_option("-i", "--ip", dest="ip", default="",
                   help="Filter conversations by specific IP address")
+    op.add_option("-t", "--trace", dest="trace", action="store_true",
+                  default=False, help="Show packet-by-packet trace of conversations")
+    op.add_option("-n", "--limit", dest="limit", type="int", default=100,
+                  help="Limit number of packets shown in trace (default: 100)")
     op.add_option("-s", "--summary", dest="summary", action="store_true",
                   default=True, help="Show summary statistics (default)")
 
@@ -610,5 +774,21 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
 
         # Display results
         result_str += display_pcap_summary(filepath, analysis, no_pipe, o)
+
+        # Display packet trace if requested
+        if o.trace:
+            if is_text:
+                # Get packet trace from text file
+                packets = get_packet_trace_text(filepath, o)
+            elif tool_name == 'tshark':
+                # Get packet trace using tshark
+                packets = get_packet_trace_tshark(filepath, o)
+            else:
+                # tcpdump doesn't support detailed packet listing easily
+                result_str += screen.COLOR_WARNING + "Packet trace not available with tcpdump. Install tshark for packet trace support.\n\n" + screen.COLOR_RESET
+                packets = []
+
+            if packets:
+                result_str += display_packet_trace(packets, no_pipe)
 
     return result_str
