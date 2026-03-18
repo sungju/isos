@@ -232,6 +232,25 @@ def analyze_pcap_tcpdump(filepath, options):
 
 
 # ============================================================================
+# Help Message
+# ============================================================================
+
+def print_help_msg(op, no_pipe):
+    """Print help message"""
+    cmd_examples = '''
+Examples:
+    > pcapinfo              # Analyze all pcap files in sosreport
+    > pcapinfo -l           # List pcap files only
+    > pcapinfo -f FILE      # Analyze specific pcap file
+    > pcapinfo -c           # Show conversation analysis
+    > pcapinfo -p tcp       # Filter by protocol (with tshark)
+    > pcapinfo -h           # Show this help message
+'''
+    result_str = op.format_help() + cmd_examples
+    return result_str
+
+
+# ============================================================================
 # Output Formatting
 # ============================================================================
 
@@ -254,18 +273,19 @@ def format_duration(seconds):
         return f"{seconds/3600:.1f}h"
 
 
-def display_file_list(pcap_files, result):
+def display_file_list(pcap_files, no_pipe):
     """Display list of pcap files found."""
-    result.write(ansicolor.green("=" * 70) + "\n")
-    result.write(ansicolor.green("PCAP Files Found") + "\n")
-    result.write(ansicolor.green("=" * 70) + "\n\n")
+    result_str = ""
+    result_str += ansicolor.green("=" * 70) + "\n"
+    result_str += ansicolor.green("PCAP Files Found") + "\n"
+    result_str += ansicolor.green("=" * 70) + "\n\n"
 
     if not pcap_files:
-        result.write("No pcap files found in sosreport.\n")
-        return
+        result_str += "No pcap files found in sosreport.\n"
+        return result_str
 
-    result.write(f"{'File':<50} {'Size':>15}\n")
-    result.write("-" * 70 + "\n")
+    result_str += f"{'File':<50} {'Size':>15}\n"
+    result_str += "-" * 70 + "\n"
 
     total_size = 0
     for filepath, size in pcap_files:
@@ -274,58 +294,62 @@ def display_file_list(pcap_files, result):
         if 'sos_commands' in filepath:
             rel_path = filepath[filepath.find('sos_commands'):]
 
-        result.write(f"{rel_path:<50} {format_size(size):>15}\n")
+        result_str += f"{rel_path:<50} {format_size(size):>15}\n"
         total_size += size
 
-    result.write("-" * 70 + "\n")
-    result.write(f"Total: {len(pcap_files)} file(s), {format_size(total_size)}\n\n")
+    result_str += "-" * 70 + "\n"
+    result_str += f"Total: {len(pcap_files)} file(s), {format_size(total_size)}\n\n"
+    return result_str
 
 
-def display_pcap_summary(filepath, analysis, result):
+def display_pcap_summary(filepath, analysis, no_pipe):
     """Display summary of pcap file analysis."""
+    result_str = ""
     rel_path = filepath
     if 'sos_commands' in filepath:
         rel_path = filepath[filepath.find('sos_commands'):]
 
-    result.write(ansicolor.green("=" * 70) + "\n")
-    result.write(ansicolor.green(f"Analysis: {rel_path}") + "\n")
-    result.write(ansicolor.green("=" * 70) + "\n\n")
+    result_str += ansicolor.green("=" * 70) + "\n"
+    result_str += ansicolor.green(f"Analysis: {rel_path}") + "\n"
+    result_str += ansicolor.green("=" * 70) + "\n\n"
 
     if analysis['errors']:
         for error in analysis['errors']:
-            result.write(ansicolor.red(f"ERROR: {error}") + "\n")
-        result.write("\n")
-        return
+            result_str += ansicolor.red(f"ERROR: {error}") + "\n"
+        result_str += "\n"
+        return result_str
 
     # Basic statistics
-    result.write(f"Total Packets: {analysis['packet_count']:,}\n")
+    result_str += f"Total Packets: {analysis['packet_count']:,}\n"
     if analysis['timespan']:
-        result.write(f"Duration: {format_duration(analysis['timespan'])}\n")
-    result.write("\n")
+        result_str += f"Duration: {format_duration(analysis['timespan'])}\n"
+    result_str += "\n"
 
     # Protocol distribution
     if analysis['protocols']:
-        result.write(ansicolor.cyan("Protocol Distribution:") + "\n")
-        result.write(f"{'Protocol':<20} {'Packets':>15} {'Percentage':>15}\n")
-        result.write("-" * 52 + "\n")
+        result_str += ansicolor.cyan("Protocol Distribution:") + "\n"
+        result_str += f"{'Protocol':<20} {'Packets':>15} {'Percentage':>15}\n"
+        result_str += "-" * 52 + "\n"
 
         sorted_protos = sorted(analysis['protocols'].items(), key=lambda x: x[1], reverse=True)
         for proto, count in sorted_protos[:10]:  # Top 10 protocols
             pct = (count / analysis['packet_count'] * 100) if analysis['packet_count'] > 0 else 0
-            result.write(f"{proto:<20} {count:>15,} {pct:>14.1f}%\n")
-        result.write("\n")
+            result_str += f"{proto:<20} {count:>15,} {pct:>14.1f}%\n"
+        result_str += "\n"
 
     # Conversations
     if analysis['conversations']:
-        result.write(ansicolor.cyan("Top Conversations:") + "\n")
-        result.write(f"{'Source':<20} {'Destination':<20} {'Packets':>12} {'Bytes':>15}\n")
-        result.write("-" * 70 + "\n")
+        result_str += ansicolor.cyan("Top Conversations:") + "\n"
+        result_str += f"{'Source':<20} {'Destination':<20} {'Packets':>12} {'Bytes':>15}\n"
+        result_str += "-" * 70 + "\n"
 
         sorted_convs = sorted(analysis['conversations'], key=lambda x: x['bytes'], reverse=True)
         for conv in sorted_convs[:20]:  # Top 20 conversations
-            result.write(f"{conv['addr1']:<20} {conv['addr2']:<20} "
-                        f"{conv['packets']:>12,} {format_size(conv['bytes']):>15}\n")
-        result.write("\n")
+            result_str += f"{conv['addr1']:<20} {conv['addr2']:<20} "
+            result_str += f"{conv['packets']:>12,} {format_size(conv['bytes']):>15}\n"
+        result_str += "\n"
+
+    return result_str
 
 
 # ============================================================================
@@ -340,64 +364,77 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
     # Set interruption callback
     is_cmd_stopped = is_cmd_stopped_func
 
-    # Extract options from input string
-    cmd_options = input_str.replace("pcapinfo", "").strip()
-
     # Parse options
-    parser = OptionParser(usage="pcapinfo [options]")
-    parser.add_option("-l", "--list", dest="list_only", action="store_true",
-                     default=False, help="List pcap files only")
-    parser.add_option("-f", "--file", dest="file", default="",
-                     help="Analyze specific pcap file")
-    parser.add_option("-p", "--proto", dest="proto", default="",
-                     help="Filter by protocol (tcp, udp, icmp, etc.)")
-    parser.add_option("-c", "--conversations", dest="conversations", action="store_true",
-                     default=False, help="Show conversation analysis")
-    parser.add_option("-s", "--summary", dest="summary", action="store_true",
-                     default=True, help="Show summary statistics (default)")
+    usage = "Usage: pcapinfo [options]"
+    op = OptionParser(usage=usage, add_help_option=False)
+    op.add_option('-h', '--help', dest='help', action='store_true',
+                  default=False, help='Show this help message')
+    op.add_option("-l", "--list", dest="list_only", action="store_true",
+                  default=False, help="List pcap files only")
+    op.add_option("-f", "--file", dest="file", default="",
+                  help="Analyze specific pcap file")
+    op.add_option("-p", "--proto", dest="proto", default="",
+                  help="Filter by protocol (tcp, udp, icmp, etc.)")
+    op.add_option("-c", "--conversations", dest="conversations", action="store_true",
+                  default=False, help="Show conversation analysis")
+    op.add_option("-s", "--summary", dest="summary", action="store_true",
+                  default=True, help="Show summary statistics (default)")
 
-    (options, args) = parser.parse_args(cmd_options.split()) if cmd_options else parser.parse_args([])
+    # Parse options with error handling
+    try:
+        (o, args) = op.parse_args(input_str.split())
+    except:
+        return ""
 
-    # Initialize output
-    result = screen.init_data(no_pipe)
+    if o.help or show_help:
+        return print_help_msg(op, no_pipe)
+
+    # Initialize screen module
+    screen.init_data(no_pipe, 1, is_cmd_stopped_func)
+
+    # Get sosreport home directory
+    sos_home = env_vars["sos_home"]
+
+    # Initialize output string
+    result_str = ""
 
     # Check for required tools
     tool_name, tool_path = find_pcap_tool()
     if not tool_name:
-        result.write(ansicolor.red("ERROR: No pcap analysis tool found\n"))
-        result.write("\nPlease install one of:\n")
-        result.write("  - tshark (recommended): yum install wireshark-cli\n")
-        result.write("  - tcpdump: yum install tcpdump\n\n")
-        return screen.fini_data(result, no_pipe)
+        result_str += ansicolor.red("ERROR: No pcap analysis tool found\n")
+        result_str += "\nPlease install one of:\n"
+        result_str += "  - tshark (recommended): yum install wireshark-cli\n"
+        result_str += "  - tcpdump: yum install tcpdump\n\n"
+        return result_str
 
-    result.write(f"Using tool: {tool_name}\n\n")
+    result_str += f"Using tool: {tool_name}\n\n"
 
     # Find pcap files
-    if options.file:
+    if o.file:
         # Specific file requested
-        if not os.path.isfile(options.file):
-            result.write(ansicolor.red(f"ERROR: File not found: {options.file}\n"))
-            return screen.fini_data(result, no_pipe)
+        if not os.path.isfile(o.file):
+            result_str += ansicolor.red(f"ERROR: File not found: {o.file}\n")
+            return result_str
 
-        if not verify_pcap_file(options.file):
-            result.write(ansicolor.red(f"ERROR: Not a valid pcap file: {options.file}\n"))
-            return screen.fini_data(result, no_pipe)
+        if not verify_pcap_file(o.file):
+            result_str += ansicolor.red(f"ERROR: Not a valid pcap file: {o.file}\n")
+            return result_str
 
-        pcap_files = [(options.file, os.path.getsize(options.file))]
+        pcap_files = [(o.file, os.path.getsize(o.file))]
     else:
         # Find all pcap files
         pcap_files = find_pcap_files(sos_home)
 
     # List mode
-    if options.list_only:
-        display_file_list(pcap_files, result)
-        return screen.fini_data(result, no_pipe)
+    if o.list_only:
+        result_str += display_file_list(pcap_files, no_pipe)
+        return result_str
 
     # No files found
     if not pcap_files:
-        result.write("No pcap files found in sosreport.\n")
-        result.write("Use --file to specify a pcap file path.\n")
-        return screen.fini_data(result, no_pipe)
+        result_str += "No pcap files found in sosreport.\n"
+        result_str += "Use --file to specify a pcap file path.\n"
+        return result_str
 
     # Analyze each file
     for filepath, size in pcap_files:
@@ -406,21 +443,21 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
 
         # Verify file is valid pcap
         if not verify_pcap_file(filepath):
-            result.write(ansicolor.yellow(f"WARNING: Skipping non-pcap file: {filepath}\n\n"))
+            result_str += ansicolor.yellow(f"WARNING: Skipping non-pcap file: {filepath}\n\n")
             continue
 
         # Large file warning
         if size > 100 * 1024 * 1024:  # 100 MB
-            result.write(ansicolor.yellow(f"WARNING: Large file ({format_size(size)}), "
-                                         "analysis may take time...\n"))
+            result_str += ansicolor.yellow(f"WARNING: Large file ({format_size(size)}), "
+                                          "analysis may take time...\n")
 
         # Analyze based on available tool
         if tool_name == 'tshark':
-            analysis = analyze_pcap_tshark(filepath, options)
+            analysis = analyze_pcap_tshark(filepath, o)
         else:
-            analysis = analyze_pcap_tcpdump(filepath, options)
+            analysis = analyze_pcap_tcpdump(filepath, o)
 
         # Display results
-        display_pcap_summary(filepath, analysis, result)
+        result_str += display_pcap_summary(filepath, analysis, no_pipe)
 
-    return screen.fini_data(result, no_pipe)
+    return result_str
