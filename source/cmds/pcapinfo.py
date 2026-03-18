@@ -736,10 +736,6 @@ def display_packet_trace(packets, no_pipe):
     fixed_width = col_num + col_timestamp + col_source + col_dest + col_proto + padding_estimate
     col_info = max(20, term_width - fixed_width)  # Minimum 20 chars for Info
 
-    # Cap Info at 80 for very wide terminals
-    if col_info > 80:
-        col_info = 80
-
     # Create table with dynamic widths
     table = TableFormatter(no_pipe=no_pipe, show_header=True, console_width=term_width)
     table.add_column("#", width=col_num, align='left', color='darkgray')
