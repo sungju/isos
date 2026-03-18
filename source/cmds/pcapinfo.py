@@ -16,6 +16,8 @@ import shutil
 
 import screen
 from isos import run_shell_command
+from table_formatter import TableFormatter
+import ansicolor
 
 # Global state for command interruption
 is_cmd_stopped = None
@@ -623,27 +625,105 @@ def display_pcap_summary(filepath, analysis, no_pipe, options=None):
     return result_str
 
 
+def colorize_info(info_str, no_pipe):
+    """
+    Apply color highlighting to TCP flags and patterns in Info field.
+
+    Args:
+        info_str: Info field content
+        no_pipe: True if outputting to terminal
+
+    Returns:
+        Colorized string with ANSI codes (or plain if piped)
+    """
+    if not no_pipe or not info_str:
+        return info_str
+
+    # Define flag color patterns
+    flag_colors = [
+        (r'\[SYN,\s*ACK\]', ansicolor.get_color(ansicolor.GREEN)),
+        (r'\[SYN\]', ansicolor.get_color(ansicolor.LIGHTGREEN)),
+        (r'\[FIN\]', ansicolor.get_color(ansicolor.LIGHTYELLOW)),
+        (r'\[RST\]', ansicolor.get_color(ansicolor.LIGHTRED)),
+        (r'\[PSH,\s*ACK\]', ansicolor.get_color(ansicolor.CYAN)),
+        (r'\[ACK\]', ansicolor.get_color(ansicolor.DARKGRAY)),
+        (r'\[S\.\]', ansicolor.get_color(ansicolor.GREEN)),
+        (r'\[P\.\]', ansicolor.get_color(ansicolor.CYAN)),
+        (r'\[\.?\]', ansicolor.get_color(ansicolor.DARKGRAY)),
+        (r'Retransmission', ansicolor.get_color(ansicolor.LIGHTRED)),
+    ]
+
+    reset = ansicolor.get_color(ansicolor.RESET)
+    result = info_str
+
+    # Apply colors to matching patterns
+    for pattern, color in flag_colors:
+        result = re.sub(pattern, lambda m: f"{color}{m.group(0)}{reset}", result)
+
+    return result
+
+
 def display_packet_trace(packets, no_pipe):
-    """Display packet-by-packet trace."""
+    """Display packet-by-packet trace with color support using TableFormatter."""
     result_str = ""
 
     if not packets:
         result_str += "No packets found.\n\n"
         return result_str
 
-    result_str += screen.COLOR_HEADER + "Packet Trace:" + screen.COLOR_RESET + "\n"
-    result_str += f"{'#':<6} {'Timestamp':<20} {'Source':<25} {'Dest':<25} {'Proto':<8} {'Info':<30}\n"
-    result_str += "-" * 120 + "\n"
+    # Protocol color mapping
+    PROTO_COLOR_MAP = {
+        'TCP': 'cyan',
+        'UDP': 'lightblue',
+        'ICMP': 'yellow',
+        'ARP': 'lightmagenta',
+        'DNS': 'lightcyan',
+        'HTTP': 'green',
+        'HTTPS': 'green',
+        'TLS': 'lightgreen',
+        'SSL': 'lightgreen',
+    }
 
+    # Section header
+    result_str += screen.COLOR_HEADER + "Packet Trace:" + screen.COLOR_RESET + "\n"
+
+    # Create table with approved color scheme
+    table = TableFormatter(no_pipe=no_pipe, show_header=True)
+    table.add_column("#", width=6, align='left', color='darkgray')
+    table.add_column("Timestamp", width=20, align='left', color='magenta')
+    table.add_column("Source", width=25, align='left', color='lightgreen')
+    table.add_column("Dest", width=25, align='left', color='lightyellow')
+    table.add_column("Proto", width=8, align='left')  # Protocol-specific via cell_colors
+    table.add_column("Info", width=30, align='left')  # Sub-colored via colorize_info()
+
+    # Add packet rows
     for pkt in packets:
         # Truncate fields if too long
         src = pkt['src'][:24] if len(pkt['src']) > 24 else pkt['src']
         dst = pkt['dst'][:24] if len(pkt['dst']) > 24 else pkt['dst']
         info = pkt['info'][:29] if len(pkt['info']) > 29 else pkt['info']
+        proto = pkt['proto']
 
-        result_str += f"{pkt['num']:<6} {pkt['timestamp']:<20} {src:<25} {dst:<25} {pkt['proto']:<8} {info:<30}\n"
+        # Determine protocol color for Proto column (column index 4)
+        proto_upper = proto.upper()
+        proto_color = PROTO_COLOR_MAP.get(proto_upper, 'white')
 
-    result_str += "\n"
+        # Colorize TCP flags in Info field
+        colored_info = colorize_info(info, no_pipe)
+
+        # Add row with protocol-specific coloring
+        table.add_row(
+            pkt['num'],
+            pkt['timestamp'],
+            src,
+            dst,
+            proto,
+            colored_info,
+            cell_colors={4: proto_color}  # Color Proto column based on protocol
+        )
+
+    # Format table
+    result_str += table.format() + "\n"
     result_str += f"Showing {len(packets)} packet(s)\n\n"
 
     return result_str
