@@ -1146,6 +1146,27 @@ def show_oom_events(op, args, no_pipe):
                                 screen.get_pipe_aware_line(line.rstrip())
                         continue
 
+                    # For vmcore-dmesg format, display stack trace lines after OOM event
+                    if oom_invoked and file_format == 'vmcore-dmesg':
+                        # Match stack trace pattern: [timestamp]  function_name+0xoffset/0xsize [module]
+                        # Skip if we've hit the process table or other known sections
+                        if "uid" in line and "total_vm" in line:
+                            # Process table started - don't display as stack trace
+                            pass
+                        elif "Mem-Info:" in line or "memory: usage" in line or "Memory cgroup stats" in line:
+                            # Known section started - let normal handlers process it
+                            pass
+                        elif re.search(r'\[[\d.]+\]\s+\S+\+0x[\da-f]+/0x[\da-f]+', line):
+                            # This is a stack trace line - display it
+                            result_str = result_str + \
+                                    screen.get_pipe_aware_line(line.rstrip())
+                            continue
+                        elif re.search(r'\[[\d.]+\]\s+(CPU:|Pid:|Call Trace:)', line):
+                            # This is a stack trace context line - display it
+                            result_str = result_str + \
+                                    screen.get_pipe_aware_line(line.rstrip())
+                            continue
+
                     if oom_invoked:
                         if "Mem-Info:" in line:
                             oom_meminfo = True
