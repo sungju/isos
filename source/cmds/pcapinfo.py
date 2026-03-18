@@ -167,13 +167,32 @@ def get_packet_trace_tshark(filepath, options):
             # "1 2026-03-18 12:34:56.789 192.168.1.1 → 192.168.1.2 TCP 74 443 → 8080 [SYN]"
             parts = line.split(None, 6)
             if len(parts) >= 6:
+                # Handle arrow format vs non-arrow format
+                if parts[4] == '→':
+                    # Arrow format: dst is parts[5], proto/info are in parts[6]
+                    dst = parts[5]
+                    if len(parts) > 6:
+                        # parts[6] contains "TCP 74 443 → 8080 [SYN]"
+                        # Split to extract protocol name and rest
+                        rest = parts[6].split(None, 1)
+                        proto = rest[0]  # "TCP", "UDP", "TLSv1.2", etc.
+                        info = rest[1] if len(rest) > 1 else ''
+                    else:
+                        proto = ''
+                        info = ''
+                else:
+                    # Non-arrow format: dst is parts[4], proto is parts[5]
+                    dst = parts[4]
+                    proto = parts[5] if len(parts) > 5 else ''
+                    info = parts[6] if len(parts) > 6 else ''
+
                 packets.append({
                     'num': parts[0],
                     'timestamp': f"{parts[1]} {parts[2]}",
                     'src': parts[3],
-                    'dst': parts[4] if parts[4] != '→' else parts[5],
-                    'proto': parts[5] if parts[4] == '→' else parts[4],
-                    'info': parts[6] if len(parts) > 6 else ''
+                    'dst': dst,
+                    'proto': proto,
+                    'info': info
                 })
 
     except subprocess.TimeoutExpired:
