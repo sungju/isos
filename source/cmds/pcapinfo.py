@@ -709,17 +709,17 @@ def display_packet_trace(packets, no_pipe):
     # Create table with approved color scheme
     table = TableFormatter(no_pipe=no_pipe, show_header=True)
     table.add_column("#", width=6, align='left', color='darkgray')
-    table.add_column("Timestamp", width=20, align='left', color='magenta')
-    table.add_column("Source", width=25, align='left', color='lightgreen')
-    table.add_column("Dest", width=25, align='left', color='lightyellow')
+    table.add_column("Timestamp", width=26, align='left', color='magenta')
+    table.add_column("Source", width=17, align='left', color='lightgreen')
+    table.add_column("Dest", width=17, align='left', color='lightyellow')
     table.add_column("Proto", width=8, align='left')  # Protocol-specific via cell_colors
-    table.add_column("Info", width=30, align='left')  # Sub-colored via colorize_info()
+    table.add_column("Info", width=55, align='left')  # Sub-colored via colorize_info()
 
     # Add packet rows
     for pkt in packets:
         # Truncate fields if too long (but not Info - let TableFormatter handle it)
-        src = pkt['src'][:24] if len(pkt['src']) > 24 else pkt['src']
-        dst = pkt['dst'][:24] if len(pkt['dst']) > 24 else pkt['dst']
+        src = pkt['src'][:16] if len(pkt['src']) > 16 else pkt['src']
+        dst = pkt['dst'][:16] if len(pkt['dst']) > 16 else pkt['dst']
         proto = pkt['proto']
 
         # Determine protocol color for Proto column (column index 4)
