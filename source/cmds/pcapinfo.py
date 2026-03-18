@@ -112,6 +112,124 @@ def verify_pcap_file(filepath):
     return False
 
 
+def is_text_tcpdump(filepath):
+    """
+    Check if file is text-mode tcpdump output.
+    Returns: True if text format, False otherwise
+    """
+    try:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            # Read first few lines
+            for i in range(10):
+                line = f.readline()
+                if not line:
+                    break
+                # Look for typical tcpdump text format patterns
+                # e.g., "12:34:56.789 IP 10.0.0.1.443 > 10.0.0.2.8080:"
+                if re.search(r'\d{2}:\d{2}:\d{2}\.\d+.*IP\s+\d+\.\d+\.\d+\.\d+', line):
+                    return True
+                # Also check for packet number format: "1  12:34:56.789"
+                if re.search(r'^\s*\d+\s+\d{2}:\d{2}:\d{2}\.\d+', line):
+                    return True
+    except:
+        pass
+    return False
+
+
+def parse_text_tcpdump(filepath, options):
+    """
+    Parse text-mode tcpdump output and extract conversations.
+    Returns: dict with analysis results
+    """
+    result = {
+        'packet_count': 0,
+        'protocols': defaultdict(int),
+        'conversations': defaultdict(lambda: {'packets': 0, 'bytes': 0}),
+        'timespan': None,
+        'errors': []
+    }
+
+    try:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            first_timestamp = None
+            last_timestamp = None
+
+            for line in f:
+                if is_cmd_stopped and is_cmd_stopped():
+                    break
+
+                # Match typical tcpdump line:
+                # "12:34:56.789012 IP 192.168.1.1.443 > 192.168.1.2.8080: Flags [P.], length 1234"
+                # or "1  12:34:56.789012 IP 192.168.1.1 > 192.168.1.2: ICMP echo request"
+
+                # Extract timestamp
+                ts_match = re.search(r'(\d{2}):(\d{2}):(\d{2})\.(\d+)', line)
+                if ts_match:
+                    h, m, s, us = ts_match.groups()
+                    timestamp = int(h) * 3600 + int(m) * 60 + int(s) + float('0.' + us)
+                    if first_timestamp is None:
+                        first_timestamp = timestamp
+                    last_timestamp = timestamp
+
+                # Extract IP conversation: "IP src.port > dst.port" or "IP src > dst"
+                ip_match = re.search(r'IP6?\s+(\d+\.\d+\.\d+\.\d+)(?:\.\d+)?\s+>\s+(\d+\.\d+\.\d+\.\d+)', line)
+                if not ip_match:
+                    # Try IPv6 or hostname format
+                    ip_match = re.search(r'IP6?\s+([^\s:>]+?)(?:\.\d+)?\s+>\s+([^\s:]+)', line)
+
+                if ip_match:
+                    result['packet_count'] += 1
+                    src_ip = ip_match.group(1)
+                    dst_ip = ip_match.group(2)
+
+                    # Normalize conversation key (sort IPs)
+                    conv_key = tuple(sorted([src_ip, dst_ip]))
+
+                    # Apply IP filter if specified
+                    if hasattr(options, 'ip') and options.ip:
+                        if options.ip not in [src_ip, dst_ip]:
+                            continue
+
+                    result['conversations'][conv_key]['packets'] += 1
+
+                    # Extract length/bytes
+                    length_match = re.search(r'length\s+(\d+)', line)
+                    if length_match:
+                        result['conversations'][conv_key]['bytes'] += int(length_match.group(1))
+
+                # Count protocols
+                if 'IP ' in line or 'IP6 ' in line:
+                    result['protocols']['IP'] += 1
+                if 'TCP' in line:
+                    result['protocols']['TCP'] += 1
+                if 'UDP' in line:
+                    result['protocols']['UDP'] += 1
+                if 'ICMP' in line:
+                    result['protocols']['ICMP'] += 1
+                if 'ARP' in line:
+                    result['protocols']['ARP'] += 1
+
+            # Calculate timespan
+            if first_timestamp and last_timestamp:
+                result['timespan'] = last_timestamp - first_timestamp
+
+    except Exception as e:
+        result['errors'].append(f'Text parsing error: {str(e)}')
+
+    # Convert conversations to list format
+    conversations_list = []
+    for (addr1, addr2), stats in result['conversations'].items():
+        conversations_list.append({
+            'addr1': addr1,
+            'addr2': addr2,
+            'packets': stats['packets'],
+            'bytes': stats['bytes']
+        })
+    result['conversations'] = conversations_list
+
+    return result
+
+
 # ============================================================================
 # Pcap Analysis with tshark
 # ============================================================================
@@ -150,8 +268,8 @@ def analyze_pcap_tshark(filepath, options):
                     result['protocols'][proto] = count
                     result['packet_count'] = max(result['packet_count'], count)
 
-        # Get conversations if requested
-        if options.conversations:
+        # Get conversations if requested or if IP filter is specified
+        if options.conversations or (hasattr(options, 'ip') and options.ip):
             cmd = ['tshark', '-r', filepath, '-q', '-z', 'conv,ip']
             output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=30)
 
@@ -159,9 +277,17 @@ def analyze_pcap_tshark(filepath, options):
                 # Parse lines like: "10.0.0.1 <-> 10.0.0.2  123  45678  789"
                 match = re.search(r'(\S+)\s+<->\s+(\S+)\s+(\d+)\s+(\d+)', line)
                 if match:
+                    addr1 = match.group(1)
+                    addr2 = match.group(2)
+
+                    # Apply IP filter if specified
+                    if hasattr(options, 'ip') and options.ip:
+                        if options.ip not in [addr1, addr2]:
+                            continue
+
                     result['conversations'].append({
-                        'addr1': match.group(1),
-                        'addr2': match.group(2),
+                        'addr1': addr1,
+                        'addr2': addr2,
                         'packets': int(match.group(3)),
                         'bytes': int(match.group(4))
                     })
@@ -240,10 +366,17 @@ def print_help_msg(op, no_pipe):
 Examples:
     > pcapinfo              # Analyze all pcap files in sosreport
     > pcapinfo -l           # List pcap files only
-    > pcapinfo -f FILE      # Analyze specific pcap file
+    > pcapinfo -f FILE      # Analyze specific pcap file (binary or text)
     > pcapinfo -c           # Show conversation analysis
+    > pcapinfo -i 10.0.0.1  # Show conversations with specific IP
+    > pcapinfo -c -i 10.0.0.1  # Conversation analysis for specific IP
     > pcapinfo -p tcp       # Filter by protocol (with tshark)
     > pcapinfo -h           # Show this help message
+
+Note:
+    - Supports binary pcap/pcapng files and text-mode tcpdump output
+    - Text format: reads tcpdump -nn output directly
+    - IP filtering works with both binary and text files
 '''
     result_str = op.format_help() + cmd_examples
     return result_str
@@ -301,7 +434,7 @@ def display_file_list(pcap_files, no_pipe):
     return result_str
 
 
-def display_pcap_summary(filepath, analysis, no_pipe):
+def display_pcap_summary(filepath, analysis, no_pipe, options=None):
     """Display summary of pcap file analysis."""
     result_str = ""
     rel_path = filepath
@@ -311,6 +444,11 @@ def display_pcap_summary(filepath, analysis, no_pipe):
     result_str += screen.COLOR_TITLE + "=" * 70 + screen.COLOR_RESET + "\n"
     result_str += screen.COLOR_TITLE + f"Analysis: {rel_path}" + screen.COLOR_RESET + "\n"
     result_str += screen.COLOR_TITLE + "=" * 70 + screen.COLOR_RESET + "\n\n"
+
+    # Show filter info if IP filtering is active
+    if options and hasattr(options, 'ip') and options.ip:
+        result_str += screen.COLOR_INFO + f"Filter: Showing conversations with IP {options.ip}\n" + screen.COLOR_RESET
+        result_str += "\n"
 
     if analysis['errors']:
         for error in analysis['errors']:
@@ -376,6 +514,8 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
                   help="Filter by protocol (tcp, udp, icmp, etc.)")
     op.add_option("-c", "--conversations", dest="conversations", action="store_true",
                   default=False, help="Show conversation analysis")
+    op.add_option("-i", "--ip", dest="ip", default="",
+                  help="Filter conversations by specific IP address")
     op.add_option("-s", "--summary", dest="summary", action="store_true",
                   default=True, help="Show summary statistics (default)")
 
@@ -435,14 +575,21 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
         result_str += "Use --file to specify a pcap file path.\n"
         return result_str
 
+    # If IP filter specified, enable conversation display automatically
+    if o.ip and not o.conversations:
+        o.conversations = True
+
     # Analyze each file
     for filepath, size in pcap_files:
         if is_cmd_stopped and is_cmd_stopped():
             break
 
-        # Verify file is valid pcap
-        if not verify_pcap_file(filepath):
-            result_str += screen.COLOR_WARNING + f"WARNING: Skipping non-pcap file: {filepath}\n\n" + screen.COLOR_RESET
+        # Check file type: binary pcap or text tcpdump
+        is_binary_pcap = verify_pcap_file(filepath)
+        is_text = is_text_tcpdump(filepath)
+
+        if not is_binary_pcap and not is_text:
+            result_str += screen.COLOR_WARNING + f"WARNING: Skipping unrecognized file format: {filepath}\n\n" + screen.COLOR_RESET
             continue
 
         # Large file warning
@@ -450,13 +597,18 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
             result_str += screen.COLOR_WARNING + f"WARNING: Large file ({format_size(size)}), "
             result_str += f"analysis may take time...\n" + screen.COLOR_RESET
 
-        # Analyze based on available tool
-        if tool_name == 'tshark':
+        # Analyze based on file type
+        if is_text:
+            # Text-mode tcpdump output - parse directly
+            analysis = parse_text_tcpdump(filepath, o)
+        elif tool_name == 'tshark':
+            # Binary pcap with tshark
             analysis = analyze_pcap_tshark(filepath, o)
         else:
+            # Binary pcap with tcpdump
             analysis = analyze_pcap_tcpdump(filepath, o)
 
         # Display results
-        result_str += display_pcap_summary(filepath, analysis, no_pipe)
+        result_str += display_pcap_summary(filepath, analysis, no_pipe, o)
 
     return result_str
