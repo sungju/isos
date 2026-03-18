@@ -706,14 +706,48 @@ def display_packet_trace(packets, no_pipe):
     # Section header
     result_str += screen.COLOR_HEADER + "Packet Trace:" + screen.COLOR_RESET + "\n"
 
-    # Create table with approved color scheme
-    table = TableFormatter(no_pipe=no_pipe, show_header=True)
-    table.add_column("#", width=6, align='left', color='darkgray')
-    table.add_column("Timestamp", width=26, align='left', color='magenta')
-    table.add_column("Source", width=17, align='left', color='lightgreen')
-    table.add_column("Dest", width=17, align='left', color='lightyellow')
-    table.add_column("Proto", width=8, align='left')  # Protocol-specific via cell_colors
-    table.add_column("Info", width=55, align='left')  # Sub-colored via colorize_info()
+    # Detect terminal width
+    try:
+        term_size = shutil.get_terminal_size(fallback=(200, 24))
+        term_width = term_size.columns
+    except:
+        term_width = 200
+
+    # Calculate column widths based on terminal size
+    # Default widths for wide terminals (>= 100 chars)
+    col_num = 6
+    col_timestamp = 26
+    col_source = 17
+    col_dest = 17
+    col_proto = 8
+
+    # Shrink columns for narrow terminals
+    if term_width < 100:
+        col_timestamp = 15  # Time-only, drop date
+        col_num = 4
+        col_proto = 6
+        col_source = 15
+        col_dest = 15
+
+    # Calculate padding (5 columns = 5 separators in Rich, ~2 chars each)
+    padding_estimate = 10
+
+    # Calculate Info column width (flexible)
+    fixed_width = col_num + col_timestamp + col_source + col_dest + col_proto + padding_estimate
+    col_info = max(20, term_width - fixed_width)  # Minimum 20 chars for Info
+
+    # Cap Info at 80 for very wide terminals
+    if col_info > 80:
+        col_info = 80
+
+    # Create table with dynamic widths
+    table = TableFormatter(no_pipe=no_pipe, show_header=True, console_width=term_width)
+    table.add_column("#", width=col_num, align='left', color='darkgray')
+    table.add_column("Timestamp", width=col_timestamp, align='left', color='magenta')
+    table.add_column("Source", width=col_source, align='left', color='lightgreen')
+    table.add_column("Dest", width=col_dest, align='left', color='lightyellow')
+    table.add_column("Proto", width=col_proto, align='left')  # Protocol-specific via cell_colors
+    table.add_column("Info", width=col_info, align='left')  # Sub-colored via colorize_info()
 
     # Add packet rows
     for pkt in packets:
@@ -721,6 +755,12 @@ def display_packet_trace(packets, no_pipe):
         src = pkt['src'][:16] if len(pkt['src']) > 16 else pkt['src']
         dst = pkt['dst'][:16] if len(pkt['dst']) > 16 else pkt['dst']
         proto = pkt['proto']
+
+        # Truncate timestamp for narrow terminals (show time only, drop date)
+        if col_timestamp == 15:
+            timestamp = pkt['timestamp'].split()[-1]  # Keep only time portion
+        else:
+            timestamp = pkt['timestamp']
 
         # Determine protocol color for Proto column (column index 4)
         proto_upper = proto.upper()
@@ -734,7 +774,7 @@ def display_packet_trace(packets, no_pipe):
         # Add row with protocol-specific coloring
         table.add_row(
             pkt['num'],
-            pkt['timestamp'],
+            timestamp,
             src,
             dst,
             proto,

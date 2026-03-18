@@ -47,6 +47,7 @@ Usage:
 # GNU General Public License for more details.
 
 import sys
+import shutil
 import ansicolor
 
 # Try to import Rich library
@@ -154,7 +155,7 @@ class TableFormatter(object):
     """
 
     def __init__(self, no_pipe=True, use_rich=True, show_header=True,
-                 show_lines=False, padding=1):
+                 show_lines=False, padding=1, console_width=None):
         """
         Initialize table formatter.
 
@@ -164,12 +165,14 @@ class TableFormatter(object):
             show_header: Whether to show column headers
             show_lines: Whether to show row separator lines (Rich only)
             padding: Number of spaces for padding between columns (fallback mode)
+            console_width: Terminal width in characters (None for auto-detect)
         """
         self.no_pipe = no_pipe
         self.use_rich = use_rich and RICH_AVAILABLE
         self.show_header = show_header
         self.show_lines = show_lines
         self.padding = padding
+        self.console_width = console_width
 
         self.columns = []
         self.rows = []
@@ -251,10 +254,21 @@ class TableFormatter(object):
         Returns:
             Formatted table as string
         """
+        # Determine console width
+        if self.console_width is not None:
+            width = self.console_width
+        else:
+            # Auto-detect terminal width
+            try:
+                term_size = shutil.get_terminal_size(fallback=(200, 24))
+                width = term_size.columns
+            except:
+                width = 200
+
         # Create Rich console for string rendering
         from io import StringIO
         string_io = StringIO()
-        console = Console(file=string_io, force_terminal=True, width=200)
+        console = Console(file=string_io, force_terminal=True, width=width)
 
         # Create Rich table
         table = RichTable(
@@ -459,13 +473,14 @@ class TableFormatter(object):
         return ""
 
 
-def create_table(no_pipe=True, show_header=True):
+def create_table(no_pipe=True, show_header=True, console_width=None):
     """
     Factory function to create a TableFormatter instance.
 
     Args:
         no_pipe: True if outputting to terminal (colors enabled)
         show_header: Whether to show column headers
+        console_width: Terminal width in characters (None for auto-detect)
 
     Returns:
         TableFormatter instance
@@ -477,4 +492,4 @@ def create_table(no_pipe=True, show_header=True):
         table.add_row("1234", "root")
         print(table.format())
     """
-    return TableFormatter(no_pipe=no_pipe, show_header=show_header)
+    return TableFormatter(no_pipe=no_pipe, show_header=show_header, console_width=console_width)
