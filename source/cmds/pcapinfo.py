@@ -15,7 +15,6 @@ from collections import defaultdict
 import shutil
 
 import screen
-import ansicolor
 from isos import run_shell_command
 
 # Global state for command interruption
@@ -276,9 +275,9 @@ def format_duration(seconds):
 def display_file_list(pcap_files, no_pipe):
     """Display list of pcap files found."""
     result_str = ""
-    result_str += ansicolor.green("=" * 70) + "\n"
-    result_str += ansicolor.green("PCAP Files Found") + "\n"
-    result_str += ansicolor.green("=" * 70) + "\n\n"
+    result_str += screen.COLOR_TITLE + "=" * 70 + screen.COLOR_RESET + "\n"
+    result_str += screen.COLOR_TITLE + "PCAP Files Found" + screen.COLOR_RESET + "\n"
+    result_str += screen.COLOR_TITLE + "=" * 70 + screen.COLOR_RESET + "\n\n"
 
     if not pcap_files:
         result_str += "No pcap files found in sosreport.\n"
@@ -309,13 +308,13 @@ def display_pcap_summary(filepath, analysis, no_pipe):
     if 'sos_commands' in filepath:
         rel_path = filepath[filepath.find('sos_commands'):]
 
-    result_str += ansicolor.green("=" * 70) + "\n"
-    result_str += ansicolor.green(f"Analysis: {rel_path}") + "\n"
-    result_str += ansicolor.green("=" * 70) + "\n\n"
+    result_str += screen.COLOR_TITLE + "=" * 70 + screen.COLOR_RESET + "\n"
+    result_str += screen.COLOR_TITLE + f"Analysis: {rel_path}" + screen.COLOR_RESET + "\n"
+    result_str += screen.COLOR_TITLE + "=" * 70 + screen.COLOR_RESET + "\n\n"
 
     if analysis['errors']:
         for error in analysis['errors']:
-            result_str += ansicolor.red(f"ERROR: {error}") + "\n"
+            result_str += screen.COLOR_CRITICAL + f"ERROR: {error}" + screen.COLOR_RESET + "\n"
         result_str += "\n"
         return result_str
 
@@ -327,7 +326,7 @@ def display_pcap_summary(filepath, analysis, no_pipe):
 
     # Protocol distribution
     if analysis['protocols']:
-        result_str += ansicolor.cyan("Protocol Distribution:") + "\n"
+        result_str += screen.COLOR_HEADER + "Protocol Distribution:" + screen.COLOR_RESET + "\n"
         result_str += f"{'Protocol':<20} {'Packets':>15} {'Percentage':>15}\n"
         result_str += "-" * 52 + "\n"
 
@@ -339,7 +338,7 @@ def display_pcap_summary(filepath, analysis, no_pipe):
 
     # Conversations
     if analysis['conversations']:
-        result_str += ansicolor.cyan("Top Conversations:") + "\n"
+        result_str += screen.COLOR_HEADER + "Top Conversations:" + screen.COLOR_RESET + "\n"
         result_str += f"{'Source':<20} {'Destination':<20} {'Packets':>12} {'Bytes':>15}\n"
         result_str += "-" * 70 + "\n"
 
@@ -401,7 +400,7 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
     # Check for required tools
     tool_name, tool_path = find_pcap_tool()
     if not tool_name:
-        result_str += ansicolor.red("ERROR: No pcap analysis tool found\n")
+        result_str += screen.COLOR_CRITICAL + "ERROR: No pcap analysis tool found\n" + screen.COLOR_RESET
         result_str += "\nPlease install one of:\n"
         result_str += "  - tshark (recommended): yum install wireshark-cli\n"
         result_str += "  - tcpdump: yum install tcpdump\n\n"
@@ -413,11 +412,11 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
     if o.file:
         # Specific file requested
         if not os.path.isfile(o.file):
-            result_str += ansicolor.red(f"ERROR: File not found: {o.file}\n")
+            result_str += screen.COLOR_CRITICAL + f"ERROR: File not found: {o.file}\n" + screen.COLOR_RESET
             return result_str
 
         if not verify_pcap_file(o.file):
-            result_str += ansicolor.red(f"ERROR: Not a valid pcap file: {o.file}\n")
+            result_str += screen.COLOR_CRITICAL + f"ERROR: Not a valid pcap file: {o.file}\n" + screen.COLOR_RESET
             return result_str
 
         pcap_files = [(o.file, os.path.getsize(o.file))]
@@ -443,13 +442,13 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
 
         # Verify file is valid pcap
         if not verify_pcap_file(filepath):
-            result_str += ansicolor.yellow(f"WARNING: Skipping non-pcap file: {filepath}\n\n")
+            result_str += screen.COLOR_WARNING + f"WARNING: Skipping non-pcap file: {filepath}\n\n" + screen.COLOR_RESET
             continue
 
         # Large file warning
         if size > 100 * 1024 * 1024:  # 100 MB
-            result_str += ansicolor.yellow(f"WARNING: Large file ({format_size(size)}), "
-                                          "analysis may take time...\n")
+            result_str += screen.COLOR_WARNING + f"WARNING: Large file ({format_size(size)}), "
+            result_str += f"analysis may take time...\n" + screen.COLOR_RESET
 
         # Analyze based on available tool
         if tool_name == 'tshark':
