@@ -164,12 +164,22 @@ def is_text_tcpdump(filepath):
     return False
 
 
-def get_packet_trace_tshark(filepath, options):
+def get_packet_trace_tshark(filepath, options, stream_callback=None):
     """
     Get packet-by-packet trace using tshark.
+
+    Args:
+        filepath: Path to pcap file
+        options: Command options
+        stream_callback: Optional callback(line_type, data) for streaming output.
+                        line_type is 'packet', data is packet dict.
+                        When provided, packets are streamed immediately without accumulation.
+
     Returns: (list of packet dicts, error_msg or '')
+             When stream_callback is provided, the list is empty (packets were streamed).
     """
     packets = []
+    packet_count = 0
 
     try:
         # Calculate dynamic timeout based on file size
@@ -215,14 +225,20 @@ def get_packet_trace_tshark(filepath, options):
                     proto = parts[5] if len(parts) > 5 else ''
                     info = parts[6] if len(parts) > 6 else ''
 
-                packets.append({
+                packet = {
                     'num': parts[0],
                     'timestamp': f"{parts[1]} {parts[2]}",
                     'src': parts[3],
                     'dst': dst,
                     'proto': proto,
                     'info': info
-                })
+                }
+
+                packet_count += 1
+                if stream_callback:
+                    stream_callback('packet', packet)
+                else:
+                    packets.append(packet)
 
     except subprocess.TimeoutExpired:
         return packets, 'Packet trace timeout - file too large, try -n to reduce packet count'
@@ -441,26 +457,7 @@ def analyze_pcap_tshark(filepath, options, stream_callback=None):
         # Calculate dynamic timeout based on file size
         timeout = calculate_timeout(filepath)
 
-        # Get basic statistics
-        cmd = ['tshark', '-r', filepath, '-q', '-z', 'io,phs']
-        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=timeout)
-
-        # Parse protocol hierarchy
-        in_hierarchy = False
-        for line in output.splitlines():
-            if 'Protocol Hierarchy Statistics' in line:
-                in_hierarchy = True
-                continue
-            if in_hierarchy and line.strip():
-                # Parse lines like: "eth       frames:1234 bytes:567890"
-                match = re.search(r'(\S+)\s+frames:(\d+)', line)
-                if match:
-                    proto = match.group(1)
-                    count = int(match.group(2))
-                    result['protocols'][proto] = count
-                    result['packet_count'] = max(result['packet_count'], count)
-
-        # Get conversations if requested or if IP filter is specified
+        # Run conversation analysis FIRST so it streams immediately before other stats
         if options.conversations or (hasattr(options, 'ip') and options.ip):
             cmd = ['tshark', '-r', filepath, '-q', '-z', 'conv,ip']
             output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=timeout)
@@ -484,7 +481,7 @@ def analyze_pcap_tshark(filepath, options, stream_callback=None):
                         'bytes': int(match.group(4))
                     }
 
-                    # Stream output if callback provided, otherwise accumulate
+                    # Always stream via callback when provided, otherwise accumulate
                     if stream_callback:
                         stream_callback('conversation', conv_data)
                         result['conversation_count'] += 1
@@ -522,6 +519,24 @@ def analyze_pcap_tshark(filepath, options, stream_callback=None):
                             result['top_talkers'].append(talker_data)
                     except (ValueError, IndexError):
                         pass
+
+        # Collect protocol hierarchy statistics after conversations are streamed
+        cmd = ['tshark', '-r', filepath, '-q', '-z', 'io,phs']
+        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=timeout)
+
+        in_hierarchy = False
+        for line in output.splitlines():
+            if 'Protocol Hierarchy Statistics' in line:
+                in_hierarchy = True
+                continue
+            if in_hierarchy and line.strip():
+                # Parse lines like: "eth       frames:1234 bytes:567890"
+                match = re.search(r'(\S+)\s+frames:(\d+)', line)
+                if match:
+                    proto = match.group(1)
+                    count = int(match.group(2))
+                    result['protocols'][proto] = count
+                    result['packet_count'] = max(result['packet_count'], count)
 
         # Get time range
         cmd = ['tshark', '-r', filepath, '-q', '-z', 'io,stat,0']
@@ -999,8 +1014,8 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
             result_str += screen.COLOR_WARNING + f"WARNING: Large file ({format_size(size)}), "
             result_str += f"using streaming mode to avoid memory issues...\n" + screen.COLOR_RESET
 
-        # For large files with conversation analysis, use streaming mode
-        use_streaming = is_large_file and (o.conversations or (hasattr(o, 'ip') and o.ip))
+        # Always use streaming mode when conversation analysis is requested
+        use_streaming = o.conversations or (hasattr(o, 'ip') and o.ip)
 
         if use_streaming:
             # Streaming mode: print conversations as they're parsed
@@ -1072,17 +1087,35 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
             if is_text:
                 # Get packet trace from text file
                 packets = get_packet_trace_text(filepath, o)
+                if packets:
+                    result_str += display_packet_trace(packets, no_pipe)
             elif tool_name == 'tshark':
-                # Get packet trace using tshark
-                packets, trace_error = get_packet_trace_tshark(filepath, o)
+                # Streaming mode: print packets immediately as they're parsed
+                packet_count = [0]
+
+                # Flush accumulated output before streaming
+                print(result_str, end='')
+                result_str = ""
+
+                # Print header immediately
+                print(screen.COLOR_HEADER + "Packet Trace:" + screen.COLOR_RESET)
+                print(f"{'#':<6} {'Timestamp':<26} {'Source':<17} {'Dest':<17} {'Proto':<8} Info")
+                print("-" * 90)
+
+                def packet_stream_callback(pkt):
+                    packet_count[0] += 1
+                    src = pkt['src'][:16] if len(pkt['src']) > 16 else pkt['src']
+                    dst = pkt['dst'][:16] if len(pkt['dst']) > 16 else pkt['dst']
+                    print(f"{pkt['num']:<6} {pkt['timestamp']:<26} {src:<17} {dst:<17} {pkt['proto']:<8} {pkt['info']}")
+
+                _, trace_error = get_packet_trace_tshark(filepath, o, stream_callback=packet_stream_callback)
+
                 if trace_error:
                     result_str += screen.COLOR_WARNING + f"WARNING: {trace_error}\n\n" + screen.COLOR_RESET
+
+                result_str += f"\nShowing {packet_count[0]} packet(s)\n\n"
             else:
                 # tcpdump doesn't support detailed packet listing easily
                 result_str += screen.COLOR_WARNING + "Packet trace not available with tcpdump. Install tshark for packet trace support.\n\n" + screen.COLOR_RESET
-                packets = []
-
-            if packets:
-                result_str += display_packet_trace(packets, no_pipe)
 
     return result_str
