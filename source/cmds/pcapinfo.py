@@ -70,26 +70,27 @@ def find_pcap_files(sos_home):
     Returns: list of (filepath, size_bytes) tuples
     """
     pcap_files = []
+    seen_paths = set()
 
     # Primary location: sos_commands/networking/
     networking_dir = os.path.join(sos_home, "sos_commands", "networking")
     if os.path.isdir(networking_dir):
         for pattern in ['*.pcap', '*.pcapng', '*.cap']:
             for filepath in glob.glob(os.path.join(networking_dir, pattern)):
-                if os.path.isfile(filepath):
+                if os.path.isfile(filepath) and filepath not in seen_paths:
                     size = os.path.getsize(filepath)
                     pcap_files.append((filepath, size))
+                    seen_paths.add(filepath)
 
     # Fallback: recursive search from sos_home
     for root, dirs, files in os.walk(sos_home):
         for filename in files:
             if filename.endswith(('.pcap', '.pcapng', '.cap')):
                 filepath = os.path.join(root, filename)
-                if os.path.isfile(filepath):
+                if os.path.isfile(filepath) and filepath not in seen_paths:
                     size = os.path.getsize(filepath)
-                    # Avoid duplicates
-                    if (filepath, size) not in pcap_files:
-                        pcap_files.append((filepath, size))
+                    pcap_files.append((filepath, size))
+                    seen_paths.add(filepath)
 
     return sorted(pcap_files)
 
@@ -109,7 +110,7 @@ def verify_pcap_file(filepath):
                 b'\x0a\x0d\x0d\x0a'  # pcapng
             ]:
                 return True
-    except:
+    except Exception:
         pass
     return False
 
@@ -133,7 +134,7 @@ def is_text_tcpdump(filepath):
                 # Also check for packet number format: "1  12:34:56.789"
                 if re.search(r'^\s*\d+\s+\d{2}:\d{2}:\d{2}\.\d+', line):
                     return True
-    except:
+    except Exception:
         pass
     return False
 
@@ -141,7 +142,7 @@ def is_text_tcpdump(filepath):
 def get_packet_trace_tshark(filepath, options):
     """
     Get packet-by-packet trace using tshark.
-    Returns: list of packet dicts with timestamp, src, dst, proto, info
+    Returns: (list of packet dicts, error_msg or '')
     """
     packets = []
 
@@ -196,13 +197,13 @@ def get_packet_trace_tshark(filepath, options):
                 })
 
     except subprocess.TimeoutExpired:
-        pass
-    except subprocess.CalledProcessError:
-        pass
-    except Exception:
-        pass
+        return packets, 'Packet trace timeout - file too large, try -n to reduce packet count'
+    except subprocess.CalledProcessError as e:
+        return packets, f'tshark error: {e.stderr.strip() if e.stderr else str(e)}'
+    except Exception as e:
+        return packets, f'Trace error: {str(e)}'
 
-    return packets
+    return packets, ''
 
 
 def get_packet_trace_text(filepath, options):
@@ -328,17 +329,18 @@ def parse_text_tcpdump(filepath, options):
                     ip_match = re.search(r'IP6?\s+([^\s:>]+?)(?:\.\d+)?\s+>\s+([^\s:]+)', line)
 
                 if ip_match:
-                    result['packet_count'] += 1
                     src_ip = ip_match.group(1)
                     dst_ip = ip_match.group(2)
-
-                    # Normalize conversation key (sort IPs)
-                    conv_key = tuple(sorted([src_ip, dst_ip]))
 
                     # Apply IP filter if specified
                     if hasattr(options, 'ip') and options.ip:
                         if options.ip not in [src_ip, dst_ip]:
                             continue
+
+                    result['packet_count'] += 1
+
+                    # Normalize conversation key (sort IPs)
+                    conv_key = tuple(sorted([src_ip, dst_ip]))
 
                     result['conversations'][conv_key]['packets'] += 1
 
@@ -441,6 +443,31 @@ def analyze_pcap_tshark(filepath, options):
                         'packets': int(match.group(3)),
                         'bytes': int(match.group(4))
                     })
+
+        # Get top talkers (endpoint statistics)
+        cmd = ['tshark', '-r', filepath, '-q', '-z', 'endpoints,ip']
+        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=30)
+
+        in_endpoints = False
+        for line in output.splitlines():
+            if 'IPv4 Endpoints' in line:
+                in_endpoints = True
+                continue
+            if in_endpoints and '=' * 10 in line:
+                in_endpoints = False
+                continue
+            if in_endpoints and line.strip() and not line.strip().startswith('|') and not line.strip().startswith('Filter'):
+                # Parse: "10.0.0.1   1234   567890   789   456789   445   111101"
+                parts = line.split()
+                if len(parts) >= 3:
+                    try:
+                        result['top_talkers'].append({
+                            'address': parts[0],
+                            'packets': int(parts[1]),
+                            'bytes': int(parts[2])
+                        })
+                    except (ValueError, IndexError):
+                        pass
 
         # Get time range
         cmd = ['tshark', '-r', filepath, '-q', '-z', 'io,stat,0']
@@ -627,6 +654,17 @@ def display_pcap_summary(filepath, analysis, no_pipe, options=None):
         for proto, count in sorted_protos[:10]:  # Top 10 protocols
             pct = (count / analysis['packet_count'] * 100) if analysis['packet_count'] > 0 else 0
             result_str += f"{proto:<20} {count:>15,} {pct:>14.1f}%\n"
+        result_str += "\n"
+
+    # Top talkers (endpoint stats)
+    if analysis.get('top_talkers'):
+        result_str += screen.COLOR_HEADER + "Top Talkers:" + screen.COLOR_RESET + "\n"
+        result_str += f"{'Address':<20} {'Packets':>12} {'Bytes':>15}\n"
+        result_str += "-" * 50 + "\n"
+
+        sorted_talkers = sorted(analysis['top_talkers'], key=lambda x: x['bytes'], reverse=True)
+        for talker in sorted_talkers[:10]:  # Top 10 endpoints
+            result_str += f"{talker['address']:<20} {talker['packets']:>12,} {format_size(talker['bytes']):>15}\n"
         result_str += "\n"
 
     # Conversations
@@ -855,8 +893,8 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
             result_str += screen.COLOR_CRITICAL + f"ERROR: File not found: {o.file}\n" + screen.COLOR_RESET
             return result_str
 
-        if not verify_pcap_file(o.file):
-            result_str += screen.COLOR_CRITICAL + f"ERROR: Not a valid pcap file: {o.file}\n" + screen.COLOR_RESET
+        if not verify_pcap_file(o.file) and not is_text_tcpdump(o.file):
+            result_str += screen.COLOR_CRITICAL + f"ERROR: Not a valid pcap/tcpdump file: {o.file}\n" + screen.COLOR_RESET
             return result_str
 
         pcap_files = [(o.file, os.path.getsize(o.file))]
@@ -918,7 +956,9 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
                 packets = get_packet_trace_text(filepath, o)
             elif tool_name == 'tshark':
                 # Get packet trace using tshark
-                packets = get_packet_trace_tshark(filepath, o)
+                packets, trace_error = get_packet_trace_tshark(filepath, o)
+                if trace_error:
+                    result_str += screen.COLOR_WARNING + f"WARNING: {trace_error}\n\n" + screen.COLOR_RESET
             else:
                 # tcpdump doesn't support detailed packet listing easily
                 result_str += screen.COLOR_WARNING + "Packet trace not available with tcpdump. Install tshark for packet trace support.\n\n" + screen.COLOR_RESET
