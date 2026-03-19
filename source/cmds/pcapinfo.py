@@ -414,10 +414,17 @@ def parse_text_tcpdump(filepath, options):
 # Pcap Analysis with tshark
 # ============================================================================
 
-def analyze_pcap_tshark(filepath, options):
+def analyze_pcap_tshark(filepath, options, stream_callback=None):
     """
     Analyze pcap file using tshark.
-    Returns: dict with analysis results
+
+    Args:
+        filepath: Path to pcap file
+        options: Command options
+        stream_callback: Optional callback(line_type, data) for streaming output
+                        line_type can be: 'conversation', 'talker', 'protocol', 'error'
+
+    Returns: dict with analysis results (minimal data if streaming)
     """
     result = {
         'packet_count': 0,
@@ -425,7 +432,9 @@ def analyze_pcap_tshark(filepath, options):
         'conversations': [],
         'top_talkers': [],
         'timespan': None,
-        'errors': []
+        'errors': [],
+        'conversation_count': 0,
+        'talker_count': 0
     }
 
     try:
@@ -468,12 +477,19 @@ def analyze_pcap_tshark(filepath, options):
                         if options.ip not in [addr1, addr2]:
                             continue
 
-                    result['conversations'].append({
+                    conv_data = {
                         'addr1': addr1,
                         'addr2': addr2,
                         'packets': int(match.group(3)),
                         'bytes': int(match.group(4))
-                    })
+                    }
+
+                    # Stream output if callback provided, otherwise accumulate
+                    if stream_callback:
+                        stream_callback('conversation', conv_data)
+                        result['conversation_count'] += 1
+                    else:
+                        result['conversations'].append(conv_data)
 
         # Get top talkers (endpoint statistics)
         cmd = ['tshark', '-r', filepath, '-q', '-z', 'endpoints,ip']
@@ -492,11 +508,18 @@ def analyze_pcap_tshark(filepath, options):
                 parts = line.split()
                 if len(parts) >= 3:
                     try:
-                        result['top_talkers'].append({
+                        talker_data = {
                             'address': parts[0],
                             'packets': int(parts[1]),
                             'bytes': int(parts[2])
-                        })
+                        }
+
+                        # Stream output if callback provided, otherwise accumulate
+                        if stream_callback:
+                            stream_callback('talker', talker_data)
+                            result['talker_count'] += 1
+                        else:
+                            result['top_talkers'].append(talker_data)
                     except (ValueError, IndexError):
                         pass
 
@@ -650,7 +673,7 @@ def display_file_list(pcap_files, no_pipe):
     return result_str
 
 
-def display_pcap_summary(filepath, analysis, no_pipe, options=None):
+def display_pcap_summary(filepath, analysis, no_pipe, options=None, is_streaming=False):
     """Display summary of pcap file analysis."""
     result_str = ""
     rel_path = filepath
@@ -690,8 +713,11 @@ def display_pcap_summary(filepath, analysis, no_pipe, options=None):
             result_str += f"{proto:<20} {count:>15,} {pct:>14.1f}%\n"
         result_str += "\n"
 
-    # Top talkers (endpoint stats)
-    if analysis.get('top_talkers'):
+    # Top talkers (endpoint stats) - show count if streaming, otherwise show data
+    if is_streaming and analysis.get('talker_count', 0) > 0:
+        result_str += screen.COLOR_HEADER + f"Top Talkers (displayed above): {analysis['talker_count']:,} endpoints\n" + screen.COLOR_RESET
+        result_str += "\n"
+    elif analysis.get('top_talkers'):
         result_str += screen.COLOR_HEADER + "Top Talkers:" + screen.COLOR_RESET + "\n"
         result_str += f"{'Address':<20} {'Packets':>12} {'Bytes':>15}\n"
         result_str += "-" * 50 + "\n"
@@ -701,8 +727,11 @@ def display_pcap_summary(filepath, analysis, no_pipe, options=None):
             result_str += f"{talker['address']:<20} {talker['packets']:>12,} {format_size(talker['bytes']):>15}\n"
         result_str += "\n"
 
-    # Conversations
-    if analysis['conversations']:
+    # Conversations - show count if streaming, otherwise show data
+    if is_streaming and analysis.get('conversation_count', 0) > 0:
+        result_str += screen.COLOR_HEADER + f"Conversations (displayed above): {analysis['conversation_count']:,} conversations\n" + screen.COLOR_RESET
+        result_str += "\n"
+    elif analysis['conversations']:
         result_str += screen.COLOR_HEADER + "Top Conversations:" + screen.COLOR_RESET + "\n"
         result_str += f"{'Source':<20} {'Destination':<20} {'Packets':>12} {'Bytes':>15}\n"
         result_str += "-" * 70 + "\n"
@@ -964,24 +993,79 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
             result_str += screen.COLOR_WARNING + f"WARNING: Skipping unrecognized file format: {filepath}\n\n" + screen.COLOR_RESET
             continue
 
-        # Large file warning
-        if size > 100 * 1024 * 1024:  # 100 MB
+        # Large file warning and streaming mode detection
+        is_large_file = size > 100 * 1024 * 1024  # 100 MB
+        if is_large_file:
             result_str += screen.COLOR_WARNING + f"WARNING: Large file ({format_size(size)}), "
-            result_str += f"analysis may take time...\n" + screen.COLOR_RESET
+            result_str += f"using streaming mode to avoid memory issues...\n" + screen.COLOR_RESET
 
-        # Analyze based on file type
-        if is_text:
-            # Text-mode tcpdump output - parse directly
-            analysis = parse_text_tcpdump(filepath, o)
-        elif tool_name == 'tshark':
-            # Binary pcap with tshark
-            analysis = analyze_pcap_tshark(filepath, o)
+        # For large files with conversation analysis, use streaming mode
+        use_streaming = is_large_file and (o.conversations or (hasattr(o, 'ip') and o.ip))
+
+        if use_streaming:
+            # Streaming mode: print conversations as they're parsed
+            conv_header_printed = False
+            talker_header_printed = False
+
+            def stream_callback(line_type, data):
+                nonlocal conv_header_printed, talker_header_printed, result_str
+
+                if line_type == 'conversation':
+                    if not conv_header_printed:
+                        result_str += screen.COLOR_HEADER + "Conversations (streaming):" + screen.COLOR_RESET + "\n"
+                        result_str += f"{'Source':<20} {'Destination':<20} {'Packets':>12} {'Bytes':>15}\n"
+                        result_str += "-" * 70 + "\n"
+                        print(result_str, end='')
+                        result_str = ""
+                        conv_header_printed = True
+
+                    # Print conversation immediately
+                    line = f"{data['addr1']:<20} {data['addr2']:<20} "
+                    line += f"{data['packets']:>12,} {format_size(data['bytes']):>15}\n"
+                    print(line, end='')
+
+                elif line_type == 'talker':
+                    if not talker_header_printed:
+                        if conv_header_printed:
+                            print()  # Separate from conversations
+                        result_str += screen.COLOR_HEADER + "Top Talkers (streaming):" + screen.COLOR_RESET + "\n"
+                        result_str += f"{'Address':<20} {'Packets':>12} {'Bytes':>15}\n"
+                        result_str += "-" * 50 + "\n"
+                        print(result_str, end='')
+                        result_str = ""
+                        talker_header_printed = True
+
+                    # Print talker immediately
+                    line = f"{data['address']:<20} {data['packets']:>12,} {format_size(data['bytes']):>15}\n"
+                    print(line, end='')
+
+            # Analyze with streaming callback
+            if is_text:
+                analysis = parse_text_tcpdump(filepath, o)
+            elif tool_name == 'tshark':
+                analysis = analyze_pcap_tshark(filepath, o, stream_callback=stream_callback)
+            else:
+                analysis = analyze_pcap_tcpdump(filepath, o)
+
+            # Print summary at the end (after streamed conversations)
+            if conv_header_printed or talker_header_printed:
+                print()  # Separator
+            result_str += display_pcap_summary(filepath, analysis, no_pipe, o, is_streaming=True)
+
         else:
-            # Binary pcap with tcpdump
-            analysis = analyze_pcap_tcpdump(filepath, o)
+            # Normal mode: accumulate all data then display
+            if is_text:
+                # Text-mode tcpdump output - parse directly
+                analysis = parse_text_tcpdump(filepath, o)
+            elif tool_name == 'tshark':
+                # Binary pcap with tshark
+                analysis = analyze_pcap_tshark(filepath, o)
+            else:
+                # Binary pcap with tcpdump
+                analysis = analyze_pcap_tcpdump(filepath, o)
 
-        # Display results
-        result_str += display_pcap_summary(filepath, analysis, no_pipe, o)
+            # Display results
+            result_str += display_pcap_summary(filepath, analysis, no_pipe, o)
 
         # Display packet trace if requested
         if o.trace:
