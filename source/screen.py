@@ -2,23 +2,58 @@
 Screen Display Module
 
 Provides screen and terminal display utilities for isos:
-- Color management for terminal output
+- Color management for terminal output (Rich-based)
 - Syntax highlighting for command output
 - Pipe-aware output handling (terminal vs redirected)
-- Column-based coloring
+- Column-based coloring (deprecated - use TableFormatter)
 
 This module manages global state for color output configuration
-and provides utilities to format text with ANSI color codes.
+and provides utilities to format text with Rich styles.
+
+NEW: Rich Console Integration
+- Uses Rich library for modern terminal output
+- Automatic pipe detection and color suppression
+- Semantic color styles for consistent theming
+- Backward compatible with legacy ANSI code
 """
 
+import sys
 import ansicolor
 from prompt_toolkit import print_formatted_text, HTML
+
+# Rich library imports
+try:
+    from rich.console import Console
+    from rich.style import Style
+    from rich.text import Text
+    RICH_AVAILABLE = True
+except ImportError:
+    RICH_AVAILABLE = False
+    Console = None
+    Style = None
+    Text = None
 
 
 # Global state variables
 no_pipe = True
 is_cmd_stopped = None
 header_start_idx = 0
+
+# Rich Console singleton (initialized in init_data)
+_console = None
+
+# Rich style definitions (semantic colors)
+_rich_styles = {
+    'title': 'bold bright_cyan',
+    'header': 'bold cyan',
+    'content': 'default',
+    'important': 'bright_yellow',
+    'warning': 'yellow',
+    'critical': 'bright_red',
+    'success': 'bright_green',
+    'info': 'magenta',
+    'highlight': 'bright_magenta',
+}
 
 # Legacy color constants - deprecated, use context colors instead
 COLOR_1 = ""
@@ -65,11 +100,22 @@ def init_data(l_no_pipe, l_header_start_idx, l_is_cmd_stopped):
         This function must be called before using get_colored_line()
         or other output functions.
     """
-    global header_start_idx, is_cmd_stopped, no_pipe
+    global header_start_idx, is_cmd_stopped, no_pipe, _console
 
     no_pipe = l_no_pipe
     header_start_idx = l_header_start_idx
     is_cmd_stopped = l_is_cmd_stopped
+
+    # Initialize Rich Console if available
+    if RICH_AVAILABLE:
+        _console = Console(
+            force_terminal=no_pipe,
+            force_interactive=False,
+            no_color=not no_pipe,
+            legacy_windows=False
+        )
+    else:
+        _console = None
 
     set_color_table()
 
@@ -327,3 +373,162 @@ def should_use_table_formatter():
             line = screen.get_colored_line(header)
     """
     return True
+
+
+# ============================================================================
+# Rich-based Color API (New)
+# ============================================================================
+
+def get_console():
+    """
+    Get the Rich Console instance.
+
+    Returns:
+        Rich Console instance, or None if Rich unavailable or piped output
+
+    Example:
+        console = get_console()
+        if console:
+            console.print("Hello", style="bold cyan")
+    """
+    return _console
+
+
+def print_rich(text, style=None, end="\n"):
+    """
+    Print text using Rich with optional style.
+
+    Automatically handles pipe detection - uses Rich for terminal,
+    plain text for piped output.
+
+    Args:
+        text: Text to print
+        style: Rich style string (e.g., "bold cyan", "bright_red")
+        end: Line ending (default newline)
+
+    Example:
+        print_rich("Error occurred", style="bright_red")
+        print_rich("Success", style="bright_green")
+    """
+    global _console, no_pipe
+
+    if _console and no_pipe:
+        _console.print(text, style=style, end=end)
+    else:
+        # Fallback to plain print
+        print(text, end=end)
+
+
+def print_semantic(text, semantic_type="content", end="\n"):
+    """
+    Print text using semantic color style.
+
+    Uses predefined semantic styles for consistent theming across isos.
+
+    Args:
+        text: Text to print
+        semantic_type: One of: title, header, content, important, warning,
+                       critical, success, info, highlight
+        end: Line ending (default newline)
+
+    Example:
+        print_semantic("System Overview", "title")
+        print_semantic("WARNING: High memory usage", "warning")
+        print_semantic("Operation completed", "success")
+    """
+    global _console, no_pipe, _rich_styles
+
+    style = _rich_styles.get(semantic_type, 'default')
+
+    if _console and no_pipe:
+        _console.print(text, style=style, end=end)
+    else:
+        # Fallback to plain print
+        print(text, end=end)
+
+
+def get_semantic_style(semantic_type):
+    """
+    Get Rich style string for semantic type.
+
+    Args:
+        semantic_type: One of: title, header, content, important, warning,
+                       critical, success, info, highlight
+
+    Returns:
+        Rich style string (e.g., "bold cyan")
+
+    Example:
+        style = get_semantic_style("critical")
+        console.print("Error", style=style)
+    """
+    return _rich_styles.get(semantic_type, 'default')
+
+
+def format_rich_text(text, style=None):
+    """
+    Format text with Rich style and return as string.
+
+    Pipe-aware: returns styled text for terminal, plain text for pipes.
+
+    Args:
+        text: Text to format
+        style: Rich style string or semantic type
+
+    Returns:
+        Formatted string
+
+    Example:
+        msg = format_rich_text("Error", "bright_red")
+        print(msg)
+    """
+    global _console, no_pipe
+
+    if not _console or not no_pipe:
+        return text
+
+    # Check if style is a semantic type
+    if style in _rich_styles:
+        style = _rich_styles[style]
+
+    # Create Rich Text object and render
+    if RICH_AVAILABLE:
+        rich_text = Text(text, style=style)
+        # Render to string using console
+        from io import StringIO
+        string_io = StringIO()
+        temp_console = Console(file=string_io, force_terminal=True, legacy_windows=False)
+        temp_console.print(rich_text, end='')
+        return string_io.getvalue()
+    else:
+        return text
+
+
+def print_header(text):
+    """Print a header line using semantic header style."""
+    print_semantic(text, "header")
+
+
+def print_title(text):
+    """Print a title line using semantic title style."""
+    print_semantic(text, "title")
+
+
+def print_warning(text):
+    """Print a warning message using semantic warning style."""
+    print_semantic(text, "warning")
+
+
+def print_critical(text):
+    """Print a critical/error message using semantic critical style."""
+    print_semantic(text, "critical")
+
+
+def print_success(text):
+    """Print a success message using semantic success style."""
+    print_semantic(text, "success")
+
+
+def print_info(text):
+    """Print an info message using semantic info style."""
+    print_semantic(text, "info")

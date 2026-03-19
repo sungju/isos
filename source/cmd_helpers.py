@@ -2,15 +2,29 @@
 Common helper functions for isos command modules.
 
 This module provides reusable utilities for:
-- Color management
+- Color management (Rich-based with ANSI fallback)
 - Size formatting
 - File parsing
 - Error handling
-- Table formatting (new pattern using TableFormatter)
+- Table formatting (Rich-based TableFormatter)
+
+NEW: Rich Console Integration
+- ColorManager now supports Rich styles
+- Semantic color methods for consistent theming
+- Automatic pipe awareness
 """
 
 import ansicolor
 from table_formatter import TableFormatter, create_table
+
+try:
+    from rich.console import Console
+    from rich.text import Text
+    RICH_AVAILABLE = True
+except ImportError:
+    RICH_AVAILABLE = False
+    Console = None
+    Text = None
 
 
 # Constants for size formatting
@@ -31,13 +45,42 @@ class ColorManager(object):
     """
     Manages color output based on pipe status.
 
+    Supports both ANSI codes (legacy) and Rich styles (new).
+
     Usage:
         colors = ColorManager(no_pipe)
-        print(colors.cyan + "Header" + colors.reset)
+        print(colors.cyan + "Header" + colors.reset)  # ANSI
+        colors.print("Header", "cyan")                 # Rich
+
+    Semantic methods:
+        colors.print_header("Text")
+        colors.print_warning("Text")
+        colors.print_critical("Text")
     """
 
-    def __init__(self, no_pipe):
-        """Initialize color manager based on output destination."""
+    def __init__(self, no_pipe, use_rich=True):
+        """
+        Initialize color manager based on output destination.
+
+        Args:
+            no_pipe: True if outputting to terminal
+            use_rich: True to enable Rich (default), False for ANSI only
+        """
+        self.no_pipe = no_pipe
+        self.use_rich = use_rich and RICH_AVAILABLE
+
+        # Initialize Rich console if available
+        if self.use_rich and no_pipe:
+            self._console = Console(
+                force_terminal=True,
+                force_interactive=False,
+                no_color=False,
+                legacy_windows=False
+            )
+        else:
+            self._console = None
+
+        # ANSI color codes (backward compatibility)
         if no_pipe:
             self.black = ansicolor.get_color(ansicolor.BLACK)
             self.red = ansicolor.get_color(ansicolor.RED)
@@ -65,6 +108,83 @@ class ColorManager(object):
             self.lightcyan = ""
             self.reset = ""
 
+        # Semantic color mappings
+        self._semantic_styles = {
+            'header': 'bold cyan',
+            'title': 'bold bright_cyan',
+            'warning': 'yellow',
+            'critical': 'bright_red',
+            'success': 'bright_green',
+            'info': 'magenta',
+            'important': 'bright_yellow',
+        }
+
+    def print(self, text, style=None, end="\n"):
+        """
+        Print text with optional Rich style.
+
+        Args:
+            text: Text to print
+            style: Rich style string (e.g., "bold cyan") or color name
+            end: Line ending
+
+        Example:
+            colors.print("Header", "bold cyan")
+            colors.print("Error", "bright_red")
+        """
+        if self._console and self.no_pipe:
+            self._console.print(text, style=style, end=end)
+        else:
+            print(text, end=end)
+
+    def format(self, text, style=None):
+        """
+        Format text with Rich style and return as string.
+
+        Args:
+            text: Text to format
+            style: Rich style string
+
+        Returns:
+            Formatted string (pipe-aware)
+        """
+        if not self._console or not self.no_pipe:
+            return text
+
+        if RICH_AVAILABLE:
+            from io import StringIO
+            rich_text = Text(text, style=style)
+            string_io = StringIO()
+            temp_console = Console(file=string_io, force_terminal=True, legacy_windows=False)
+            temp_console.print(rich_text, end='')
+            return string_io.getvalue()
+        else:
+            return text
+
+    def print_header(self, text):
+        """Print header using semantic style."""
+        self.print(text, self._semantic_styles['header'])
+
+    def print_title(self, text):
+        """Print title using semantic style."""
+        self.print(text, self._semantic_styles['title'])
+
+    def print_warning(self, text):
+        """Print warning using semantic style."""
+        self.print(text, self._semantic_styles['warning'])
+
+    def print_critical(self, text):
+        """Print critical/error using semantic style."""
+        self.print(text, self._semantic_styles['critical'])
+
+    def print_success(self, text):
+        """Print success using semantic style."""
+        self.print(text, self._semantic_styles['success'])
+
+    def print_info(self, text):
+        """Print info using semantic style."""
+        self.print(text, self._semantic_styles['info'])
+
     def get_threshold_color(self, percentage, critical=THRESHOLD_CRITICAL, warning=THRESHOLD_WARNING):
         """
         Get color based on percentage threshold.
@@ -75,7 +195,7 @@ class ColorManager(object):
             warning: Warning threshold (default 80%)
 
         Returns:
-            Color code string
+            Color code string (ANSI)
         """
         if percentage >= critical:
             return self.red
@@ -83,6 +203,25 @@ class ColorManager(object):
             return self.yellow
         else:
             return ""
+
+    def get_threshold_style(self, percentage, critical=THRESHOLD_CRITICAL, warning=THRESHOLD_WARNING):
+        """
+        Get Rich style based on percentage threshold.
+
+        Args:
+            percentage: Value to check (0-100)
+            critical: Critical threshold (default 90%)
+            warning: Warning threshold (default 80%)
+
+        Returns:
+            Rich style string
+        """
+        if percentage >= critical:
+            return "bright_red"
+        elif percentage >= warning:
+            return "yellow"
+        else:
+            return "default"
 
 
 def format_bytes(bytes_val, precision=2):
