@@ -61,6 +61,31 @@ def find_pcap_tool():
 
 
 # ============================================================================
+# Timeout Calculation
+# ============================================================================
+
+def calculate_timeout(filepath, base_timeout=30, per_mb=0.5, max_timeout=600):
+    """
+    Calculate dynamic timeout based on file size.
+
+    Args:
+        filepath: Path to file
+        base_timeout: Base timeout in seconds (default: 30)
+        per_mb: Additional seconds per MB (default: 0.5)
+        max_timeout: Maximum timeout in seconds (default: 600 = 10 minutes)
+
+    Returns:
+        Timeout in seconds
+    """
+    try:
+        size_mb = os.path.getsize(filepath) / (1024 * 1024)
+        timeout = base_timeout + (size_mb * per_mb)
+        return min(timeout, max_timeout)
+    except:
+        return base_timeout
+
+
+# ============================================================================
 # File Discovery
 # ============================================================================
 
@@ -147,6 +172,9 @@ def get_packet_trace_tshark(filepath, options):
     packets = []
 
     try:
+        # Calculate dynamic timeout based on file size
+        timeout = calculate_timeout(filepath)
+
         # Build tshark command for packet listing
         cmd = ['tshark', '-r', filepath, '-n', '-t', 'ad']
 
@@ -158,7 +186,7 @@ def get_packet_trace_tshark(filepath, options):
         if hasattr(options, 'limit') and options.limit:
             cmd.extend(['-c', str(options.limit)])
 
-        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=30)
+        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=timeout)
 
         for line in output.splitlines():
             if is_cmd_stopped and is_cmd_stopped():
@@ -401,9 +429,12 @@ def analyze_pcap_tshark(filepath, options):
     }
 
     try:
+        # Calculate dynamic timeout based on file size
+        timeout = calculate_timeout(filepath)
+
         # Get basic statistics
         cmd = ['tshark', '-r', filepath, '-q', '-z', 'io,phs']
-        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=30)
+        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=timeout)
 
         # Parse protocol hierarchy
         in_hierarchy = False
@@ -423,7 +454,7 @@ def analyze_pcap_tshark(filepath, options):
         # Get conversations if requested or if IP filter is specified
         if options.conversations or (hasattr(options, 'ip') and options.ip):
             cmd = ['tshark', '-r', filepath, '-q', '-z', 'conv,ip']
-            output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=30)
+            output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=timeout)
 
             for line in output.splitlines():
                 # Parse lines like: "10.0.0.1 <-> 10.0.0.2  123  45678  789"
@@ -446,7 +477,7 @@ def analyze_pcap_tshark(filepath, options):
 
         # Get top talkers (endpoint statistics)
         cmd = ['tshark', '-r', filepath, '-q', '-z', 'endpoints,ip']
-        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=30)
+        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=timeout)
 
         in_endpoints = False
         for line in output.splitlines():
@@ -471,7 +502,7 @@ def analyze_pcap_tshark(filepath, options):
 
         # Get time range
         cmd = ['tshark', '-r', filepath, '-q', '-z', 'io,stat,0']
-        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=30)
+        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=timeout)
 
         for line in output.splitlines():
             # Parse duration from io,stat output
@@ -504,12 +535,15 @@ def analyze_pcap_tcpdump(filepath, options):
     }
 
     try:
+        # Calculate dynamic timeout based on file size
+        timeout = calculate_timeout(filepath)
+
         # Count packets
         cmd = ['tcpdump', '-r', filepath, '-nn', '-q']
         if options.proto:
             cmd.append(options.proto)
 
-        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=30)
+        output = subprocess.check_output(cmd, stderr=subprocess.PIPE, text=True, timeout=timeout)
 
         lines = output.strip().splitlines()
         result['packet_count'] = len(lines)
