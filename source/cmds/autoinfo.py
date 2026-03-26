@@ -10,6 +10,7 @@ Provides comprehensive overview of automated system management tools.
 """
 
 import os
+import re
 from os.path import exists, isfile, isdir, join
 from optparse import OptionParser
 from io import StringIO
@@ -42,7 +43,7 @@ def detect_tool_by_packages(sos_home, tool_name):
     Returns:
         List of matching package names, empty if not found
     """
-    rpm_path = get_sos_file_path(sos_home, "installed_rpms")
+    rpm_path = get_sos_file_path(sos_home, "installed-rpms")
     if not exists(rpm_path):
         return []
 
@@ -128,6 +129,47 @@ def check_systemd_service(sos_home, service_name):
             pass
 
     return False
+
+
+def get_systemd_service_info(sos_home, service_name):
+    """
+    Get systemd service presence and enable state.
+
+    Args:
+        sos_home: Root of sosreport
+        service_name: Service name (e.g., 'ansible.service')
+
+    Returns:
+        (found, enable_state) where enable_state is 'enabled', 'disabled', etc., or None
+    """
+    found = False
+    enable_state = None
+
+    paths = [
+        get_sos_file_path(sos_home, "etc", "systemd", "system", service_name),
+        get_sos_file_path(sos_home, "usr", "lib", "systemd", "system", service_name),
+    ]
+    for path in paths:
+        if exists(path):
+            found = True
+            break
+
+    unit_list_path = get_sos_file_path(sos_home, "sos_commands", "systemd",
+                                       "systemctl_list-unit-files")
+    if exists(unit_list_path):
+        try:
+            with open(unit_list_path, 'r') as f:
+                for line in f:
+                    if service_name in line:
+                        found = True
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            enable_state = parts[1]
+                        break
+        except (IOError, OSError):
+            pass
+
+    return found, enable_state
 
 
 def analyze_puppet(sos_home, colors, output):
@@ -252,13 +294,19 @@ def analyze_ansible(sos_home, colors, output):
     Returns:
         True if Ansible detected, False otherwise
     """
-    # Check for Ansible presence
+    # Check for Ansible presence via directories, packages, or services
     ansible_dirs = [
         get_sos_file_path(sos_home, "etc", "ansible"),
         get_sos_file_path(sos_home, "var", "log", "ansible")
     ]
 
-    if not any(isdir(d) for d in ansible_dirs):
+    dirs_present = any(isdir(d) for d in ansible_dirs)
+    packages = detect_tool_by_packages(sos_home, "ansible")
+    has_service = (check_systemd_service(sos_home, "ansible.service") or
+                   check_systemd_service(sos_home, "ansible-pull.service"))
+    managed_node_info = detect_ansible_managed_node_activity(sos_home)
+
+    if not (dirs_present or packages or has_service or managed_node_info['detected']):
         return False
 
     output.add_colored_line("=== Ansible Configuration Management ===",
@@ -266,7 +314,6 @@ def analyze_ansible(sos_home, colors, output):
     output.add_line("")
 
     # Package information
-    packages = detect_tool_by_packages(sos_home, "ansible")
     if packages:
         output.add_colored_line("Installed Packages:", colors.yellow, colors.reset)
         for pkg in packages[:5]:
@@ -360,6 +407,37 @@ def analyze_ansible(sos_home, colors, output):
                 output.add_line("")
         except OSError:
             pass
+
+    # Service status
+    ansible_service_names = ["ansible.service", "ansible-pull.service"]
+    detected_services = []
+    for svc_name in ansible_service_names:
+        found, enable_state = get_systemd_service_info(sos_home, svc_name)
+        if found:
+            detected_services.append((svc_name, enable_state))
+
+    if detected_services:
+        output.add_colored_line("Service:", colors.yellow, colors.reset)
+        for svc_name, enable_state in detected_services:
+            status_str = " (%s)" % enable_state if enable_state else ""
+            output.add_line("  %s%s" % (svc_name, status_str))
+        output.add_line("")
+
+    # Managed node activity section
+    if managed_node_info['detected']:
+        output.add_colored_line("Managed Node Activity:", colors.yellow, colors.reset)
+        if managed_node_info['service_account']:
+            output.add_line("  Service account: %s" % managed_node_info['service_account'])
+        if managed_node_info['recent_activity']:
+            output.add_line("  Recent activity: %s" % managed_node_info['recent_activity'])
+        if managed_node_info['modules_used']:
+            modules_sorted = sorted(managed_node_info['modules_used'])
+            output.add_line("  Modules detected: %s" % ', '.join(modules_sorted))
+        if managed_node_info['evidence']:
+            output.add_line("  Evidence:")
+            for ev in managed_node_info['evidence'][:10]:
+                output.add_line("    - %s" % ev)
+        output.add_line("")
 
     output.add_line("")
     return True
@@ -521,6 +599,176 @@ Examples:
 
 # Global state
 is_cmd_stopped = None
+_ansible_managed_node_cache = {}
+
+
+def detect_ansible_managed_node_activity(sos_home):
+    """
+    Detect ansible activity on managed nodes via log and filesystem analysis.
+
+    Checks journalctl logs for ansible module invocations, BECOME-SUCCESS
+    markers, .ansible/tmp/ references, and ansible service account activity.
+    Also checks etc/passwd and user home directories for ansible artifacts.
+
+    Args:
+        sos_home: Root of sosreport
+
+    Returns:
+        dict with keys:
+            detected (bool), service_account (str or None),
+            modules_used (set), recent_activity (str or None),
+            evidence (list of str)
+    """
+    global _ansible_managed_node_cache
+    if sos_home in _ansible_managed_node_cache:
+        return _ansible_managed_node_cache[sos_home]
+
+    result = {
+        'detected': False,
+        'service_account': None,
+        'modules_used': set(),
+        'recent_activity': None,
+        'evidence': [],
+    }
+
+    # Check etc/passwd for ansible-related usernames
+    ansible_users = []
+    passwd_path = get_sos_file_path(sos_home, "etc", "passwd")
+    if exists(passwd_path):
+        try:
+            with open(passwd_path, 'r') as f:
+                for line in f:
+                    if is_cmd_stopped():
+                        break
+                    lower = line.lower()
+                    if 'ansible' in lower or 'svcansible' in lower:
+                        username = line.split(':')[0].strip()
+                        if username:
+                            ansible_users.append(username)
+        except (IOError, OSError):
+            pass
+
+    if ansible_users:
+        result['service_account'] = ansible_users[0]
+        result['evidence'].append(
+            "Ansible service account(s) in /etc/passwd: %s" % ', '.join(ansible_users)
+        )
+
+    # Check user home directories for .ansible/ directories
+    home_base = get_sos_file_path(sos_home, "home")
+    if isdir(home_base):
+        try:
+            for user_dir in os.listdir(home_base):
+                if is_cmd_stopped():
+                    break
+                ansible_dir = join(home_base, user_dir, ".ansible")
+                if isdir(ansible_dir):
+                    result['evidence'].append(
+                        ".ansible/ directory found in /home/%s/" % user_dir
+                    )
+                    if not result['service_account'] and 'ansible' in user_dir.lower():
+                        result['service_account'] = user_dir
+        except OSError:
+            pass
+
+    root_ansible = get_sos_file_path(sos_home, "root", ".ansible")
+    if isdir(root_ansible):
+        result['evidence'].append(".ansible/ directory found in /root/")
+
+    # Scan log files for ansible activity patterns
+    module_pattern = re.compile(r'ansible-([a-zA-Z0-9_]+)')
+    become_pattern = re.compile(r'BECOME-SUCCESS')
+    tmp_pattern = re.compile(r'\.ansible/tmp/')
+    session_pattern = re.compile(r'New session \d+ of user (\w+)')
+
+    ansible_user_pattern = None
+    if ansible_users:
+        escaped = '|'.join(re.escape(u) for u in ansible_users)
+        ansible_user_pattern = re.compile(escaped)
+
+    # Candidate log paths in priority order; resolve symlinks transparently
+    log_candidates = [
+        get_sos_file_path(sos_home, "logs", "journalctl_--no-pager_--boot"),
+        get_sos_file_path(sos_home, "var", "log", "messages"),
+    ]
+
+    for log_path in log_candidates:
+        # Resolve symlink so open() follows it correctly
+        try:
+            resolved = os.path.realpath(log_path)
+        except OSError:
+            resolved = log_path
+
+        if not exists(resolved):
+            continue
+
+        log_label = log_path.replace(sos_home, "")
+
+        try:
+            with open(resolved, 'r', errors='replace') as f:
+                last_timestamp = None
+                for line in f:
+                    if is_cmd_stopped():
+                        break
+
+                    # Extract syslog/journalctl timestamp prefix (Month DD HH:MM:SS)
+                    parts = line.split()
+                    if len(parts) >= 3 and ':' in parts[2]:
+                        last_timestamp = ' '.join(parts[:3])
+
+                    # "New session N of user <username>" — detect ansible accounts from logs
+                    sm = session_pattern.search(line)
+                    if sm:
+                        session_user = sm.group(1)
+                        lower_u = session_user.lower()
+                        if 'ansible' in lower_u or 'svcansible' in lower_u:
+                            if session_user not in ansible_users:
+                                ansible_users.append(session_user)
+                            if not result['service_account']:
+                                result['service_account'] = session_user
+                            ev = "Ansible service account session in %s: user %s" % (
+                                log_label, session_user)
+                            if ev not in result['evidence']:
+                                result['evidence'].append(ev)
+                            if result['recent_activity'] is None and last_timestamp:
+                                result['recent_activity'] = last_timestamp
+
+                    # Ansible module invocations (ansible-<module>)
+                    m = module_pattern.search(line)
+                    if m:
+                        module_name = m.group(1)
+                        result['modules_used'].add(module_name)
+                        if last_timestamp:
+                            result['recent_activity'] = last_timestamp
+
+                    # BECOME-SUCCESS markers
+                    if become_pattern.search(line):
+                        ev = "BECOME-SUCCESS marker detected in %s" % log_label
+                        if ev not in result['evidence']:
+                            result['evidence'].append(ev)
+                        if result['recent_activity'] is None and last_timestamp:
+                            result['recent_activity'] = last_timestamp
+
+                    # .ansible/tmp/ directory references
+                    if tmp_pattern.search(line):
+                        ev = ".ansible/tmp/ references found in %s" % log_label
+                        if ev not in result['evidence']:
+                            result['evidence'].append(ev)
+
+                    # Known ansible service account activity in logs
+                    if ansible_user_pattern and ansible_user_pattern.search(line):
+                        ev = "Ansible service account activity in %s" % log_label
+                        if ev not in result['evidence']:
+                            result['evidence'].append(ev)
+                        if result['recent_activity'] is None and last_timestamp:
+                            result['recent_activity'] = last_timestamp
+
+        except (IOError, OSError):
+            pass
+
+    result['detected'] = bool(result['modules_used'] or result['evidence'])
+    _ansible_managed_node_cache[sos_home] = result
+    return result
 
 
 def run_autoinfo(input_str, env_vars, is_cmd_stopped_func,
