@@ -1,11 +1,11 @@
 """
-compare command for isos — compares two sosreports side-by-side.
+soscompare command for isos — compares two sosreports side-by-side.
 
 Usage:
-    compare <path-to-second-sosreport>
-    compare -t <topic>
-    compare -l
-    compare --no-fzf <path-to-second-sosreport>
+    soscompare <path-to-second-sosreport>
+    soscompare -t <topic>
+    soscompare -l
+    soscompare --no-fzf <path-to-second-sosreport>
 """
 
 import os
@@ -15,13 +15,13 @@ import tempfile
 from optparse import OptionParser
 from os.path import basename, exists
 
-from compare_topics import TOPICS, get_topic
+from cmds.compare_topics import TOPICS, get_topic
 
 
 sos_home = ""
 is_cmd_stopped = None
 
-cmd_name = "compare"
+cmd_name = "soscompare"
 
 
 def description():
@@ -147,40 +147,40 @@ def run_compare(input_str, env_vars, is_cmd_stopped_func,
         print("\nAvailable topics:")
         for t in TOPICS:
             print("  %-12s  %s" % (t.key, t.display_name))
-        return
+        return ""
 
     if opts.list_topics:
         for t in TOPICS:
             print("  %-12s  %s" % (t.key, t.display_name))
-        return
+        return ""
 
     if not remaining:
         print("Error: second sosreport path required.")
         op.print_help()
-        return
+        return ""
 
     sos2_path = remaining[0]
     sos1_path = sos_home
 
     if not exists(sos2_path):
         print("Error: path not found: %s" % sos2_path)
-        return
+        return ""
 
     # Single topic mode (-t)
     if opts.topic:
         topic = get_topic(opts.topic)
         if topic is None:
             print("Error: unknown topic '%s'. Use -l to list topics." % opts.topic)
-            return
+            return ""
         _print_topic(topic, sos1_path, sos2_path)
-        return
+        return ""
 
     # Plain text fallback (--no-fzf or fzf not installed)
     if opts.no_fzf or not shutil.which('fzf'):
         if not opts.no_fzf:
             print("Note: fzf not found, falling back to plain text output.")
         _print_all_plain(TOPICS, sos1_path, sos2_path)
-        return
+        return ""
 
     # Interactive fzf mode
     output_dir = tempfile.mkdtemp(prefix='isos_compare_')

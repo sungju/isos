@@ -999,3 +999,12 @@ def get_topic(key):
         if t.key == key:
             return t
     return None
+
+
+# ---------------------------------------------------------------------------
+# isos command interface (returns False so this module is not loaded as a command)
+# ---------------------------------------------------------------------------
+
+def add_command():
+    """Do not load this module as a command - it's a library for compare.py."""
+    return False
