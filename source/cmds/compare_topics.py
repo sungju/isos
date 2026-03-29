@@ -144,7 +144,7 @@ def _kb_to_str(kb_val):
 
 def collect_system(sos_home):
     """
-    Collect system information: kernel, hostname, OS release, date, RPM count.
+    Collect system information: kernel, hostname, OS release, date, RPM count, BIOS info.
 
     Returns:
         {
@@ -153,6 +153,9 @@ def collect_system(sos_home):
           'os_release': str,
           'date': str,
           'installed_rpms': str,   # count as string
+          'bios_vendor': str,
+          'bios_version': str,
+          'bios_date': str,
         }
     Returns {} on error.
     """
@@ -199,6 +202,19 @@ def collect_system(sos_home):
                         count += 1
             data['installed_rpms'] = str(count)
 
+        # BIOS information from sys/class/dmi/id/
+        bios_vendor = _read_first_line(join(sos_home, "sys", "class", "dmi", "id", "bios_vendor"))
+        if bios_vendor:
+            data['bios_vendor'] = bios_vendor
+
+        bios_version = _read_first_line(join(sos_home, "sys", "class", "dmi", "id", "bios_version"))
+        if bios_version:
+            data['bios_version'] = bios_version
+
+        bios_date = _read_first_line(join(sos_home, "sys", "class", "dmi", "id", "bios_date"))
+        if bios_date:
+            data['bios_date'] = bios_date
+
     except Exception:
         pass
 
@@ -208,13 +224,16 @@ def collect_system(sos_home):
 def format_system(data1, data2):
     """Format system info diff lines."""
     lines = [_section_header("System Information")]
-    keys = ['hostname', 'kernel', 'os_release', 'date', 'installed_rpms']
+    keys = ['hostname', 'kernel', 'os_release', 'date', 'installed_rpms', 'bios_vendor', 'bios_version', 'bios_date']
     key_labels = {
         'hostname':       'Hostname',
         'kernel':         'Kernel',
         'os_release':     'OS Release',
         'date':           'System Date',
         'installed_rpms': 'Installed RPMs',
+        'bios_vendor':    'BIOS Vendor',
+        'bios_version':   'BIOS Version',
+        'bios_date':      'BIOS Date',
     }
     lines += _format_dict_diff(data1, data2, keys=keys, key_label=key_labels)
     return lines
