@@ -73,6 +73,23 @@ def _run_fzf(topics, sos1_path, sos2_path, output_dir):
 
     print("Launching interactive comparison...")
 
+    # Check for ISOS_EDITOR environment variable
+    editor = os.environ.get('ISOS_EDITOR', '')
+    if editor:
+        editor_name = basename(editor)
+        header_keys = "Keys: ↑/↓=navigate  Enter={editor}  Esc=exit".format(editor=editor_name)
+        # less with -R flag supports ANSI codes, others need plain text
+        if 'less' in editor_name.lower():
+            bind_cmd = "--bind 'enter:execute({editor} -R {output_dir}/{{1}}.txt)' ".format(
+                editor=editor, output_dir=output_dir)
+        else:
+            # Strip ANSI codes for other editors using sed
+            bind_cmd = "--bind 'enter:execute(sed \"s/\\x1b\\[[0-9;]*m//g\" {output_dir}/{{1}}.txt | {editor} -)' ".format(
+                editor=editor, output_dir=output_dir)
+    else:
+        header_keys = "Keys: ↑/↓=navigate  Esc=exit"
+        bind_cmd = "--bind 'enter:ignore' "
+
     # {1} in fzf refers to the first field (the topic key) of the selected line.
     # {{1}} in Python format string escapes to literal {1} after .format().
     # Use $'...' for multi-line header with newlines
@@ -82,15 +99,17 @@ def _run_fzf(topics, sos1_path, sos2_path, output_dir):
         "--preview 'cat {output_dir}/{{1}}.txt 2>/dev/null || echo \"(no data)\"' "
         "--preview-window 'right:70%:wrap' "
         "--layout reverse "
-        "--header $'SOS1: {sos1_label}\\nSOS2: {sos2_label}\\n\\nKeys: ↑/↓=navigate  Esc=exit' "
+        "--header $'SOS1: {sos1_label}\\nSOS2: {sos2_label}\\n\\n{header_keys}' "
         "--prompt 'Topic> ' "
-        "--bind 'enter:ignore' "
+        "{bind_cmd}"
         "--height 100%"
     ).format(
         topics_file=topics_file,
         output_dir=output_dir,
         sos1_label=sos1_label,
         sos2_label=sos2_label,
+        header_keys=header_keys,
+        bind_cmd=bind_cmd,
     )
 
     subprocess.call(fzf_cmd, shell=True)
