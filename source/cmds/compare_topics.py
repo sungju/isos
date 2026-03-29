@@ -12,8 +12,8 @@ Each topic:
 Diff line convention:
     [=] field  : value       (same in both)
     [~] field  : v1  vs  v2  (changed)
-    [-] field  : v1           (only in sos1 / decreased)
-    [+] field  : v2           (only in sos2 / increased)
+    [1] field  : v1           (only in sos1)
+    [2] field  : v2           (only in sos2)
 """
 
 import os
@@ -82,11 +82,11 @@ def _diff_line_changed(key, val1, val2):
 
 
 def _diff_line_only1(key, val1):
-    return "%s[-] %-30s : %s%s" % (_ANSI_RED, key, val1, _ANSI_RESET)
+    return "%s[1] %-30s : %s%s" % (_ANSI_RED, key, val1, _ANSI_RESET)
 
 
 def _diff_line_only2(key, val2):
-    return "%s[+] %-30s : %s%s" % (_ANSI_GREEN, key, val2, _ANSI_RESET)
+    return "%s[2] %-30s : %s%s" % (_ANSI_GREEN, key, val2, _ANSI_RESET)
 
 
 def _format_dict_diff(d1, d2, keys=None, key_label=None):

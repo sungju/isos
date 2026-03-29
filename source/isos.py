@@ -266,6 +266,7 @@ mod_aliases_seen = set()
 
 # Environment variables (sos_home is the most important)
 env_vars = {
+    "WORK_DIR": os.environ.get("WORK_DIR", os.getcwd()),
     "sos_home": os.getcwd(),
 }
 

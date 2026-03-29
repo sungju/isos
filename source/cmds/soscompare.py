@@ -71,17 +71,20 @@ def _run_fzf(topics, sos1_path, sos2_path, output_dir):
 
     topics_file = _write_topics_file(topics, output_dir)
 
+    print("Launching interactive comparison...")
+
     # {1} in fzf refers to the first field (the topic key) of the selected line.
     # {{1}} in Python format string escapes to literal {1} after .format().
+    # Use $'...' for multi-line header with newlines
     fzf_cmd = (
         "cat {topics_file} | fzf "
         "--ansi "
         "--preview 'cat {output_dir}/{{1}}.txt 2>/dev/null || echo \"(no data)\"' "
         "--preview-window 'right:70%:wrap' "
         "--layout reverse "
-        "--header 'SOS1: {sos1_label}  |  SOS2: {sos2_label}' "
+        "--header $'SOS1: {sos1_label}\\nSOS2: {sos2_label}\\n\\nKeys: ↑/↓=navigate  Esc=exit' "
         "--prompt 'Topic> ' "
-        "--bind 'enter:execute(cat {output_dir}/{{1}}.txt | less -R)' "
+        "--bind 'enter:ignore' "
         "--height 100%"
     ).format(
         topics_file=topics_file,
@@ -91,6 +94,7 @@ def _run_fzf(topics, sos1_path, sos2_path, output_dir):
     )
 
     subprocess.call(fzf_cmd, shell=True)
+    return ""  # Return empty string instead of None
 
 
 def _print_topic(topic, sos1_path, sos2_path):
@@ -131,7 +135,7 @@ def run_compare(input_str, env_vars, is_cmd_stopped_func,
                   help='Show this help message')
     op.add_option('-t', '--topic', dest='topic', default=None,
                   metavar='TOPIC',
-                  help='Show only this topic (skip fzf, print to stdout)')
+                  help='Show specific topic(s) (comma-separated, skip fzf, print to stdout)')
     op.add_option('-l', '--list', dest='list_topics', action='store_true',
                   help='List available comparison topics')
     op.add_option('--no-fzf', dest='no_fzf', action='store_true',
@@ -140,6 +144,9 @@ def run_compare(input_str, env_vars, is_cmd_stopped_func,
                   help='Disable color output')
 
     args = input_str.split() if input_str else []
+    # Skip first word (command name) - isos.py passes full input including command
+    if args and args[0] == cmd_name:
+        args = args[1:]
     opts, remaining = op.parse_args(args)
 
     if show_help or opts.help:
@@ -162,17 +169,27 @@ def run_compare(input_str, env_vars, is_cmd_stopped_func,
     sos2_path = remaining[0]
     sos1_path = sos_home
 
+    # Resolve relative paths from WORK_DIR (original launch directory)
+    # This handles symlink cases where sos_home is the resolved path
+    if not os.path.isabs(sos2_path):
+        work_dir = env_vars.get('WORK_DIR', os.getcwd())
+        sos2_path = os.path.abspath(os.path.join(work_dir, sos2_path))
+
     if not exists(sos2_path):
         print("Error: path not found: %s" % sos2_path)
         return ""
 
-    # Single topic mode (-t)
+    # Topic mode (-t) - supports comma-separated topics
     if opts.topic:
-        topic = get_topic(opts.topic)
-        if topic is None:
-            print("Error: unknown topic '%s'. Use -l to list topics." % opts.topic)
-            return ""
-        _print_topic(topic, sos1_path, sos2_path)
+        topic_keys = [t.strip() for t in opts.topic.split(',')]
+        for topic_key in topic_keys:
+            topic = get_topic(topic_key)
+            if topic is None:
+                print("Error: unknown topic '%s'. Use -l to list topics." % topic_key)
+                return ""
+            _print_topic(topic, sos1_path, sos2_path)
+            if len(topic_keys) > 1:
+                print()  # Blank line between topics
         return ""
 
     # Plain text fallback (--no-fzf or fzf not installed)
@@ -190,3 +207,5 @@ def run_compare(input_str, env_vars, is_cmd_stopped_func,
         _run_fzf(TOPICS, sos1_path, sos2_path, output_dir)
     finally:
         shutil.rmtree(output_dir, ignore_errors=True)
+
+    return ""
