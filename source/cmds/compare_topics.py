@@ -331,12 +331,13 @@ def format_memory(data1, data2):
 
 def collect_cpu(sos_home):
     """
-    Collect CPU count, model, and load averages.
+    Collect CPU count, model, uptime, and load averages.
 
     Returns:
         {
           'cpu_count': str,
           'cpu_model': str,
+          'uptime': str,
           'load_1m': str,
           'load_5m': str,
           'load_15m': str,
@@ -360,15 +361,43 @@ def collect_cpu(sos_home):
         pass
 
     try:
-        loadavg = _read_first_line(join(sos_home, "proc", "loadavg"))
-        if loadavg:
-            parts = loadavg.split()
-            if len(parts) >= 3:
-                data['load_1m']  = parts[0]
-                data['load_5m']  = parts[1]
-                data['load_15m'] = parts[2]
+        # Get uptime from uptime command output
+        uptime_line = _read_first_line(join(sos_home, "uptime"))
+        if uptime_line:
+            # Extract uptime and load from uptime output
+            # Format: " HH:MM:SS up X days, HH:MM, N users, load average: X.XX, X.XX, X.XX"
+            if "load average:" in uptime_line:
+                # Extract load averages from uptime
+                load_part = uptime_line.split("load average:")[1].strip()
+                loads = [x.strip() for x in load_part.split(",")]
+                if len(loads) >= 3:
+                    data['load_1m']  = loads[0]
+                    data['load_5m']  = loads[1]
+                    data['load_15m'] = loads[2]
+            # Extract uptime portion
+            if " up " in uptime_line:
+                up_part = uptime_line.split(" up ")[1]
+                # Remove everything after "user" or "load"
+                if "user" in up_part:
+                    up_part = up_part.split("user")[0].strip().rstrip(",")
+                elif "load" in up_part:
+                    up_part = up_part.split("load")[0].strip().rstrip(",")
+                data['uptime'] = up_part
     except Exception:
         pass
+
+    # Fallback to /proc/loadavg if uptime didn't provide load
+    if 'load_1m' not in data:
+        try:
+            loadavg = _read_first_line(join(sos_home, "proc", "loadavg"))
+            if loadavg:
+                parts = loadavg.split()
+                if len(parts) >= 3:
+                    data['load_1m']  = parts[0]
+                    data['load_5m']  = parts[1]
+                    data['load_15m'] = parts[2]
+        except Exception:
+            pass
 
     return data
 
@@ -376,10 +405,11 @@ def collect_cpu(sos_home):
 def format_cpu(data1, data2):
     """Format CPU & load diff lines."""
     lines = [_section_header("CPU & Load")]
-    keys = ['cpu_count', 'cpu_model', 'load_1m', 'load_5m', 'load_15m']
+    keys = ['cpu_count', 'cpu_model', 'uptime', 'load_1m', 'load_5m', 'load_15m']
     key_labels = {
         'cpu_count':  'CPU Count',
         'cpu_model':  'CPU Model',
+        'uptime':     'Uptime',
         'load_1m':    'Load Avg 1m',
         'load_5m':    'Load Avg 5m',
         'load_15m':   'Load Avg 15m',
