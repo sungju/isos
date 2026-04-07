@@ -494,7 +494,8 @@ def parse_binary_archive(archive_dir, data):
     archive_path = index_files[0][:-6]  # Remove .index suffix
 
     # Build pmrep command to extract all metrics as CSV
-    metrics = list(CPU_METRICS.keys()) + list(MEM_METRICS.keys()) + list(DISK_METRICS.keys())
+    metrics = (list(CPU_METRICS.keys()) + list(MEM_METRICS.keys()) +
+               list(DISK_METRICS.keys()) + list(NET_METRICS.keys()))
     cmd = [
         pmrep, '-a', archive_path,
         '-t', '60s',
@@ -504,7 +505,7 @@ def parse_binary_archive(archive_dir, data):
 
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=60
+            cmd, capture_output=True, text=True, timeout=300
         )
         if result.returncode != 0 or not result.stdout:
             return False
@@ -1712,6 +1713,13 @@ Examples:
     # Show data from a specific pmrep CSV file
     > pcpinfo -f /path/to/pmrep_output.csv -c
 
+    # Analyze a standalone PCP archive directory (e.g. collected from a remote server)
+    > pcpinfo --archive-dir /path/to/pcp_archives -c
+    > pcpinfo -A /path/to/pcp_archives --output-all /tmp/report
+
+    # Standalone directories may contain compressed (.xz) or uncompressed archives
+    > pcpinfo -A /path/to/archives.xz/ -m
+
 PCP data is searched in:
     <sos_home>/sos_commands/pcp/
     <sos_home>/var/log/pcp/pmlogger/<hostname>/
@@ -1772,6 +1780,9 @@ def run_pcpinfo(input_str, env_vars, is_cmd_stopped_func,
     op.add_option('--output-all', dest='output_all', default="",
                   action='store', type='string',
                   help='write comprehensive report (prefix for multiple files)')
+    op.add_option('-A', '--archive-dir', dest='archive_dir', default="",
+                  action='store', type='string',
+                  help='analyze PCP archives from a standalone directory (supports .xz)')
 
     o = args = None
     try:
@@ -1788,6 +1799,14 @@ def run_pcpinfo(input_str, env_vars, is_cmd_stopped_func,
     # Load PCP data
     data = PCPData()
 
+    # Mutual exclusion: -A and -f cannot be used together
+    if o.input_file and o.archive_dir:
+        msg = "Options -A/--archive-dir and -f/--file are mutually exclusive.\n"
+        if no_pipe:
+            print(msg)
+            return ""
+        return msg
+
     # Specific file provided via -f
     if o.input_file:
         if not isfile(o.input_file):
@@ -1800,6 +1819,31 @@ def run_pcpinfo(input_str, env_vars, is_cmd_stopped_func,
         if not parsed:
             parsed = parse_pmrep_text(o.input_file, data)
         data.source = o.input_file
+    elif o.archive_dir:
+        if not isdir(o.archive_dir):
+            msg = "Archive directory not found: %s\n" % o.archive_dir
+            if no_pipe:
+                print(msg)
+                return ""
+            return msg
+        if not _find_pmrep():
+            msg = ("pmrep is not installed on this system.\n"
+                   "Install PCP tools to analyze binary archives: "
+                   "dnf install pcp-system-tools\n")
+            if no_pipe:
+                print(msg)
+                return ""
+            return msg
+        parse_binary_archive(o.archive_dir, data)
+        if not data.timestamps:
+            msg = ("No valid PCP archive data found in: %s\n"
+                   "Ensure the directory contains .index/.meta archive files.\n"
+                   "PCP 5.x+ handles .xz compressed archives natively.\n") % o.archive_dir
+            if no_pipe:
+                print(msg)
+                return ""
+            return msg
+        data.source = o.archive_dir
     elif len(args) > 1:
         # File(s) provided as positional arguments
         for fpath in args[1:]:
