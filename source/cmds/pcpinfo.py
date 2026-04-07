@@ -17,6 +17,9 @@ import csv
 import re
 import subprocess
 import tempfile
+import json
+import gzip
+import hashlib
 from datetime import datetime
 from optparse import OptionParser
 from os.path import isfile, isdir, join, basename, dirname
@@ -70,15 +73,20 @@ NET_METRICS = {
     'network.interface.out.errors':  'out_errors',
 }
 
+PROC_METRICS = {
+    'proc.hog.cpu': 'cpu_util',
+}
+
 # All known metric names (flat set for lookup)
 ALL_METRICS = {}
 ALL_METRICS.update(CPU_METRICS)
 ALL_METRICS.update(MEM_METRICS)
 ALL_METRICS.update(DISK_METRICS)
 ALL_METRICS.update(NET_METRICS)
+ALL_METRICS.update(PROC_METRICS)
 
 # Metric categories that are per-instance (e.g. per interface, per disk)
-PER_INSTANCE_PREFIXES = ('network.interface.',)
+PER_INSTANCE_PREFIXES = ('network.interface.', 'proc.')
 
 # ---------------------------------------------------------------------------
 # Module globals
@@ -117,12 +125,15 @@ class PCPData:
         self.disk = defaultdict(list)  # label -> [float values]
         # network: {iface -> {label -> [float values]}}
         self.network = defaultdict(lambda: defaultdict(list))
+        # process CPU: {pid_str -> [float values aligned with timestamps]}
+        self.proc_cpu = defaultdict(list)
         self.source = ""           # data source description
         self.hostname = ""
         self.has_cpu = False
         self.has_mem = False
         self.has_disk = False
         self.has_network = False
+        self.has_proc = False
 
     @property
     def start_time(self):
@@ -238,6 +249,20 @@ def _classify_metric(col_header):
         bracket = col_header.index('[')
         pcp_name = col_header[:bracket]
         instance = col_header[bracket + 1:-1]
+    # Instance metrics: "proc.hog.cpu-PID processname" format (pmrep 6.x)
+    elif col_header.startswith('proc.hog.cpu-'):
+        # Format: "proc.hog.cpu-000001 /usr/lib/systemd/systemd"
+        parts = col_header.split(None, 1)  # Split on first whitespace
+        if len(parts) >= 1:
+            metric_instance = parts[0]  # "proc.hog.cpu-000001"
+            pcp_name = 'proc.hog.cpu'
+            instance = metric_instance[len('proc.hog.cpu-'):]  # Extract PID
+            if len(parts) == 2:
+                # Include process name in instance for better identification
+                instance = parts[1]  # Use process name as instance
+        else:
+            pcp_name = col_header
+            instance = None
     else:
         pcp_name = col_header
         instance = None
@@ -252,6 +277,8 @@ def _classify_metric(col_header):
         return 'disk', pcp_name, instance
     if pcp_name in NET_METRICS:
         return 'net', pcp_name, instance
+    if pcp_name in PROC_METRICS:
+        return 'proc', pcp_name, instance
 
     # Prefix-based matching for partial metric names
     for known in CPU_METRICS:
@@ -266,6 +293,9 @@ def _classify_metric(col_header):
     for known in NET_METRICS:
         if pcp_name.startswith(known) or known.startswith(pcp_name):
             return 'net', known, instance
+    for known in PROC_METRICS:
+        if pcp_name.startswith(known) or known.startswith(pcp_name):
+            return 'proc', known, instance
 
     return None, pcp_name, instance
 
@@ -291,7 +321,7 @@ def parse_pmrep_csv(filepath, data):
 
     # Skip comment lines to find header
     header_idx = None
-    _metric_prefixes = ('kernel.', 'mem.', 'disk.', 'network.',
+    _metric_prefixes = ('kernel.', 'mem.', 'disk.', 'network.', 'proc.',
                         'Timestamp', 'timestamp', 'time')
     for i, line in enumerate(raw):
         stripped = line.strip()
@@ -319,9 +349,13 @@ def parse_pmrep_csv(filepath, data):
 
     # Map column index -> (category, pcp_name, instance)
     col_map = {}
+    ncpu_col = None  # column index for hinv.ncpu (CPU count metric)
     for idx, hdr in enumerate(headers):
         if idx == 0:
             continue  # timestamp column
+        if hdr.strip() == 'hinv.ncpu':
+            ncpu_col = idx
+            continue
         cat, pcp_name, instance = _classify_metric(hdr)
         if cat:
             col_map[idx] = (cat, pcp_name, instance)
@@ -329,8 +363,12 @@ def parse_pmrep_csv(filepath, data):
     if not col_map:
         return False
 
+    # Remember starting position to normalize only newly-added CPU values
+    start_idx = len(data.timestamps)
+
     # Parse data rows
     parsed_any = False
+    ncpu = 0.0
     for line in raw[header_idx + 1:]:
         stripped = line.strip()
         if not stripped or stripped.startswith('#'):
@@ -350,6 +388,15 @@ def parse_pmrep_csv(filepath, data):
 
         data.timestamps.append(ts)
         parsed_any = True
+
+        # Capture CPU count (constant value; take any valid reading)
+        if ncpu_col is not None and ncpu_col < len(row):
+            try:
+                v = float(row[ncpu_col])
+                if v > 0:
+                    ncpu = v
+            except (ValueError, TypeError):
+                pass
 
         for idx, (cat, pcp_name, instance) in col_map.items():
             if idx >= len(row):
@@ -374,6 +421,17 @@ def parse_pmrep_csv(filepath, data):
                 iface = instance if instance else 'all'
                 data.network[iface][label].append(val)
                 data.has_network = True
+            elif cat == 'proc':
+                pid_str = instance if instance else 'unknown'
+                data.proc_cpu[pid_str].append(val)
+                data.has_proc = True
+
+    # Normalize CPU series by CPU count to convert per-CPU sums to percentages
+    if ncpu > 1 and parsed_any:
+        for label in list(data.cpu.keys()):
+            series = data.cpu[label]
+            for i in range(start_idx, len(series)):
+                series[i] /= ncpu
 
     return parsed_any
 
@@ -488,37 +546,45 @@ def _find_pmrep():
     return None
 
 
-def _run_pmrep_archive(pmrep, archive_path):
+def _run_pmrep_archive(pmrep, archive_path, include_proc=False):
     """Run pmrep on a single archive base path, return CSV text or None on failure.
 
     Retries with reduced metric list if pmrep reports unknown/unavailable metrics.
     """
-    metrics = (list(CPU_METRICS.keys()) + list(MEM_METRICS.keys()) +
+    metrics = (['hinv.ncpu'] + list(CPU_METRICS.keys()) + list(MEM_METRICS.keys()) +
                list(DISK_METRICS.keys()) + list(NET_METRICS.keys()))
+    if include_proc:
+        metrics += list(PROC_METRICS.keys())
 
     # Try up to 3 times, removing failing metrics each iteration
     for attempt in range(3):
+        # Use larger interval for proc metrics to avoid timeout with massive CSV
+        interval = '300s' if include_proc else '60s'
         cmd = [
             pmrep, '-a', archive_path,
-            '-t', '60s',
-            '-f', '%Y-%m-%d %H:%M:%S',
+            '-t', interval,
             '-o', 'csv',
         ] + metrics
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            # Proc metrics require longer timeout due to .xz decompression (6+ min per archive)
+            proc_timeout = 900 if include_proc else 300
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=proc_timeout)
             if result.returncode == 0 and result.stdout:
                 return result.stdout
 
             # Parse stderr for unavailable metrics (PM_ERR_NAME, "not in"/"unknown"/"invalid")
             if result.stderr:
                 import re
-                # Match patterns like "kernel.cpu.util.irq.hard: Unknown metric name"
-                # or "metric X not in archive" or similar
+                # pmrep 6.x format: "Invalid metric kernel.cpu.util.irq.hard (PM_ERR_NAME ...)"
+                # pmrep 5.x format: "kernel.cpu.util.irq.hard: Unknown metric name"
                 bad_metrics = re.findall(
-                    r'([a-z][a-z0-9._]*(?:\.[a-z][a-z0-9._]*)*)\s*[:\-]?\s*(?:Unknown|not in|Invalid|unavailable)',
+                    r'(?:Invalid|Unknown) metric\s+([a-z][a-z0-9._]+(?:\.[a-z][a-z0-9._]+)*)'
+                    r'|([a-z][a-z0-9._]+(?:\.[a-z][a-z0-9._]+)*)\s*[:\-]?\s*(?:Unknown|not in|Invalid|unavailable)',
                     result.stderr, re.IGNORECASE
                 )
+                # findall returns tuples when there are groups; flatten and filter empty strings
+                bad_metrics = [m for tup in bad_metrics for m in tup if m]
                 if bad_metrics:
                     # Remove the failing metrics and retry
                     metrics = [m for m in metrics if m not in bad_metrics]
@@ -570,15 +636,210 @@ def _sort_and_dedup_pcp_data(data):
     for iface in data.network:
         for label in list(data.network[iface].keys()):
             data.network[iface][label] = _reorder(data.network[iface][label])
+    for pid_str in list(data.proc_cpu.keys()):
+        data.proc_cpu[pid_str] = _reorder(data.proc_cpu[pid_str])
 
 
-def parse_binary_archive(archive_dir, data):
+# ---------------------------------------------------------------------------
+# Cache functions for PCP archive processing
+# ---------------------------------------------------------------------------
+
+def _cache_path(archive_dir):
+    """Return path to cache file for the given archive directory."""
+    cache_file = join(archive_dir, '.pcpinfo_cache.json.gz')
+    # Check if writable
+    if os.access(archive_dir, os.W_OK):
+        return cache_file
+    # Fallback to ~/.cache/isos/pcp/ if archive dir is read-only
+    cache_dir = os.path.expanduser('~/.cache/isos/pcp')
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+        # Use hash of absolute path to avoid collisions
+        path_hash = hashlib.sha256(os.path.abspath(archive_dir).encode()).hexdigest()[:8]
+        return join(cache_dir, '%s_%s.json.gz' % (basename(archive_dir), path_hash))
+    except (OSError, IOError):
+        return cache_file  # Return primary path even if fallback fails
+
+
+def _build_manifest(archive_dir):
+    """Build manifest of archive files with their mtimes."""
+    manifest = {}
+    for ext in ('*.index', '*.meta'):
+        for fpath in glob.glob(join(archive_dir, ext)):
+            fname = basename(fpath)
+            try:
+                mtime = os.path.getmtime(fpath)
+                manifest[fname] = mtime
+            except OSError:
+                pass
+    return manifest
+
+
+def _is_cache_valid(cache_meta, archive_dir, include_proc, all_archives):
+    """Check if cache is valid for current request."""
+    # Version mismatch
+    if cache_meta.get('cache_version') != 1:
+        return False
+
+    # Check archive manifest
+    current_manifest = _build_manifest(archive_dir)
+    cached_manifest = cache_meta.get('archive_manifest', {})
+    if current_manifest != cached_manifest:
+        return False
+
+    # Check if cache has sufficient data for request
+    cached_proc = cache_meta.get('include_proc', False)
+    cached_all = cache_meta.get('all_archives', False)
+
+    # If user wants proc but cache doesn't have it, invalid
+    if include_proc and not cached_proc:
+        return False
+
+    # If user wants all archives but cache only has subset, invalid
+    if all_archives and not cached_all:
+        return False
+
+    return True
+
+
+def _load_cache(archive_dir, include_proc, all_archives, no_cache=False, refresh_cache=False):
+    """Load cache if valid, return None if invalid or missing."""
+    # Skip cache if user requested no-cache or refresh-cache
+    if no_cache or refresh_cache:
+        return None
+
+    cache_file = _cache_path(archive_dir)
+    if not os.path.exists(cache_file):
+        return None
+
+    try:
+        with gzip.open(cache_file, 'rt', encoding='utf-8') as f:
+            cache = json.load(f)
+
+        meta = cache.get('meta', {})
+        if not _is_cache_valid(meta, archive_dir, include_proc, all_archives):
+            return None
+
+        print("Using cached PCP data (processed %s)." % meta.get('created_at', 'unknown'),
+              file=sys.stderr)
+        return cache
+
+    except (IOError, OSError, json.JSONDecodeError, ValueError) as e:
+        print("Note: PCP cache invalid (%s), reprocessing archives..." % str(e),
+              file=sys.stderr)
+        # Try to remove corrupt cache
+        try:
+            os.unlink(cache_file)
+        except (OSError, IOError):
+            pass
+        return None
+
+
+def _save_cache(archive_dir, data, include_proc, all_archives, index_files):
+    """Save processed data to cache."""
+    cache_file = _cache_path(archive_dir)
+
+    try:
+        # Build cache structure
+        cache = {
+            'meta': {
+                'cache_version': 1,
+                'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'archive_manifest': _build_manifest(archive_dir),
+                'include_proc': include_proc,
+                'all_archives': all_archives,
+                'archives_processed': [basename(f)[:-6] for f in index_files],  # Remove .index
+                'source': archive_dir,
+                'hostname': data.hostname or ''
+            },
+            'data': {
+                'timestamps': [ts.strftime('%Y-%m-%dT%H:%M:%S') for ts in data.timestamps],
+                'cpu': dict(data.cpu),
+                'mem': dict(data.mem),
+                'disk': dict(data.disk),
+                'network': {iface: dict(labels) for iface, labels in data.network.items()},
+                'proc_cpu': dict(data.proc_cpu),
+                'has_cpu': data.has_cpu,
+                'has_mem': data.has_mem,
+                'has_disk': data.has_disk,
+                'has_network': data.has_network,
+                'has_proc': data.has_proc
+            }
+        }
+
+        # Write atomically (write to temp, then rename)
+        temp_file = cache_file + '.tmp'
+        with gzip.open(temp_file, 'wt', encoding='utf-8', compresslevel=6) as f:
+            json.dump(cache, f, indent=2)
+        os.rename(temp_file, cache_file)
+
+    except (IOError, OSError) as e:
+        print("Note: Could not write PCP cache (%s), continuing without cache." % str(e),
+              file=sys.stderr)
+        # Clean up temp file if it exists
+        try:
+            if os.path.exists(temp_file):
+                os.unlink(temp_file)
+        except (OSError, IOError):
+            pass
+
+
+def _apply_cache_to_data(cache, data):
+    """Populate PCPData object from cache dictionary."""
+    cache_data = cache.get('data', {})
+    cache_meta = cache.get('meta', {})
+
+    # Parse timestamps
+    data.timestamps = []
+    for ts_str in cache_data.get('timestamps', []):
+        try:
+            data.timestamps.append(datetime.strptime(ts_str, '%Y-%m-%dT%H:%M:%S'))
+        except ValueError:
+            pass
+
+    # Restore metrics
+    for label, values in cache_data.get('cpu', {}).items():
+        data.cpu[label] = list(values)
+    for label, values in cache_data.get('mem', {}).items():
+        data.mem[label] = list(values)
+    for label, values in cache_data.get('disk', {}).items():
+        data.disk[label] = list(values)
+    for iface, labels in cache_data.get('network', {}).items():
+        for label, values in labels.items():
+            data.network[iface][label] = list(values)
+    for pid_str, values in cache_data.get('proc_cpu', {}).items():
+        data.proc_cpu[pid_str] = list(values)
+
+    # Restore flags
+    data.has_cpu = cache_data.get('has_cpu', False)
+    data.has_mem = cache_data.get('has_mem', False)
+    data.has_disk = cache_data.get('has_disk', False)
+    data.has_network = cache_data.get('has_network', False)
+    data.has_proc = cache_data.get('has_proc', False)
+
+    # Restore metadata
+    data.source = cache_meta.get('source', '')
+    data.hostname = cache_meta.get('hostname', '')
+
+
+def parse_binary_archive(archive_dir, data, include_proc=False, all_archives=False,
+                         no_cache=False, refresh_cache=False):
     """
     Use pmrep to extract data from a PCP binary archive directory.
     Processes ALL archives found (not just the most recent), merging
     their time-series data chronologically into data.
+
+    If include_proc=True and all_archives=False, limits to 3 most recent archives.
+    If all_archives=True, processes all archives regardless (may take 90+ minutes).
+
     Returns True if any data was parsed.
     """
+    # Try cache first
+    cached = _load_cache(archive_dir, include_proc, all_archives, no_cache, refresh_cache)
+    if cached is not None:
+        _apply_cache_to_data(cached, data)
+        return True
+
     pmrep = _find_pmrep()
     if not pmrep:
         return False
@@ -587,6 +848,16 @@ def parse_binary_archive(archive_dir, data):
     index_files = sorted(glob.glob(join(archive_dir, '*.index')))
     if not index_files:
         return False
+
+    # For proc metrics, limit to most recent 3 archives to avoid excessive runtime
+    # (6+ min per archive for proc.hog.cpu decompression)
+    # Can be overridden with all_archives=True
+    if include_proc and not all_archives and len(index_files) > 3:
+        print("Note: Limiting process analysis to 3 most recent archives (out of %d total)."
+              % len(index_files), file=sys.stderr)
+        print("      Use --all-archives to process all archives (may take 90+ minutes).",
+              file=sys.stderr)
+        index_files = index_files[-3:]
 
     multi = len(index_files) > 1
     success_count = 0
@@ -603,7 +874,7 @@ def parse_binary_archive(archive_dir, data):
                   file=sys.stderr, flush=True)
 
         try:
-            csv_text = _run_pmrep_archive(pmrep, archive_path)
+            csv_text = _run_pmrep_archive(pmrep, archive_path, include_proc=include_proc)
             if csv_text is None:
                 print("  Warning: archive %s returned no data, skipping." % archive_name,
                       file=sys.stderr, flush=True)
@@ -631,6 +902,9 @@ def parse_binary_archive(archive_dir, data):
     if data.timestamps:
         _sort_and_dedup_pcp_data(data)
         data.hostname = basename(archive_dir)
+        # Save cache after successful processing (unless user disabled caching)
+        if not no_cache and not refresh_cache:
+            _save_cache(archive_dir, data, include_proc, all_archives, index_files)
 
     return success_count > 0
 
@@ -639,7 +913,35 @@ def parse_binary_archive(archive_dir, data):
 # Main data loading function
 # ---------------------------------------------------------------------------
 
-def load_pcp_data(sos_home_path):
+def _merge_pmstat_samples(samples, data):
+    """Merge a list of PMStatData dicts (from parse_pmstat) into a PCPData instance."""
+    for sample in samples:
+        ts = _parse_timestamp(sample.get('timestamp', ''))
+        if ts is None:
+            continue
+        data.timestamps.append(ts)
+
+        cpu = sample.get('cpu', {})
+        for label, key in [('user', 'user'), ('sys', 'sys'),
+                            ('idle', 'idle'), ('wait', 'iowait')]:
+            if cpu.get(key) is not None:
+                data.cpu[label].append(cpu[key])
+                data.has_cpu = True
+
+        mem = sample.get('memory', {})
+        for label, key in [('free', 'free'), ('cached', 'cache'), ('used', 'used')]:
+            if mem.get(key) is not None:
+                data.mem[label].append(mem[key])
+                data.has_mem = True
+
+        disk = sample.get('disk', {})
+        for label, key in [('read_iops', 'reads'), ('write_iops', 'writes')]:
+            if disk.get(key) is not None:
+                data.disk[label].append(disk[key])
+                data.has_disk = True
+
+
+def load_pcp_data(sos_home_path, include_proc=False):
     """
     Locate and load PCP performance data from a sosreport directory.
 
@@ -667,6 +969,13 @@ def load_pcp_data(sos_home_path):
             success = parse_pmrep_text(fpath, data)
             if success and not data.source:
                 data.source = fpath
+        elif '@' in sample and any(kw in sample.lower() for kw in ('memory', 'swap', 'cpu')):
+            # pmstat format: lines start with '@ <timestamp>'
+            samples = parse_pmstat(fpath)
+            if samples:
+                _merge_pmstat_samples(samples, data)
+                if not data.source:
+                    data.source = fpath
 
     # Sort and deduplicate after CSV loading (os.listdir order is arbitrary)
     if not data.is_empty():
@@ -677,7 +986,7 @@ def load_pcp_data(sos_home_path):
         for archive_dir in files_info['archive_dirs']:
             if is_cmd_stopped and is_cmd_stopped():
                 break
-            success = parse_binary_archive(archive_dir, data)
+            success = parse_binary_archive(archive_dir, data, include_proc=include_proc)
             if success:
                 data.source = archive_dir
                 break
@@ -1253,6 +1562,93 @@ def show_network(data, no_pipe):
     return builder.get_result()
 
 
+def show_top_procs(data, top_n, no_pipe):
+    """Display top N CPU consuming processes ranked by average CPU usage."""
+    builder = OutputBuilder(no_pipe)
+    colors = ColorManager(no_pipe)
+
+    if not data.has_proc:
+        builder.add_line(
+            "No process CPU data available.\n"
+            "Use -p/--top-procs with PCP binary archives (requires pmrep).\n"
+            "Ensure proc.hog.cpu metric is collected in PCP archives."
+        )
+        return builder.get_result()
+
+    colors.print_header(_section_header("TOP %d CPU CONSUMERS" % top_n))
+
+    # Compute stats per process; skip any that never had non-zero CPU
+    proc_stats = {}
+    n_ts = len(data.timestamps)
+    for pid_str, vals in data.proc_cpu.items():
+        if not any(v > 0 for v in vals):
+            continue
+        mn, mx, avg = _stats(vals)
+        # Find peak timestamp
+        peak_ts = None
+        if data.timestamps and len(vals) >= 1:
+            paired = sorted(zip(vals, range(len(vals))), reverse=True)
+            peak_idx = paired[0][1]
+            if peak_idx < n_ts:
+                peak_ts = data.timestamps[peak_idx]
+        proc_stats[pid_str] = (mn, mx, avg, peak_ts)
+
+    if not proc_stats:
+        builder.add_line("All processes reported zero CPU utilization.")
+        return builder.get_result()
+
+    top = sorted(proc_stats.items(), key=lambda x: x[1][2], reverse=True)[:top_n]
+
+    table = create_table(no_pipe)
+    table.add_column("Process",   width=32, align='left',  color='cyan')
+    table.add_column("Min CPU%",  width=9,  align='right', color='lightcyan')
+    table.add_column("Max CPU%",  width=9,  align='right', color='lightcyan')
+    table.add_column("Avg CPU%",  width=9,  align='right', color='lightcyan')
+    table.add_column("Peak At",   width=21, align='left',  color='white')
+
+    for pid_str, (mn, mx, avg, peak_ts) in top:
+        row_color = 'lightred' if avg >= 80 else ('lightyellow' if avg >= 40 else None)
+        peak_str = peak_ts.strftime('%Y-%m-%d %H:%M:%S') if peak_ts else ""
+        table.add_row(
+            pid_str[:32],
+            "%.2f" % mn,
+            "%.2f" % mx,
+            "%.2f" % avg,
+            peak_str,
+            row_color=row_color,
+        )
+
+    builder.add_table(table)
+
+    # Peak snapshot: show top N at the single busiest timestamp
+    if data.timestamps:
+        builder.add_line("\nTop processes at peak CPU timestamp:")
+        # Find timestamp where the sum of all proc CPU is highest
+        peak_ts_idx = 0
+        peak_sum = 0.0
+        for ts_idx in range(n_ts):
+            total = sum(
+                vals[ts_idx] for vals in data.proc_cpu.values()
+                if ts_idx < len(vals)
+            )
+            if total > peak_sum:
+                peak_sum = total
+                peak_ts_idx = ts_idx
+
+        peak_snapshot = {
+            pid_str: vals[peak_ts_idx]
+            for pid_str, vals in data.proc_cpu.items()
+            if peak_ts_idx < len(vals) and vals[peak_ts_idx] > 0
+        }
+        peak_top = sorted(peak_snapshot.items(), key=lambda x: x[1], reverse=True)[:top_n]
+        peak_ts_str = data.timestamps[peak_ts_idx].strftime('%Y-%m-%d %H:%M:%S')
+        builder.add_line("  Timestamp: %s" % peak_ts_str)
+        for rank, (pid_str, cpu_val) in enumerate(peak_top, 1):
+            builder.add_line("  %2d. %-32s  %.2f%%" % (rank, pid_str[:32], cpu_val))
+
+    return builder.get_result()
+
+
 def show_summary(data, no_pipe):
     """Display summary overview with TableFormatter and anomaly indicators."""
     builder = OutputBuilder(no_pipe)
@@ -1821,6 +2217,12 @@ Examples:
     # Write comprehensive report (creates prefix_all.txt, prefix_cpu.txt, etc.)
     > pcpinfo --output-all /tmp/pcp_report
 
+    # Show top 5 CPU consuming processes
+    > pcpinfo -p 5
+
+    # Show top 10 CPU consumers alongside CPU metrics
+    > pcpinfo -p 10 -c
+
     # Show data from a specific pmrep CSV file
     > pcpinfo -f /path/to/pmrep_output.csv -c
 
@@ -1894,6 +2296,15 @@ def run_pcpinfo(input_str, env_vars, is_cmd_stopped_func,
     op.add_option('-A', '--archive-dir', dest='archive_dir', default="",
                   action='store', type='string',
                   help='analyze PCP archives from a standalone directory (supports .xz)')
+    op.add_option('-p', '--top-procs', dest='top_procs', default=0,
+                  action='store', type='int',
+                  help='show top N CPU consuming processes (e.g. -p 5; requires PCP archives)')
+    op.add_option('--all-archives', dest='all_archives', action='store_true',
+                  help='process all archives (not just 3 most recent) for proc analysis; may take 90+ min')
+    op.add_option('--no-cache', dest='no_cache', action='store_true',
+                  help='skip cache, always process archives from scratch')
+    op.add_option('--refresh-cache', dest='refresh_cache', action='store_true',
+                  help='force reprocess archives and update cache')
 
     o = args = None
     try:
@@ -1906,6 +2317,9 @@ def run_pcpinfo(input_str, env_vars, is_cmd_stopped_func,
 
     screen.init_data(no_pipe, 1, is_cmd_stopped)
     result_str = ""
+
+    include_proc = o.top_procs > 0
+    top_n = o.top_procs if o.top_procs > 0 else 5
 
     # Load PCP data
     data = PCPData()
@@ -1945,7 +2359,9 @@ def run_pcpinfo(input_str, env_vars, is_cmd_stopped_func,
                 print(msg)
                 return ""
             return msg
-        parse_binary_archive(o.archive_dir, data)
+        parse_binary_archive(o.archive_dir, data, include_proc=include_proc,
+                             all_archives=o.all_archives, no_cache=o.no_cache,
+                             refresh_cache=o.refresh_cache)
         if not data.timestamps:
             msg = ("No valid PCP archive data found in: %s\n"
                    "Ensure the directory contains .index/.meta archive files.\n"
@@ -1967,7 +2383,7 @@ def run_pcpinfo(input_str, env_vars, is_cmd_stopped_func,
                 data.source = fpath
     else:
         # Auto-discover from sosreport
-        data = load_pcp_data(sos_home)
+        data = load_pcp_data(sos_home, include_proc=include_proc)
 
     # Handle output-to-file options
     any_output = False
@@ -2021,7 +2437,7 @@ def run_pcpinfo(input_str, env_vars, is_cmd_stopped_func,
         return result_str
 
     # Display to terminal
-    show_any = o.cpu or o.mem or o.disk or o.network or o.show_all
+    show_any = o.cpu or o.mem or o.disk or o.network or o.show_all or include_proc
 
     if not show_any:
         # Default: show summary
@@ -2035,5 +2451,7 @@ def run_pcpinfo(input_str, env_vars, is_cmd_stopped_func,
             result_str += show_disk(data, no_pipe)
         if o.show_all or o.network:
             result_str += show_network(data, no_pipe)
+        if include_proc:
+            result_str += show_top_procs(data, top_n, no_pipe)
 
     return result_str
