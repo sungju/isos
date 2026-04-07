@@ -227,11 +227,17 @@ def _looks_like_csv(lines):
 def _classify_metric(col_header):
     """
     Given a CSV column header (possibly with instance suffix like
-    'network.interface.in.bytes::eth0'), return (category, pcp_name, instance).
+    'network.interface.in.bytes::eth0' or 'network.interface.in.bytes[eth0]'),
+    return (category, pcp_name, instance).
     """
-    # Instance metrics: "metric.name::instance"
+    # Instance metrics: "metric.name::instance" (pmrep >= 5.x)
     if '::' in col_header:
         pcp_name, instance = col_header.split('::', 1)
+    # Instance metrics: "metric.name[instance]" (pmrep < 5.x)
+    elif '[' in col_header and col_header.endswith(']'):
+        bracket = col_header.index('[')
+        pcp_name = col_header[:bracket]
+        instance = col_header[bracket + 1:-1]
     else:
         pcp_name = col_header
         instance = None
@@ -285,6 +291,8 @@ def parse_pmrep_csv(filepath, data):
 
     # Skip comment lines to find header
     header_idx = None
+    _metric_prefixes = ('kernel.', 'mem.', 'disk.', 'network.',
+                        'Timestamp', 'timestamp', 'time')
     for i, line in enumerate(raw):
         stripped = line.strip()
         if stripped.startswith('#') or not stripped:
@@ -292,10 +300,12 @@ def parse_pmrep_csv(filepath, data):
         if 'Timestamp' in stripped or stripped.startswith('time'):
             header_idx = i
             break
-        # First non-comment line might already be data - check for comma
+        # Accept as header only if it contains a known PCP metric prefix —
+        # avoids misidentifying pmrep warning lines as the CSV header.
         if ',' in stripped and not stripped[0].isdigit():
-            header_idx = i
-            break
+            if any(p in stripped for p in _metric_prefixes):
+                header_idx = i
+                break
 
     if header_idx is None:
         return False
@@ -479,22 +489,50 @@ def _find_pmrep():
 
 
 def _run_pmrep_archive(pmrep, archive_path):
-    """Run pmrep on a single archive base path, return CSV text or None on failure."""
+    """Run pmrep on a single archive base path, return CSV text or None on failure.
+
+    Retries with reduced metric list if pmrep reports unknown/unavailable metrics.
+    """
     metrics = (list(CPU_METRICS.keys()) + list(MEM_METRICS.keys()) +
                list(DISK_METRICS.keys()) + list(NET_METRICS.keys()))
-    cmd = [
-        pmrep, '-a', archive_path,
-        '-t', '60s',
-        '-f', '%Y-%m-%d %H:%M:%S',
-        '-o', 'csv',
-    ] + metrics
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if result.returncode != 0 or not result.stdout:
+
+    # Try up to 3 times, removing failing metrics each iteration
+    for attempt in range(3):
+        cmd = [
+            pmrep, '-a', archive_path,
+            '-t', '60s',
+            '-f', '%Y-%m-%d %H:%M:%S',
+            '-o', 'csv',
+        ] + metrics
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode == 0 and result.stdout:
+                return result.stdout
+
+            # Parse stderr for unavailable metrics (PM_ERR_NAME, "not in"/"unknown"/"invalid")
+            if result.stderr:
+                import re
+                # Match patterns like "kernel.cpu.util.irq.hard: Unknown metric name"
+                # or "metric X not in archive" or similar
+                bad_metrics = re.findall(
+                    r'([a-z][a-z0-9._]*(?:\.[a-z][a-z0-9._]*)*)\s*[:\-]?\s*(?:Unknown|not in|Invalid|unavailable)',
+                    result.stderr, re.IGNORECASE
+                )
+                if bad_metrics:
+                    # Remove the failing metrics and retry
+                    metrics = [m for m in metrics if m not in bad_metrics]
+                    if not metrics:
+                        return None  # No metrics left to try
+                    continue
+
+            # No specific metrics identified, can't retry
             return None
-        return result.stdout
-    except (subprocess.TimeoutExpired, OSError):
-        return None
+
+        except (subprocess.TimeoutExpired, OSError):
+            return None
+
+    return None  # Max retries exhausted
 
 
 def _sort_and_dedup_pcp_data(data):
