@@ -16,6 +16,7 @@ import glob
 import csv
 import re
 import subprocess
+import tempfile
 from datetime import datetime
 from optparse import OptionParser
 from os.path import isfile, isdir, join, basename, dirname
@@ -177,10 +178,12 @@ def find_pcp_files(sos_home_path):
         for entry in os.listdir(pmlogger_base):
             archive_dir = join(pmlogger_base, entry)
             if isdir(archive_dir):
-                # Check for archive files (.index, .meta)
-                has_archives = any(
-                    f.endswith('.index') or f.endswith('.meta')
-                    for f in os.listdir(archive_dir)
+                # Check for archive files — require both .index and .meta
+                # (.index alone is not enough; pmrep needs the .meta file too)
+                dir_files = os.listdir(archive_dir)
+                has_archives = (
+                    any(f.endswith('.index') for f in dir_files) and
+                    any(f.endswith('.meta')  for f in dir_files)
                 )
                 if has_archives:
                     result['archive_dirs'].append(archive_dir)
@@ -475,25 +478,8 @@ def _find_pmrep():
     return None
 
 
-def parse_binary_archive(archive_dir, data):
-    """
-    Use pmrep to extract data from a PCP binary archive directory.
-    Returns True if any data was parsed.
-    """
-    pmrep = _find_pmrep()
-    if not pmrep:
-        return False
-
-    # Find the most recent archive in the directory
-    index_files = glob.glob(join(archive_dir, '*.index'))
-    if not index_files:
-        return False
-
-    # Sort by modification time, pick most recent
-    index_files.sort(key=os.path.getmtime, reverse=True)
-    archive_path = index_files[0][:-6]  # Remove .index suffix
-
-    # Build pmrep command to extract all metrics as CSV
+def _run_pmrep_archive(pmrep, archive_path):
+    """Run pmrep on a single archive base path, return CSV text or None on failure."""
     metrics = (list(CPU_METRICS.keys()) + list(MEM_METRICS.keys()) +
                list(DISK_METRICS.keys()) + list(NET_METRICS.keys()))
     cmd = [
@@ -502,30 +488,113 @@ def parse_binary_archive(archive_dir, data):
         '-f', '%Y-%m-%d %H:%M:%S',
         '-o', 'csv',
     ] + metrics
-
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=300
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0 or not result.stdout:
-            return False
+            return None
+        return result.stdout
     except (subprocess.TimeoutExpired, OSError):
+        return None
+
+
+def _sort_and_dedup_pcp_data(data):
+    """
+    Sort all time-series in data by timestamp (ascending) and remove
+    duplicate timestamps that can occur when archive time ranges overlap.
+    """
+    n = len(data.timestamps)
+    if n < 2:
+        return
+
+    # Build a sorted index permutation, deduplicate in one pass
+    order = sorted(range(n), key=lambda i: data.timestamps[i])
+    keep = []
+    seen = None
+    for i in order:
+        ts = data.timestamps[i]
+        if ts != seen:
+            keep.append(i)
+            seen = ts
+
+    if len(keep) == n and all(keep[i] == i for i in range(n)):
+        return  # Already sorted and no duplicates
+
+    def _reorder(lst):
+        return [lst[i] for i in keep if i < len(lst)]
+
+    data.timestamps = _reorder(data.timestamps)
+    for label in list(data.cpu.keys()):
+        data.cpu[label] = _reorder(data.cpu[label])
+    for label in list(data.mem.keys()):
+        data.mem[label] = _reorder(data.mem[label])
+    for label in list(data.disk.keys()):
+        data.disk[label] = _reorder(data.disk[label])
+    for iface in data.network:
+        for label in list(data.network[iface].keys()):
+            data.network[iface][label] = _reorder(data.network[iface][label])
+
+
+def parse_binary_archive(archive_dir, data):
+    """
+    Use pmrep to extract data from a PCP binary archive directory.
+    Processes ALL archives found (not just the most recent), merging
+    their time-series data chronologically into data.
+    Returns True if any data was parsed.
+    """
+    pmrep = _find_pmrep()
+    if not pmrep:
         return False
 
-    # Parse the stdout as CSV
-    import tempfile
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tf:
-        tf.write(result.stdout)
-        tmp_path = tf.name
+    # Collect all archive sets; sort by filename (date-named = chronological order)
+    index_files = sorted(glob.glob(join(archive_dir, '*.index')))
+    if not index_files:
+        return False
 
-    try:
-        success = parse_pmrep_csv(tmp_path, data)
-    finally:
-        os.unlink(tmp_path)
+    multi = len(index_files) > 1
+    success_count = 0
 
-    if success:
+    for i, idx_file in enumerate(index_files):
+        if is_cmd_stopped and is_cmd_stopped():
+            break
+
+        archive_path = idx_file[:-6]  # Remove .index suffix
+        archive_name = basename(archive_path)
+
+        if multi:
+            print("Processing archive %d/%d: %s..." % (i + 1, len(index_files), archive_name),
+                  file=sys.stderr, flush=True)
+
+        try:
+            csv_text = _run_pmrep_archive(pmrep, archive_path)
+            if csv_text is None:
+                print("  Warning: archive %s returned no data, skipping." % archive_name,
+                      file=sys.stderr, flush=True)
+                continue
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tf:
+                tf.write(csv_text)
+                tmp_path = tf.name
+
+            try:
+                ok = parse_pmrep_csv(tmp_path, data)
+            finally:
+                os.unlink(tmp_path)
+
+            if ok:
+                success_count += 1
+        except Exception as e:
+            print("  Warning: failed to process archive %s: %s" % (archive_name, e),
+                  file=sys.stderr, flush=True)
+
+    if multi and success_count > 0:
+        print("Processed %d/%d archives successfully." % (success_count, len(index_files)),
+              file=sys.stderr, flush=True)
+
+    if data.timestamps:
+        _sort_and_dedup_pcp_data(data)
         data.hostname = basename(archive_dir)
-    return success
+
+    return success_count > 0
 
 
 # ---------------------------------------------------------------------------
@@ -560,6 +629,10 @@ def load_pcp_data(sos_home_path):
             success = parse_pmrep_text(fpath, data)
             if success and not data.source:
                 data.source = fpath
+
+    # Sort and deduplicate after CSV loading (os.listdir order is arbitrary)
+    if not data.is_empty():
+        _sort_and_dedup_pcp_data(data)
 
     # Try binary archives if no text data found
     if data.is_empty():
