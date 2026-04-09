@@ -928,7 +928,7 @@ def show_inspect_events(inspect_root, options, colors):
                      filter_lower in e.get('_namespace', '').lower()]
 
     # Sort by last timestamp (most recent first)
-    all_events.sort(key=lambda e: e.get('lastTimestamp', ''), reverse=True)
+    all_events.sort(key=lambda e: e.get('lastTimestamp') or '', reverse=True)
 
     # Count by type
     warning_count = sum(1 for e in all_events if e.get('type') == 'Warning')
