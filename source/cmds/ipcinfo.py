@@ -53,20 +53,39 @@ def show_shmem(op, no_pipe):
     shmem_total_usage = 0
     ipc_mode = IPC_NONE
     ipc_title = ""
+
+    # Determine which IPC types to show based on options
+    # If no options specified, show all types (backward compatibility)
+    show_all = not (op.show_shm or op.show_sem or op.show_msg)
+    show_shm = show_all or op.show_shm
+    show_sem = show_all or op.show_sem
+    show_msg = show_all or op.show_msg
+
     try:
         with open(sos_home + '/sos_commands/sysvipc/ipcs') as f:
             result_lines = f.readlines()
             for i in range(1, len(result_lines)):
                 result_line = result_lines[i].strip()
+
+                # Detect section type
                 if "Shared Memory Segments" in result_line:
                     ipc_mode = IPC_SHM
                     ipc_title = result_line
                     continue
-                elif "key" in result_line and ipc_mode == IPC_SHM:
+                elif "Semaphore Arrays" in result_line:
+                    ipc_mode = IPC_SEM
+                    ipc_title = result_line
+                    continue
+                elif "Message Queues" in result_line:
+                    ipc_mode = IPC_MSG
+                    ipc_title = result_line
+                    continue
+                elif "key" in result_line and ipc_mode != IPC_NONE:
                     ipc_title = ipc_title + "\n" + result_line
                     continue
                 elif len(result_line) == 0:
-                    if ipc_mode == IPC_SHM:
+                    # End of section
+                    if ipc_mode == IPC_SHM and show_shm:
                         sorted_usage = sorted(shmem_usage_dict.items(),
                                 key=operator.itemgetter(1), reverse=False)
                         result_str = result_str + screen.get_pipe_aware_line(ipc_title)
@@ -75,13 +94,17 @@ def show_shmem(op, no_pipe):
 
                         result_str = result_str + \
                                 screen.get_pipe_aware_line("\n\tTotal shared memory allocation = %s" % get_size_str(shmem_total_usage))
+                        result_str = result_str + screen.get_pipe_aware_line("")
 
-                    result_str = result_str + \
-                            screen.get_pipe_aware_line("")
+                    # Reset for next section
                     ipc_mode = IPC_NONE
+                    shmem_usage_dict = {}
+                    shmem_total_usage = 0
+                    ipc_title = ""
                     continue
 
-                if ipc_mode == IPC_SHM:
+                # Process section content based on type and filter
+                if ipc_mode == IPC_SHM and show_shm:
                     words = result_line.split()
                     try:
                         alloc_bytes = int(words[4])
@@ -92,9 +115,15 @@ def show_shmem(op, no_pipe):
                             shmem_total_usage = shmem_total_usage + alloc_bytes
                     except:
                         pass
-                else:
-                    result_str = result_str + \
-                            screen.get_pipe_aware_line(result_line)
+                elif ipc_mode == IPC_SEM and show_sem:
+                    # Show semaphore data as-is
+                    result_str = result_str + screen.get_pipe_aware_line(result_line)
+                elif ipc_mode == IPC_MSG and show_msg:
+                    # Show message queue data as-is
+                    result_str = result_str + screen.get_pipe_aware_line(result_line)
+                elif ipc_mode == IPC_NONE:
+                    # Show unrecognized sections as-is
+                    result_str = result_str + screen.get_pipe_aware_line(result_line)
     except Exception as e:
         print(e)
         return ""
@@ -106,6 +135,13 @@ def show_shmem(op, no_pipe):
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
     It shows SYSV IPC usage
+
+    Examples:
+        ipcinfo              # Show all IPC types (shared memory, semaphores, message queues)
+        ipcinfo --shm        # Show only Shared Memory Segments
+        ipcinfo --sem        # Show only Semaphore Arrays
+        ipcinfo --msg        # Show only Message Queues
+        ipcinfo --shm --sem  # Show Shared Memory and Semaphores only
     '''
 
     if no_pipe == False:
@@ -133,6 +169,12 @@ def run_ipcinfo(input_str, env_vars, is_cmd_stopped_func,\
     op = OptionParser(usage=usage, add_help_option=False)
     op.add_option('-h', '--help', dest='help', action='store_true',
                   help='show this help message and exit')
+    op.add_option('-m', '--shm', dest='show_shm', action='store_true',
+                  help='show only Shared Memory Segments')
+    op.add_option('-s', '--sem', dest='show_sem', action='store_true',
+                  help='show only Semaphore Arrays')
+    op.add_option('-q', '--msg', dest='show_msg', action='store_true',
+                  help='show only Message Queues')
 
 
     o = args = None
