@@ -77,12 +77,11 @@ def run_rule(basic_data):
             result_dict["KCS_URL"] = "https://access.redhat.com/solutions/7086240"
             result_dict["RESOLUTION"] = "Please upgrade kernel as specified in the KCS"
             result_dict["KERNELS"] = {
-                    "kernel-3.10.0-1160.88.1.el7",
-                    "kernel-4.18.0-477.10.1.el8_8",
-                    "kernel-4.18.0-425.19.2.el8_7",
-                    "kernel-4.18.0-372.57.1.el8_6",
-                    "kernel-5.14.0-284.11.1.el9_2",
-                    "kernel-5.14.0-162.23.1.el9_1" }
+                    "kernel-5.14.0-503.11.1.el9_5",
+                    "kernel-5.14.0-427.40.1.el9_4",
+                    "kernel-5.14.0-284.90.1.el9_2",
+                    "kernel-4.18.0-553.22.1.el8_10",
+                    "kernel-4.18.0-477.75.1.el8_8" }
 
             return [result_dict]
     except Exception as e:
