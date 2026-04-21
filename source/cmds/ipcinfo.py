@@ -29,11 +29,11 @@ def get_command_info():
 
 def get_size_str(size):
     size_str = ""
-    if size > (1024 * 1024 * 1024): # GiB
+    if size >= (1024 * 1024 * 1024): # GiB
         size_str = "%.1f GiB" % (size / (1024*1024*1024))
-    elif size > (1024 * 1024): # MiB
+    elif size >= (1024 * 1024): # MiB
         size_str = "%.1f MiB" % (size / (1024*1024))
-    elif size > (1024): # KiB
+    elif size >= (1024): # KiB
         size_str = "%.1f KiB" % (size / (1024))
     else:
         size_str = "%.0f B" % (size)
@@ -53,6 +53,7 @@ def show_shmem(op, no_pipe):
     shmem_total_usage = 0
     ipc_mode = IPC_NONE
     ipc_title = ""
+    title_displayed = False
 
     # Determine which IPC types to show based on options
     # If no options specified, show all types (backward compatibility)
@@ -71,14 +72,17 @@ def show_shmem(op, no_pipe):
                 if "Shared Memory Segments" in result_line:
                     ipc_mode = IPC_SHM
                     ipc_title = result_line
+                    title_displayed = False
                     continue
                 elif "Semaphore Arrays" in result_line:
                     ipc_mode = IPC_SEM
                     ipc_title = result_line
+                    title_displayed = False
                     continue
                 elif "Message Queues" in result_line:
                     ipc_mode = IPC_MSG
                     ipc_title = result_line
+                    title_displayed = False
                     continue
                 elif "key" in result_line and ipc_mode != IPC_NONE:
                     ipc_title = ipc_title + "\n" + result_line
@@ -95,12 +99,19 @@ def show_shmem(op, no_pipe):
                         result_str = result_str + \
                                 screen.get_pipe_aware_line("\n\tTotal shared memory allocation = %s" % get_size_str(shmem_total_usage))
                         result_str = result_str + screen.get_pipe_aware_line("")
+                    elif ipc_mode == IPC_SEM and show_sem and title_displayed:
+                        # End semaphore section with blank line
+                        result_str = result_str + screen.get_pipe_aware_line("")
+                    elif ipc_mode == IPC_MSG and show_msg and title_displayed:
+                        # End message queue section with blank line
+                        result_str = result_str + screen.get_pipe_aware_line("")
 
                     # Reset for next section
                     ipc_mode = IPC_NONE
                     shmem_usage_dict = {}
                     shmem_total_usage = 0
                     ipc_title = ""
+                    title_displayed = False
                     continue
 
                 # Process section content based on type and filter
@@ -116,9 +127,17 @@ def show_shmem(op, no_pipe):
                     except:
                         pass
                 elif ipc_mode == IPC_SEM and show_sem:
+                    # Display title before first data line
+                    if not title_displayed:
+                        result_str = result_str + screen.get_pipe_aware_line(ipc_title)
+                        title_displayed = True
                     # Show semaphore data as-is
                     result_str = result_str + screen.get_pipe_aware_line(result_line)
                 elif ipc_mode == IPC_MSG and show_msg:
+                    # Display title before first data line
+                    if not title_displayed:
+                        result_str = result_str + screen.get_pipe_aware_line(ipc_title)
+                        title_displayed = True
                     # Show message queue data as-is
                     result_str = result_str + screen.get_pipe_aware_line(result_line)
                 elif ipc_mode == IPC_NONE:
