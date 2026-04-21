@@ -48,7 +48,7 @@ def run_rule(basic_data):
 
             nr_dentry = int(values[0])
             nr_unused = int(values[1])
-            nr_negative = int(values[5])
+            nr_negative = int(values[4])
 
             if nr_dentry == 0:
                 return None
