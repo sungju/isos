@@ -220,7 +220,7 @@ def print_result(result_list):
             if len(kernels) > 0:
                 result_str = result_str + \
                         screen.get_pipe_color_line("Fixed kernel version:", "green")
-                for kernel in kernels:
+                for kernel in sorted(kernels):
                     result_str = result_str + \
                             screen.get_pipe_color_line("\t%s" % kernel, "cyan")
 
