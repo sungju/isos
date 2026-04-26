@@ -51,30 +51,83 @@ def run_rule(basic_data):
         has_cr2_null = "CR2: 0000000000000000" in log_string
         has_sos_process = "Comm: sos" in log_string
 
-        # Find the start of the panic message (look for timestamp or '[')
+        # Find the start of the panic message
+        # Look backwards from NULL deref to find the beginning of the panic sequence
+        # This could be a timestamp '[' or the start of a line
         pos_panic_start = log_string.rfind('[', 0, pos_null_deref)
         if pos_panic_start < 0:
             pos_panic_start = log_string.rfind('\n', 0, pos_null_deref)
             if pos_panic_start < 0:
                 pos_panic_start = 0
 
+        # For logs without timestamps, look further back to catch any context
+        # Look for double newline or start of buffer
+        if pos_panic_start > 0:
+            context_start = log_string.rfind('\n\n', 0, pos_panic_start)
+            if context_start >= 0 and (pos_panic_start - context_start) < 500:
+                # If there's a paragraph break within 500 chars, use that as start
+                pos_panic_start = context_start + 2
+
         # Find end of panic trace
+        # Look for the "---[ end trace" marker first
         end_trace_pos = log_string.find('---[ end trace', pos_panic_start)
         if end_trace_pos >= 0:
+            # Include the full trace end line
             end_pos = log_string.find('\n', end_trace_pos)
             if end_pos >= 0:
                 end_pos += 1
+
+                # Look for additional lines after trace marker (CR2, cleanup messages)
+                # Check up to 5 more lines for relevant content
+                lines_checked = 0
+                temp_pos = end_pos
+                while lines_checked < 5 and temp_pos < len(log_string):
+                    next_line_end = log_string.find('\n', temp_pos)
+                    if next_line_end < 0:
+                        # Last line in file
+                        end_pos = len(log_string)
+                        break
+
+                    line_content = log_string[temp_pos:next_line_end].strip()
+
+                    # Check if this line contains relevant diagnostic info
+                    if (line_content.startswith('CR2:') or
+                        line_content.startswith('CR3:') or
+                        line_content.startswith('CR4:') or
+                        'Kernel panic' in line_content or
+                        'RIP:' in line_content):
+                        # Include this line
+                        end_pos = next_line_end + 1
+                        temp_pos = end_pos
+                        lines_checked += 1
+                    elif line_content.startswith('[') or not line_content:
+                        # Hit next kernel message or empty line - stop here
+                        break
+                    else:
+                        # Unknown content - include it to be safe
+                        end_pos = next_line_end + 1
+                        temp_pos = end_pos
+                        lines_checked += 1
             else:
                 end_pos = len(log_string)
         else:
-            # Look for next kernel message
-            end_pos = log_string.find('\n[', pos_panic_start + 1)
-            if end_pos >= 0:
-                end_pos += 1
+            # No trace end marker found - look for next kernel message or buffer end
+            # Check for next timestamp-prefixed message
+            next_msg_pos = log_string.find('\n[', pos_panic_start + 1)
+            if next_msg_pos >= 0:
+                # Found next message - use that as boundary
+                end_pos = next_msg_pos + 1
             else:
-                end_pos = len(log_string)
+                # No next message - take a reasonable chunk (up to 20KB from start)
+                # This prevents capturing the entire log if no boundary is found
+                max_chunk = pos_panic_start + 20480
+                end_pos = min(len(log_string), max_chunk)
+                # Try to end at a line boundary
+                last_newline = log_string.rfind('\n', pos_panic_start, end_pos)
+                if last_newline > pos_panic_start:
+                    end_pos = last_newline + 1
 
-        # Extract relevant panic excerpt
+        # Extract complete panic trace with all diagnostic context
         panic_msg = log_string[pos_panic_start:end_pos]
 
         # Check kernel version to determine if it's vulnerable
