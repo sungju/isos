@@ -9,6 +9,48 @@ import math
 import rules_helper as rh
 
 
+def get_dentry_memory_info(sos_home, nr_negative):
+    """
+    Parse /proc/slabinfo to get the dentry slab objsize and calculate
+    the estimated memory consumed by negative dentries.
+
+    Returns (memory_bytes, objsize) on success, or (None, None) on any error.
+    """
+    try:
+        with open(sos_home + '/proc/slabinfo') as f:
+            result_lines = f.readlines()
+
+        if len(result_lines) < 3:
+            return None, None
+
+        # Header line: "# name  <active_objs> <num_objs> <objsize> ..."
+        header = result_lines[1].replace('# name', 'name').split()
+        idx_objsize = -1
+        for i, col in enumerate(header):
+            if '<objsize>' in col:
+                idx_objsize = i
+                break
+
+        if idx_objsize == -1:
+            return None, None
+
+        # Find the 'dentry' entry
+        for line in result_lines[2:]:
+            parts = line.split()
+            if len(parts) > idx_objsize and parts[0] == 'dentry':
+                objsize = int(parts[idx_objsize])
+                if objsize <= 0:
+                    return None, None
+                memory_bytes = nr_negative * objsize
+                return memory_bytes, objsize
+
+        # dentry entry not found
+        return None, None
+
+    except Exception:
+        return None, None
+
+
 def is_major():
     return True
 
@@ -59,10 +101,19 @@ def run_rule(basic_data):
             if negative_percent < NEGATIVE_DENTRY_PERCENT_THRESHOLD:
                 return None
 
+            # Estimate memory consumed by negative dentries via /proc/slabinfo
+            memory_bytes, objsize = get_dentry_memory_info(sos_home, nr_negative)
+            if memory_bytes is not None:
+                memory_info = "\n  Estimated memory consumed by negative dentries: %s" \
+                              " (%d bytes/dentry × %d dentries)" % \
+                              (rh.get_size_str(memory_bytes), objsize, nr_negative)
+            else:
+                memory_info = ""
+
             result_dict = {}
             result_dict["TITLE"] = "Negative dentry increase bug detected by %s" % \
                                     ntpath.basename(__file__)
-            result_dict["MSG"] = "Negative dentry leak detected (%.1f%% of total dentries)\n\n" \
+            result_dict["MSG"] = "Negative dentry leak detected (%.1f%% of total dentries)%s\n\n" \
                     "/proc/sys/fs/dentry-state:\n" \
                     "  nr_dentry   : %d\n" \
                     "  nr_unused   : %d\n" \
@@ -71,7 +122,8 @@ def run_rule(basic_data):
                     "  nr_negative : %d (%.1f%% of nr_dentry)\n" \
                     "  dummy       : %d\n\n" \
                     "This indicates a negative dentry leak issue." % \
-                    (negative_percent, int(values[0]), int(values[1]), int(values[2]),
+                    (negative_percent, memory_info,
+                     int(values[0]), int(values[1]), int(values[2]),
                      int(values[3]), nr_negative, negative_percent, int(values[5]))
             result_dict["KCS_TITLE"] = "Negative dentry increase causing memory pressure"
             result_dict["KCS_URL"] = "https://access.redhat.com/solutions/7086240"
