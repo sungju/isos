@@ -8,6 +8,12 @@ import math
 
 import rules_helper as rh
 
+try:
+    from cmds.meminfo import get_memory_bar
+    _HAS_MEMORY_BAR = True
+except ImportError:
+    _HAS_MEMORY_BAR = False
+
 
 def get_dentry_memory_info(sos_home, nr_negative):
     """
@@ -120,6 +126,7 @@ def run_rule(basic_data):
                 return None
 
             # Estimate memory consumed by negative dentries via /proc/slabinfo
+            sys_mem_pct = None
             memory_bytes, objsize = get_dentry_memory_info(sos_home, nr_negative)
             if memory_bytes is not None:
                 system_total_kb = get_system_total_memory_kb(sos_home)
@@ -139,6 +146,16 @@ def run_rule(basic_data):
                 memory_info = mem_line
             else:
                 memory_info = ""
+
+            # Add bar graph visualizations
+            if _HAS_MEMORY_BAR:
+                dentry_bar = get_memory_bar(negative_percent, width=40, no_pipe=True)
+                memory_info += "\n\n  Negative dentries (%.1f%% of total dentries):\n  %s" % \
+                               (negative_percent, dentry_bar)
+                if sys_mem_pct is not None:
+                    mem_bar = get_memory_bar(sys_mem_pct, width=40, no_pipe=True)
+                    memory_info += "\n  Negative dentry memory (%.2f%% of system memory):\n  %s" % \
+                                   (sys_mem_pct, mem_bar)
 
             result_dict = {}
             result_dict["TITLE"] = "Negative dentry increase bug detected by %s" % \
