@@ -51,6 +51,24 @@ def get_dentry_memory_info(sos_home, nr_negative):
         return None, None
 
 
+def get_system_total_memory_kb(sos_home):
+    """
+    Read MemTotal from /proc/meminfo.
+
+    Returns the total memory in kB, or 0 on any error.
+    """
+    try:
+        with open(sos_home + '/proc/meminfo') as f:
+            for line in f:
+                if line.startswith('MemTotal:'):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        return int(parts[1])
+        return 0
+    except Exception:
+        return 0
+
+
 def is_major():
     return True
 
@@ -104,9 +122,21 @@ def run_rule(basic_data):
             # Estimate memory consumed by negative dentries via /proc/slabinfo
             memory_bytes, objsize = get_dentry_memory_info(sos_home, nr_negative)
             if memory_bytes is not None:
-                memory_info = "\n  Estimated memory consumed by negative dentries: %s" \
-                              " (%d bytes/dentry × %d dentries)" % \
-                              (rh.get_size_str(memory_bytes), objsize, nr_negative)
+                system_total_kb = get_system_total_memory_kb(sos_home)
+                system_total_bytes = system_total_kb * 1024
+
+                mem_line = "\n  Estimated memory consumed by negative dentries: %s" \
+                           " (%d bytes/dentry × %d dentries)" % \
+                           (rh.get_size_str(memory_bytes), objsize, nr_negative)
+
+                if system_total_bytes > 0:
+                    sys_mem_pct = (memory_bytes / system_total_bytes) * 100
+                    mem_line += "\n  System total memory                          : %s" % \
+                                rh.get_size_str(system_total_bytes)
+                    mem_line += "\n  Negative dentries as %% of system memory      : %.2f%%" % \
+                                sys_mem_pct
+
+                memory_info = mem_line
             else:
                 memory_info = ""
 
