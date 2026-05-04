@@ -98,6 +98,12 @@ def add_rule(sysinfo):
 # it's considered abnormal
 NEGATIVE_DENTRY_PERCENT_THRESHOLD = 50
 
+# Threshold: negative dentry memory must also consume at least this percentage
+# of total system memory to be considered an issue. High dentry percentage
+# alone is not enough — it must also represent significant memory pressure.
+# If memory data is unavailable, fall back to the dentry % check only.
+NEGATIVE_DENTRY_MEMORY_PERCENT_THRESHOLD = 20
+
 
 def run_rule(basic_data):
     env_vars = basic_data["env_vars"]
@@ -146,6 +152,13 @@ def run_rule(basic_data):
                 memory_info = mem_line
             else:
                 memory_info = ""
+
+            # Apply the system memory threshold:
+            # Rule triggers ONLY if negative dentry memory >= 20% of system memory.
+            # If sys_mem_pct is unavailable (no memory data), skip this check and
+            # rely solely on the dentry percentage threshold above.
+            if sys_mem_pct is not None and sys_mem_pct < NEGATIVE_DENTRY_MEMORY_PERCENT_THRESHOLD:
+                return None
 
             # Add bar graph visualizations
             if _HAS_MEMORY_BAR:
