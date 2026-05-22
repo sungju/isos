@@ -12,6 +12,7 @@ from itertools import chain
 
 from isos import run_shell_command, column_strings
 import screen
+import ansicolor
 from soshelpers import get_main
 
 def description():
@@ -206,6 +207,19 @@ def get_sos_relative_name(path):
 
     return path
 
+def has_oom_data(filename):
+    for file in get_file_list(filename, False):
+        if not isfile(file):
+            continue
+        try:
+            with open(file) as f:
+                for line in f:
+                    if "invoked oom-killer:" in line or \
+                       "Out of memory: Killed process" in line:
+                        return True
+        except:
+            pass
+    return False
 
 def show_oom_events(op, args, no_pipe):
     global hugepages_size
@@ -216,9 +230,19 @@ def show_oom_events(op, args, no_pipe):
         file_list = file_list + get_file_list(file, True)
         
     if len(file_list) == 0:
-        file_list = get_file_list(sos_home + "/var/log/messages*", False)
-        file_list = file_list + \
-                get_file_list(sos_home + "/sos_commands/logs/journalctl*", False)
+        if no_pipe:
+            print("\nYou can also manually specify a log file name:  %smeminfo -O <path_to_file_name>%s"
+                  % (ansicolor.get_color(ansicolor.YELLOW), ansicolor.get_color(ansicolor.RESET)))       
+        dmesg_t = sos_home + "/sos_commands/kernel/dmesg_-T"
+        dmesg = sos_home + "/sos_commands/kernel/dmesg"
+        if has_oom_data(dmesg_t):
+            file_list = get_file_list(dmesg_t, False)
+        elif has_oom_data(dmesg):
+            file_list = get_file_list(dmesg, False)
+        else:
+            file_list = get_file_list(sos_home + "/var/log/messages*", False)
+            file_list = file_list + \
+                    get_file_list(sos_home + "/sos_commands/logs/journalctl*", False)
 
     is_first_oom = True
     page_size = get_main().page_size
@@ -677,8 +701,8 @@ def print_help_msg(op, no_pipe):
     It shows memory usage from process / slab.
 
 Example)
-    To see oom events, you can specify log name or default file (/var/log/messages)
-    will be used.
+    To see oom events, you can specify a log file name. If none is given, the
+    captured kernel dmesg is checked first, then /var/log/messages* and journalctl.
 
     example.com> meminfo -O
     Nov  9 01:12:50 example.com kernel: https-jsse-nio- invoked oom-killer: ...
