@@ -1037,6 +1037,8 @@ def show_oom_events(op, args, no_pipe):
         file_list = file_list + \
                 get_file_list(sos_home + "/sos_commands/logs/journalctl*", False)
         file_list = file_list + \
+                get_file_list(sos_home + "/var/log/dmesg*", False)
+        file_list = file_list + \
                 get_file_list(sos_home + "/var/log/vmcore-dmesg.txt*", False)
         file_list = file_list + \
                 get_file_list(sos_home + "/*vmcore-dmesg.txt*", False)
@@ -1870,6 +1872,77 @@ def show_ps_memusage(op, no_pipe):
     return result_str
 
 
+def print_oom_help_msg(no_pipe):
+    msg = '''meminfo -O  --  OOM Killer Event Analysis
+
+SYNOPSIS
+    meminfo -O [OPTIONS] [FILE ...]
+
+DESCRIPTION
+    Scans log files for OOM killer events and displays per-event memory usage
+    breakdowns, sorted by process RSS at the time of the kill.
+
+    If no FILE is given, the following paths are searched automatically
+    (in order, inside the sosreport root):
+
+        var/log/messages*
+        sos_commands/logs/journalctl*
+        var/log/dmesg*
+        var/log/vmcore-dmesg.txt*
+        *vmcore-dmesg.txt*   (top-level)
+
+    Both syslog format and vmcore-dmesg (bracketed timestamp) format are
+    auto-detected per file.
+
+OPTIONS
+    -O, --oom
+        Enable OOM event analysis mode.
+
+    --oom-summary
+        Show a dashboard summarising all OOM events: total count, date range,
+        top invoking processes, and pattern analysis.
+
+    --oom-count N
+        Display at most N OOM events (default: all).
+
+    --oom-top N
+        Show top N memory consumers per event (default: 10).
+
+    --process-filter PATTERN
+        Restrict output to events whose invoker or killed process matches
+        PATTERN.  Accepts a plain name, comma-separated names, or a regex.
+
+    -g, --graph
+        Add ASCII bar-chart columns to the per-process memory table.
+
+    -a, --all
+        Show all processes, not just the top N.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    # All OOM events from default log files
+    example.com> meminfo -O
+
+    # OOM events from a specific file
+    example.com> meminfo -O /path/to/vmcore-dmesg.txt
+
+    # Summary dashboard
+    example.com> meminfo -O --oom-summary
+
+    # Only java-related events, capped at 20
+    example.com> meminfo -O --process-filter java --oom-count 20
+
+    # Top 30 consumers per event with bar charts
+    example.com> meminfo -O --oom-top 30 -g
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
     It shows memory usage from process / slab.
@@ -2001,6 +2074,7 @@ def show_overall_memory(options, no_pipe):
     try:
         file_list = get_file_list(sos_home + "/var/log/messages*", False)
         file_list = file_list + get_file_list(sos_home + "/sos_commands/logs/journalctl*", False)
+        file_list = file_list + get_file_list(sos_home + "/var/log/dmesg*", False)
 
         # Count total OOM events across all files
         total_oom_events = 0
@@ -2304,6 +2378,8 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
         return ""
 
     if o.help or show_help == True:
+        if o.oom:
+            return print_oom_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
     
     result_str = ""
