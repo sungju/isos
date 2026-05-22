@@ -1872,6 +1872,198 @@ def show_ps_memusage(op, no_pipe):
     return result_str
 
 
+def print_process_help_msg(no_pipe):
+    msg = '''meminfo / meminfo -p  --  Process Memory Usage
+
+SYNOPSIS
+    meminfo [-p] [OPTIONS]
+
+DESCRIPTION
+    Shows per-process RSS (Resident Set Size) sorted by memory consumption,
+    read from the sosreport's /ps file.  This is the default mode when no
+    other sub-command flag is given.
+
+OPTIONS
+    -p, --process
+        Enable process memory mode (default when no other flag is given).
+
+    -a, --all
+        Show all processes including those with PID appended to name.
+
+    -g, --graph
+        Add ASCII bar-chart column showing each process's share of total RAM.
+
+    -d, --details
+        Show additional detail per process.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    # Default: top RSS consumers
+    example.com> meminfo
+
+    # All processes with bar charts
+    example.com> meminfo -ag
+
+    # Show details per process
+    example.com> meminfo -pd
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_slab_help_msg(no_pipe):
+    msg = '''meminfo -s  --  SLAB Memory Usage
+
+SYNOPSIS
+    meminfo -s [OPTIONS]
+
+DESCRIPTION
+    Shows kernel SLAB/SLUB memory usage per cache, parsed from
+    /proc/slabinfo in the sosreport.  Equivalent to slabtop but
+    reads from the captured snapshot rather than a live system.
+
+OPTIONS
+    -s, --slab
+        Enable SLAB memory mode.
+
+    -a, --all
+        Show all SLAB caches, not just the top N.
+
+    -g, --graph
+        Add ASCII bar-chart column showing each cache's share of total RAM.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    # Top SLAB consumers
+    example.com> meminfo -s
+
+    # All caches with bar charts
+    example.com> meminfo -sag
+
+    # Bar chart for top caches
+    example.com> meminfo -sg
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_balloon_help_msg(no_pipe):
+    msg = '''meminfo -b  --  Memory Balloon (VM)
+
+SYNOPSIS
+    meminfo -b
+
+DESCRIPTION
+    Shows VMware memory balloon information for virtual machine guests.
+    Reads balloon target and current page counts from:
+
+        sys/kernel/debug/vmmemctl
+
+    This file is only present in sosreports collected from VMware guests
+    with the vmware-tools / open-vm-tools balloon driver active.
+
+OPTIONS
+    -b, --balloon
+        Enable balloon memory mode.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> meminfo -b
+    VMware VM
+    Target  : 131072 pages (512.0 MiB)
+    Current : 98304 pages (384.0 MiB)
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_overall_help_msg(no_pipe):
+    msg = '''meminfo --overall  --  Overall Memory Breakdown
+
+SYNOPSIS
+    meminfo --overall
+
+DESCRIPTION
+    Shows a full memory usage breakdown with ASCII bar graphs covering:
+
+        MemTotal, MemFree, MemAvailable
+        Buffers, Cached, SwapCached
+        Active/Inactive (anon + file)
+        Slab (reclaimable + unreclaimable)
+        PageTables, Dirty, Writeback
+        HugePages (if configured)
+
+    Parsed from /proc/meminfo in the sosreport.
+
+    Additionally, if OOM killer events are found in the logs
+    (var/log/messages, sos_commands/logs/journalctl, var/log/dmesg),
+    a summary of OOM activity is automatically appended.
+
+OPTIONS
+    --overall
+        Enable overall memory breakdown mode.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> meminfo --overall
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_swap_help_msg(no_pipe):
+    msg = '''meminfo -w  --  Swap Usage per Process
+
+SYNOPSIS
+    meminfo -w [OPTIONS]
+
+DESCRIPTION
+    Shows per-process swap usage sorted by VmSwap size, read from
+    /proc/<pid>/status files captured in the sosreport.
+
+OPTIONS
+    -w, --swap
+        Enable swap usage mode.
+
+    -a, --all
+        Show process name with PID appended (e.g. "java (1234)") instead
+        of grouping all PIDs of the same name together.
+
+    -g, --graph
+        Add ASCII bar-chart column for each process's swap share.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    # Per-process swap consumers
+    example.com> meminfo -w
+
+    # Show each PID individually with bar chart
+    example.com> meminfo -wag
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_oom_help_msg(no_pipe):
     msg = '''meminfo -O  --  OOM Killer Event Analysis
 
@@ -2380,6 +2572,16 @@ def run_meminfo(input_str, env_vars, is_cmd_stopped_func,\
     if o.help or show_help == True:
         if o.oom:
             return print_oom_help_msg(no_pipe)
+        elif o.slab:
+            return print_slab_help_msg(no_pipe)
+        elif o.balloon:
+            return print_balloon_help_msg(no_pipe)
+        elif o.overall:
+            return print_overall_help_msg(no_pipe)
+        elif o.swapshow:
+            return print_swap_help_msg(no_pipe)
+        elif o.process:
+            return print_process_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
     
     result_str = ""
