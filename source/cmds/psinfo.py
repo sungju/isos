@@ -153,6 +153,21 @@ def remove_empty_ps_line(lines):
     return result_list
 
 
+def filter_by_keyword(lines, keyword):
+    """Keep header plus lines whose COMMAND field contains keyword (case-insensitive)."""
+    if not keyword:
+        return lines
+    kw = keyword.lower()
+    result = [lines[0]]  # always keep header
+    for line in lines[1:]:
+        words = line.split()
+        # COMMAND starts at index 10 in standard ps output
+        cmd = " ".join(words[10:]).lower() if len(words) > 10 else ""
+        if kw in cmd:
+            result.append(line)
+    return result
+
+
 def read_ps_basic(ps_path, no_pipe, options):
     global total_vsz
     global total_rss
@@ -163,6 +178,7 @@ def read_ps_basic(ps_path, no_pipe, options):
     result_str = ""
     with open(ps_path) as f:
         lines = remove_empty_ps_line(f.readlines())
+        lines = filter_by_keyword(lines, getattr(options, 'keyword', ''))
         total_lines = len(lines)
         if options.lines_to_print > 0:
             print_count = options.lines_to_print + 1
@@ -358,6 +374,10 @@ Examples:
     # To sort by resource type. It shows the highest at the bottom
     # unless specifying line numbers with -l
     > psinfo -s rss
+
+    # To filter process list by task name (case-insensitive)
+    > psinfo -k java
+    > psinfo -k httpd -s rss
     '''
 
     if no_pipe == False:
@@ -390,6 +410,9 @@ def run_psinfo(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option('-p', '--pid', dest='process_details', default='',
             action='store', type="string",
             help="Shows details of a specified process")
+    op.add_option('-k', '--keyword', dest='keyword', default='',
+            action='store', type='string',
+            help='Filter process list by task name (case-insensitive substring match)')
     op.add_option('-s', '--sort', dest='sort_by', default="",
             action='store', type="string",
             help="Sorts the output by one of the below options\n" + \
