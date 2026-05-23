@@ -311,6 +311,139 @@ def get_matching_data(idx, lines, options, no_pipe, match_columns, graph_func=No
     return idx, result_str
 
 
+def print_cpu_help_msg(no_pipe):
+    msg = '''sarinfo -c  --  CPU usage view
+
+SYNOPSIS
+    sarinfo -c [-g] [-C CPU] [-a] SARFILE [SARFILE...]
+
+DESCRIPTION
+    Displays CPU utilization data from a sar data file, showing columns
+    %usr, %nice, %sys, %iowait, %steal, %irq, %soft, %guest, %gnice, %idle.
+    By default shows the "all" aggregate row. Use -C to select a specific
+    CPU number, or -a to show all CPUs.
+
+OPTIONS
+    -c, --cpu
+        Show CPU usage.
+
+    -g, --graph
+        Render each sample as a horizontal bar chart using single-character
+        codes: U=usr N=nice S=sys I=iowait T=steal Q=irq F=soft G=guest C=gnice.
+
+    -C CPU, --cpuno CPU
+        Show data for only the specified CPU number (e.g. -C 0).
+
+    -a, --all
+        Show data for all CPUs (overrides -C).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> sarinfo -c sar14
+    example.com> sarinfo -c -g sar28
+    example.com> sarinfo -c -C 0 sar14
+    example.com> sarinfo -c -a sar14
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_mem_help_msg(no_pipe):
+    msg = '''sarinfo -m  --  Memory usage view
+
+SYNOPSIS
+    sarinfo -m [-g] SARFILE [SARFILE...]
+
+DESCRIPTION
+    Displays memory utilization data from a sar data file, reading the
+    kbmemfree section. Shows kbmemfree, kbmemused, %memused, kbbuffers,
+    kbcached, kbcommit, %commit, kbactive, kbinact, kbdirty, and kbslab
+    columns (availability depends on the sar version that generated the file).
+
+OPTIONS
+    -m, --mem
+        Show memory usage.
+
+    -g, --graph
+        Render each sample as a horizontal bar chart using:
+        #=used C=cached S=slab (or B=buffers) .=available.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> sarinfo -m sar14
+    example.com> sarinfo -m -g sar28
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_load_help_msg(no_pipe):
+    msg = '''sarinfo -l  --  Load average view
+
+SYNOPSIS
+    sarinfo -l SARFILE [SARFILE...]
+
+DESCRIPTION
+    Displays load average data from a sar data file, showing the runq-sz
+    and plist-sz section which includes run-queue size, process list size,
+    and 1/5/15-minute load averages.
+
+OPTIONS
+    -l, --load
+        Show load average.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> sarinfo -l sar14
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_net_help_msg(no_pipe):
+    msg = '''sarinfo -n  --  Network usage view
+
+SYNOPSIS
+    sarinfo -n [-N DEVICE] SARFILE [SARFILE...]
+
+DESCRIPTION
+    Displays network interface statistics from a sar data file, reading
+    the IFACE/rxpck/s section. Shows per-interface packet and byte rates
+    for both receive and transmit directions.
+
+OPTIONS
+    -n, --net
+        Show network usage.
+
+    -N DEVICE, --netdev DEVICE
+        Show data for only the specified network device (e.g. -N eth0).
+        Without this option all devices are shown.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> sarinfo -n sar14
+    example.com> sarinfo -n -N eth0 sar14
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
 Examples:
@@ -323,7 +456,7 @@ Examples:
         Linux 4.18.0-553.16.1.el8_10.x86_64 (test) 	2024-10-14 	_x86_64_	(8 CPU)
 
         00:00:00        CPU      %usr     %nice      %sys   %iowait    %steal      %irq     %soft    %guest    %gnice     %idle
-        00:10:01        all      4.77      0.00      1.67      0.07      0.00      0.23      0.10      0.00      0.00     93.16
+        00:10:01        all      4.77      0.00      1.67      0.07      0.00      0.00      0.23      0.10      0.00      0.00     93.16
 
     # Data can be shown in bar graph style for CPU and memory usage
     > sar sar28 -gc
@@ -336,7 +469,7 @@ Examples:
     '''
 
     if no_pipe == False:
-        output = StringIO.StringIO()
+        output = StringIO()
         op.print_help(file=output)
         contents = output.getvalue()
         output.close()
@@ -388,6 +521,15 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
         return ""
 
     if o.help or show_help == True or len(args) == 1:
+        if o.help or show_help == True:
+            if o.cpu_usage:
+                return print_cpu_help_msg(no_pipe)
+            elif o.mem_usage:
+                return print_mem_help_msg(no_pipe)
+            elif o.loadavg:
+                return print_load_help_msg(no_pipe)
+            elif o.net_usage:
+                return print_net_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
 
     result_str = ""

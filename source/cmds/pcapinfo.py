@@ -609,6 +609,121 @@ def analyze_pcap_tcpdump(filepath, options):
 # Help Message
 # ============================================================================
 
+def print_list_help_msg(no_pipe):
+    msg = '''pcapinfo -l  --  List pcap files view
+
+SYNOPSIS
+    pcapinfo -l
+
+DESCRIPTION
+    Discovers and lists all pcap, pcapng, and cap files in the sosreport.
+    Searches sos_commands/networking/ first, then falls back to a recursive
+    scan from the sosreport root. Shows file path and size, with a total
+    summary at the bottom. Does not perform any packet analysis.
+
+OPTIONS
+    -l, --list
+        List pcap files only (no analysis).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> pcapinfo -l
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_conversations_help_msg(no_pipe):
+    msg = '''pcapinfo -c  --  Conversation analysis view
+
+SYNOPSIS
+    pcapinfo -c [-f FILE] [-i IP] [-p PROTO]
+
+DESCRIPTION
+    Shows IP conversation pairs (source, destination, packet count, bytes)
+    and top endpoint talkers extracted from pcap files.
+    With tshark: uses "tshark -z conv,ip" and "tshark -z endpoints,ip".
+    With tcpdump or text files: parses IP pairs from tcpdump output.
+    Conversations are streamed to the terminal as they are parsed to
+    handle large captures without excessive memory use.
+
+OPTIONS
+    -c, --conversations
+        Show conversation analysis.
+
+    -f FILE, --file FILE
+        Analyze a specific pcap file instead of auto-discovering files.
+        Accepts binary pcap/pcapng or text-mode tcpdump output.
+
+    -i IP, --ip IP
+        Filter conversations to only those involving the given IP address.
+        Automatically enables conversation display when used alone.
+
+    -p PROTO, --proto PROTO
+        Filter by protocol (tcp, udp, icmp, etc.). Effective with tshark.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> pcapinfo -c
+    example.com> pcapinfo -c -i 10.0.0.1
+    example.com> pcapinfo -c -f /path/to/capture.pcap
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_trace_help_msg(no_pipe):
+    msg = '''pcapinfo -t  --  Packet-by-packet trace view
+
+SYNOPSIS
+    pcapinfo -t [-f FILE] [-n COUNT] [-i IP]
+
+DESCRIPTION
+    Displays individual packets in a tabular trace showing packet number,
+    timestamp, source, destination, protocol, and info field.
+    With tshark: uses "tshark -r FILE -n -t ad" and streams packets
+    directly to the terminal for large files.
+    With text-mode tcpdump files: parses lines matching the standard
+    tcpdump timestamp/IP format.
+    TCP flag annotations ([SYN], [RST], [ACK], etc.) are color-coded.
+
+OPTIONS
+    -t, --trace
+        Show packet-by-packet trace.
+
+    -n COUNT, --limit COUNT
+        Maximum number of packets to display (default: 100).
+
+    -f FILE, --file FILE
+        Analyze a specific pcap file instead of auto-discovering files.
+        Accepts binary pcap/pcapng or text-mode tcpdump output.
+
+    -i IP, --ip IP
+        Show only packets involving the given IP address.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> pcapinfo -t
+    example.com> pcapinfo -t -n 50
+    example.com> pcapinfo -t -i 10.0.0.1
+    example.com> pcapinfo -t -f capture.pcap -n 200
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     """Print help message"""
     cmd_examples = '''
@@ -942,6 +1057,12 @@ def run_pcapinfo(input_str, env_vars, is_cmd_stopped_func,
         return ""
 
     if o.help or show_help:
+        if o.list_only:
+            return print_list_help_msg(no_pipe)
+        elif o.conversations:
+            return print_conversations_help_msg(no_pipe)
+        elif o.trace:
+            return print_trace_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
 
     # Initialize screen module

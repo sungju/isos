@@ -478,6 +478,204 @@ def show_memory_stats(sos_home, cgroup_path, colors, output):
         output.add_line("Error reading memory statistics")
 
 
+def print_list_help_msg(no_pipe):
+    msg = '''cginfo -l  --  Systemd cgroup hierarchy view
+
+SYNOPSIS
+    cginfo -l
+
+DESCRIPTION
+    Displays the systemd cgroup hierarchy from the sosreport, reading
+    sos_commands/cgroups/systemd-cgls output verbatim with color
+    highlighting applied to the tree structure.
+
+OPTIONS
+    -l, --list
+        Show systemd cgroup hierarchy.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> cginfo -l
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_memory_help_msg(no_pipe):
+    msg = '''cginfo -m  --  Memory cgroup usage view
+
+SYNOPSIS
+    cginfo -m
+
+DESCRIPTION
+    Shows memory usage for all cgroups that consume at least 1 MB,
+    sorted by usage (highest first). Reads usage_in_bytes and
+    limit_in_bytes from sys/fs/cgroup/memory/**/.
+    Percentage column is color-coded: yellow >= 70%, red >= 90%.
+
+OPTIONS
+    -m, --memory
+        Show memory usage for all cgroups.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> cginfo -m
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_cpu_help_msg(no_pipe):
+    msg = '''cginfo -c  --  CPU cgroup quota view
+
+SYNOPSIS
+    cginfo -c
+
+DESCRIPTION
+    Lists cgroups that have a CFS CPU quota set (cpu.cfs_quota_us != -1).
+    Reads cpu.cfs_quota_us and cpu.cfs_period_us from
+    sys/fs/cgroup/cpu,cpuacct/** (falls back to sys/fs/cgroup/cpu/**).
+    The CPU Cores column shows quota/period as a fractional core count.
+
+OPTIONS
+    -c, --cpu
+        Show CPU quotas for cgroups.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> cginfo -c
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_oom_help_msg(no_pipe):
+    msg = '''cginfo -o  --  OOM events view
+
+SYNOPSIS
+    cginfo -o
+
+DESCRIPTION
+    Scans memory.oom_control files under sys/fs/cgroup/memory/** and
+    reports cgroups where under_oom or oom_kill is non-zero.
+    Only cgroups with actual OOM activity are shown; a clean system will
+    display "No OOM events detected."
+
+OPTIONS
+    -o, --oom
+        Show OOM events in cgroups.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> cginfo -o
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_top_help_msg(no_pipe):
+    msg = '''cginfo -t  --  Top memory-consuming cgroups view
+
+SYNOPSIS
+    cginfo -t
+
+DESCRIPTION
+    Shows the top 20 memory-consuming cgroups sorted by current usage,
+    skipping cgroups below 1 MB. This is a focused subset of -m output
+    useful for quickly identifying the heaviest memory consumers.
+
+OPTIONS
+    -t, --top
+        Show top memory-consuming cgroups.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> cginfo -t
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_stats_help_msg(no_pipe):
+    msg = '''cginfo -s  --  Detailed cgroup memory statistics view
+
+SYNOPSIS
+    cginfo -s PATH
+
+DESCRIPTION
+    Shows the full memory.stat file for a specific cgroup path.
+    PATH is the relative cgroup path under sys/fs/cgroup/memory/
+    (e.g. /system.slice/sshd.service).
+    Byte values are shown with human-readable equivalents.
+    Hierarchical and total_ keys are highlighted in yellow.
+
+OPTIONS
+    -s PATH, --stats PATH
+        Show detailed statistics for the cgroup at PATH.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> cginfo -s /system.slice/sshd.service
+    example.com> cginfo -s /kubepods/pod-abc123
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_all_help_msg(no_pipe):
+    msg = '''cginfo -a  --  Comprehensive cgroup information view
+
+SYNOPSIS
+    cginfo -a
+
+DESCRIPTION
+    Runs all cgroup analysis modes in sequence:
+      1. Cgroup version and controllers (-v)
+      2. Full memory cgroup usage (-m)
+      3. CPU quota information (-c)
+      4. OOM events (-o)
+    Equivalent to running each mode individually but in a single output.
+
+OPTIONS
+    -a, --all
+        Show all cgroup information.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> cginfo -a
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
 Shows cgroup (control groups) information from the sosreport.
@@ -500,7 +698,7 @@ Cgroup Info:
     '''
 
     if no_pipe == False:
-        output = StringIO.StringIO()
+        output = StringIO()
         op.print_help(file=output)
         contents = output.getvalue()
         output.close()
@@ -561,6 +759,20 @@ def run_cginfo(input_str, env_vars, is_cmd_stopped_func,
         return ""
 
     if o.help or show_help:
+        if o.show_all:
+            return print_all_help_msg(no_pipe)
+        elif o.show_list:
+            return print_list_help_msg(no_pipe)
+        elif o.show_memory:
+            return print_memory_help_msg(no_pipe)
+        elif o.show_cpu:
+            return print_cpu_help_msg(no_pipe)
+        elif o.show_oom:
+            return print_oom_help_msg(no_pipe)
+        elif o.show_top:
+            return print_top_help_msg(no_pipe)
+        elif o.cgroup_path:
+            return print_stats_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
 
     # Initialize helpers

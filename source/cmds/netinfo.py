@@ -1747,6 +1747,235 @@ def show_interface_list(sos_home, no_pipe):
 # Help and Main Entry Point
 # ============================================================================
 
+def print_interface_help_msg(no_pipe):
+    msg = '''netinfo -i  --  Interface detail view
+
+SYNOPSIS
+    netinfo -i DEVICE
+
+DESCRIPTION
+    Shows detailed information for a specific network interface, including
+    state, MTU, hardware address, IP addresses, link speed, driver info,
+    RX/TX statistics, ring buffer sizes, and offload feature flags.
+    Reads from sos_commands/networking/ip_-d_address, ip_-s_-d_link,
+    and ethtool_* files.
+
+OPTIONS
+    -i DEVICE, --interface DEVICE
+        Show detailed information for the named interface (e.g. ens192).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> netinfo -i ens192
+    example.com> netinfo -i lo
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_routes_help_msg(no_pipe):
+    msg = '''netinfo -r  --  Routing table view
+
+SYNOPSIS
+    netinfo -r [-d]
+
+DESCRIPTION
+    Displays the routing table parsed from
+    sos_commands/networking/ip_route_show_table_all.
+    Routes are grouped into Internet Gateway, Direct Networks, and Local
+    Routes sections with color-coded protocol and scope annotations.
+
+OPTIONS
+    -r, --routes
+        Show routing table.
+
+    -d, --descriptive
+        Add human-readable explanation below each route entry and show
+        a legend. Also expands the Local Routes section (up to 15 entries).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> netinfo -r
+    example.com> netinfo -r -d
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_connections_help_msg(no_pipe):
+    msg = '''netinfo -c  --  Connection analysis view
+
+SYNOPSIS
+    netinfo -c
+
+DESCRIPTION
+    Analyzes TCP/UDP socket state from
+    sos_commands/networking/ss_-peaonmi.
+    Shows TCP connection state breakdown (ESTAB, LISTEN, TIME-WAIT, etc.),
+    UDP socket count, and a table of listening ports with owning process names.
+
+OPTIONS
+    -c, --connections
+        Show connection analysis.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> netinfo -c
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_stats_help_msg(no_pipe):
+    msg = '''netinfo -s  --  Network protocol statistics view
+
+SYNOPSIS
+    netinfo -s
+
+DESCRIPTION
+    Displays key protocol statistics parsed from
+    sos_commands/networking/netstat_-s.
+    Shows error, drop, retransmit, and other notable counters for the
+    IP, TCP, UDP, and ICMP protocol sections.
+
+OPTIONS
+    -s, --stats
+        Show protocol statistics.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> netinfo -s
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_nm_help_msg(no_pipe):
+    msg = '''netinfo -n  --  NetworkManager status view
+
+SYNOPSIS
+    netinfo -n
+
+DESCRIPTION
+    Shows NetworkManager device and connection status parsed from
+    sos_commands/networkmanager/nmcli_dev and nmcli_con.
+    Lists managed devices with their state and all configured connections.
+
+OPTIONS
+    -n, --nm
+        Show NetworkManager status.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> netinfo -n
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_list_help_msg(no_pipe):
+    msg = '''netinfo -l  --  Interface list view
+
+SYNOPSIS
+    netinfo -l
+
+DESCRIPTION
+    Displays a compact table of all network interfaces with state, primary
+    IP address, MAC address, and MTU. Reads from
+    sos_commands/networking/ip_-d_address and ip_-s_-d_link.
+    Summarizes total, UP, and DOWN interface counts at the bottom.
+
+OPTIONS
+    -l, --list
+        Show simple interface list.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> netinfo -l
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_arp_help_msg(no_pipe):
+    msg = '''netinfo --arp  --  ARP table view
+
+SYNOPSIS
+    netinfo --arp
+
+DESCRIPTION
+    Displays the ARP table parsed from proc/net/arp.
+    Shows IP address, MAC address, entry state (COMPLETE, PERMANENT,
+    INCOMPLETE), and device for each entry.
+
+OPTIONS
+    --arp
+        Show ARP table.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> netinfo --arp
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_neigh_help_msg(no_pipe):
+    msg = '''netinfo --neigh  --  Neighbor table view
+
+SYNOPSIS
+    netinfo --neigh
+
+DESCRIPTION
+    Displays the IPv4/IPv6 neighbor (NDP/ARP) table parsed from
+    sos_commands/networking/ip_-s_-s_neigh_show.
+    Shows IP address, MAC address, state (REACHABLE, STALE, FAILED, etc.),
+    device, and reference count, with a state breakdown summary.
+
+OPTIONS
+    --neigh
+        Show neighbor table (NDP/ARP).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> netinfo --neigh
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     """Print help message"""
     cmd_examples = '''
@@ -1823,6 +2052,22 @@ def run_netinfo(input_str, env_vars, is_cmd_stopped_func,
         return ""
 
     if o.help or show_help:
+        if o.interface:
+            return print_interface_help_msg(no_pipe)
+        elif o.show_routes:
+            return print_routes_help_msg(no_pipe)
+        elif o.show_connections:
+            return print_connections_help_msg(no_pipe)
+        elif o.show_stats:
+            return print_stats_help_msg(no_pipe)
+        elif o.show_nm:
+            return print_nm_help_msg(no_pipe)
+        elif o.show_list:
+            return print_list_help_msg(no_pipe)
+        elif o.show_arp:
+            return print_arp_help_msg(no_pipe)
+        elif o.show_neigh:
+            return print_neigh_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
 
     # Initialize screen module
