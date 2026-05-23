@@ -2181,6 +2181,236 @@ def output_all(data, filepath_prefix):
 # Help message
 # ---------------------------------------------------------------------------
 
+def print_cpu_help_msg(no_pipe):
+    msg = '''pcpinfo -c  --  CPU utilization from PCP data
+
+SYNOPSIS
+    pcpinfo -c [OPTIONS]
+
+DESCRIPTION
+    Show CPU utilization metrics from PCP performance data in the
+    sosreport.  Reads kernel.cpu.util.* metrics and displays min, max,
+    and average percentages with trend indicators.  Highlights high user,
+    sys, iowait, or steal values.
+
+    PCP data is searched in:
+      sos_commands/pcp/
+      var/log/pcp/pmlogger/<hostname>/
+
+OPTIONS
+    -c, --cpu
+        Enable CPU utilization mode.
+
+    -f FILE, --file FILE
+        Parse a specific pmrep CSV file instead of auto-discovering.
+
+    -A DIR, --archive-dir DIR
+        Analyze PCP binary archives from a standalone directory.
+
+    --no-cache
+        Skip cache, always process archives from scratch.
+
+    --refresh-cache
+        Force reprocess archives and update cache.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> pcpinfo -c
+    example.com> pcpinfo -c -f /path/to/pmrep.csv
+    example.com> pcpinfo -c -A /path/to/pcp_archives
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_mem_help_msg(no_pipe):
+    msg = '''pcpinfo -m  --  Memory utilization from PCP data
+
+SYNOPSIS
+    pcpinfo -m [OPTIONS]
+
+DESCRIPTION
+    Show memory utilization metrics from PCP performance data in the
+    sosreport.  Reads mem.util.* and mem.physmem metrics and displays
+    min, max, and average values with trend indicators.  Highlights
+    critically low free or available memory.
+
+    PCP data is searched in:
+      sos_commands/pcp/
+      var/log/pcp/pmlogger/<hostname>/
+
+OPTIONS
+    -m, --mem
+        Enable memory utilization mode.
+
+    -f FILE, --file FILE
+        Parse a specific pmrep CSV file instead of auto-discovering.
+
+    -A DIR, --archive-dir DIR
+        Analyze PCP binary archives from a standalone directory.
+
+    --no-cache
+        Skip cache, always process archives from scratch.
+
+    --refresh-cache
+        Force reprocess archives and update cache.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> pcpinfo -m
+    example.com> pcpinfo -m -A /path/to/pcp_archives
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_disk_help_msg(no_pipe):
+    msg = '''pcpinfo -d  --  Disk I/O statistics from PCP data
+
+SYNOPSIS
+    pcpinfo -d [OPTIONS]
+
+DESCRIPTION
+    Show disk I/O metrics from PCP performance data in the sosreport.
+    Reads disk.all.* metrics (read/write IOPS, throughput, active time)
+    and displays min, max, and average values with trend indicators.
+    Highlights high disk busy (avactive) percentages.
+
+    PCP data is searched in:
+      sos_commands/pcp/
+      var/log/pcp/pmlogger/<hostname>/
+
+OPTIONS
+    -d, --disk
+        Enable disk I/O mode.
+
+    -f FILE, --file FILE
+        Parse a specific pmrep CSV file instead of auto-discovering.
+
+    -A DIR, --archive-dir DIR
+        Analyze PCP binary archives from a standalone directory.
+
+    --no-cache
+        Skip cache, always process archives from scratch.
+
+    --refresh-cache
+        Force reprocess archives and update cache.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> pcpinfo -d
+    example.com> pcpinfo -d -A /path/to/pcp_archives
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_network_help_msg(no_pipe):
+    msg = '''pcpinfo -n  --  Network statistics from PCP data
+
+SYNOPSIS
+    pcpinfo -n [OPTIONS]
+
+DESCRIPTION
+    Show network statistics from PCP performance data in the sosreport.
+    Reads network.interface.* metrics per interface (bytes, packets,
+    errors) and displays min, max, and average values with trend
+    indicators.  Highlights interfaces with non-zero error rates.
+
+    PCP data is searched in:
+      sos_commands/pcp/
+      var/log/pcp/pmlogger/<hostname>/
+
+OPTIONS
+    -n, --network
+        Enable network statistics mode.
+
+    -f FILE, --file FILE
+        Parse a specific pmrep CSV file instead of auto-discovering.
+
+    -A DIR, --archive-dir DIR
+        Analyze PCP binary archives from a standalone directory.
+
+    --no-cache
+        Skip cache, always process archives from scratch.
+
+    --refresh-cache
+        Force reprocess archives and update cache.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> pcpinfo -n
+    example.com> pcpinfo -n -A /path/to/pcp_archives
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_top_procs_help_msg(no_pipe):
+    msg = '''pcpinfo -p N  --  Top CPU consuming processes from PCP data
+
+SYNOPSIS
+    pcpinfo -p N [OPTIONS]
+
+DESCRIPTION
+    Show the top N CPU consuming processes from PCP binary archives in
+    the sosreport.  Reads the proc.hog.cpu metric, which is only
+    available in binary archives (requires pmrep to be installed).
+
+    By default, only the 3 most recent archives are processed to avoid
+    excessive runtime.  Use --all-archives to process all of them.
+
+    PCP archives are searched in:
+      var/log/pcp/pmlogger/<hostname>/
+
+OPTIONS
+    -p N, --top-procs N
+        Show top N CPU consuming processes.
+
+    --all-archives
+        Process all archives, not just the 3 most recent ones.
+        May take 90+ minutes for large archive sets.
+
+    -A DIR, --archive-dir DIR
+        Analyze PCP binary archives from a standalone directory.
+
+    --no-cache
+        Skip cache, always process archives from scratch.
+
+    --refresh-cache
+        Force reprocess archives and update cache.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> pcpinfo -p 5
+    example.com> pcpinfo -p 10 -c
+    example.com> pcpinfo -p 5 --all-archives
+    example.com> pcpinfo -p 5 -A /path/to/pcp_archives
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
 Examples:
@@ -2313,6 +2543,16 @@ def run_pcpinfo(input_str, env_vars, is_cmd_stopped_func,
         return ""
 
     if o.help or show_help:
+        if o.cpu:
+            return print_cpu_help_msg(no_pipe)
+        elif o.mem:
+            return print_mem_help_msg(no_pipe)
+        elif o.disk:
+            return print_disk_help_msg(no_pipe)
+        elif o.network:
+            return print_network_help_msg(no_pipe)
+        elif o.top_procs:
+            return print_top_procs_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
 
     screen.init_data(no_pipe, 1, is_cmd_stopped)

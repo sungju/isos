@@ -497,6 +497,215 @@ def show_thin_pools(sos_home, colors, output):
             output.add_line("Note: This system uses traditional thick-provisioned logical volumes.")
 
 
+def print_pv_help_msg(no_pipe):
+    msg = '''lvminfo -p  --  Physical Volume details
+
+SYNOPSIS
+    lvminfo -p [-V]
+
+DESCRIPTION
+    Show Physical Volume (PV) details from the sosreport.
+    Reads sos_commands/lvm2/pvs_-a_-v_* and lists each PV with its
+    associated VG, format, size, and free space.  With -V, additional
+    metadata columns (PMdaFree, PMdaSize, count) are shown.
+
+OPTIONS
+    -p, --pv
+        Enable Physical Volume mode.
+
+    -V, --verbose
+        Show extended metadata information for each PV.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> lvminfo -p
+    example.com> lvminfo -p -V
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_vg_help_msg(no_pipe):
+    msg = '''lvminfo -v  --  Volume Group details
+
+SYNOPSIS
+    lvminfo -v [-V]
+
+DESCRIPTION
+    Show Volume Group (VG) details from the sosreport.
+    Reads sos_commands/lvm2/vgdisplay_-vv_* and displays the full
+    vgdisplay output.  Without -V, noisy debug/config lines are filtered
+    out.
+
+OPTIONS
+    -v, --vg
+        Enable Volume Group mode.
+
+    -V, --verbose
+        Include all vgdisplay output lines (config reload, warnings,
+        device scan messages, etc.).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> lvminfo -v
+    example.com> lvminfo -v -V
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_lv_help_msg(no_pipe):
+    msg = '''lvminfo -l  --  Logical Volume details
+
+SYNOPSIS
+    lvminfo -l [-V]
+
+DESCRIPTION
+    Show Logical Volume (LV) details from the sosreport.
+    Reads sos_commands/lvm2/lvs_-a_-o_* and lists each LV with its VG,
+    attribute flags, and size.  With -V, device and stripe information
+    are added.
+
+OPTIONS
+    -l, --lv
+        Enable Logical Volume mode.
+
+    -V, --verbose
+        Show device and stripe columns in addition to the standard
+        LV, VG, Attr, LSize columns.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> lvminfo -l
+    example.com> lvminfo -l -V
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_usage_help_msg(no_pipe):
+    msg = '''lvminfo -u  --  Filesystem usage on LVM volumes
+
+SYNOPSIS
+    lvminfo -u
+
+DESCRIPTION
+    Show filesystem usage statistics for LVM volumes from the sosreport.
+    Reads sos_commands/filesys/df_-aliT_-x_autofs (or df_-al_-x_autofs)
+    and displays only /dev/mapper/* entries with size, used, available,
+    and use percentage.  High usage percentages are colour-coded.
+
+OPTIONS
+    -u, --usage
+        Enable filesystem usage mode.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> lvminfo -u
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_dm_help_msg(no_pipe):
+    msg = '''lvminfo -d  --  Device mapper status
+
+SYNOPSIS
+    lvminfo -d
+
+DESCRIPTION
+    Show device mapper status from the sosreport.
+    Reads sos_commands/devicemapper/dmsetup_info_-c and displays the
+    full dmsetup output with colour highlighting.
+
+OPTIONS
+    -d, --dm
+        Enable device mapper status mode.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> lvminfo -d
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_thin_help_msg(no_pipe):
+    msg = '''lvminfo -t  --  Thin pools and snapshots
+
+SYNOPSIS
+    lvminfo -t
+
+DESCRIPTION
+    Show thin pool and snapshot LVs from the sosreport.
+    Reads sos_commands/lvm2/lvs_-a_-o_* and filters for LVs whose
+    attribute field indicates a thin pool (t), thin volume (V), or
+    snapshot (s).  Reports "no thin pools or snapshots found" when
+    the system uses only thick-provisioned volumes.
+
+OPTIONS
+    -t, --thin
+        Enable thin pools and snapshots mode.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> lvminfo -t
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_config_help_msg(no_pipe):
+    msg = '''lvminfo -c  --  LVM configuration
+
+SYNOPSIS
+    lvminfo -c
+
+DESCRIPTION
+    Show the LVM configuration file from the sosreport.
+    Reads etc/lvm/lvm.conf and displays its full contents with colour
+    highlighting.
+
+OPTIONS
+    -c, --config
+        Enable LVM configuration mode.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> lvminfo -c
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
 Shows LVM (Logical Volume Manager) information from the sosreport.
@@ -586,6 +795,20 @@ def run_lvminfo(input_str, env_vars, is_cmd_stopped_func,
         return ""
 
     if o.help or show_help:
+        if o.show_pv:
+            return print_pv_help_msg(no_pipe)
+        elif o.show_vg:
+            return print_vg_help_msg(no_pipe)
+        elif o.show_lv:
+            return print_lv_help_msg(no_pipe)
+        elif o.show_usage:
+            return print_usage_help_msg(no_pipe)
+        elif o.show_dm:
+            return print_dm_help_msg(no_pipe)
+        elif o.show_thin:
+            return print_thin_help_msg(no_pipe)
+        elif o.show_config:
+            return print_config_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
 
     # Initialize helpers

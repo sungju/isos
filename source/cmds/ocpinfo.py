@@ -1627,6 +1627,572 @@ def show_inspect_pvc(inspect_root, options, colors):
     print_section_footer(colors)
 
 
+def print_pods_help_msg(no_pipe):
+    msg = '''ocpinfo -p  --  Pod information (sosreport)
+
+SYNOPSIS
+    ocpinfo -p [OPTIONS]
+
+DESCRIPTION
+    Show pod information from a sosreport directory.
+    Reads from sos_commands/crio/crictl_pods and summarises pod states
+    and namespace distribution.  Use -d to see the full pod list.
+
+OPTIONS
+    -p, --pods
+        Enable pod information mode.
+
+    -d, --detail
+        Show the full pod list instead of the summary.
+
+    -n NAMESPACE, --namespace NAMESPACE
+        Filter pods by namespace name.
+
+    --state STATE
+        Filter pods by state (Ready, NotReady, Running, Exited, etc.).
+
+    -f PATTERN, --filter PATTERN
+        Filter pods whose fields contain PATTERN (case-insensitive).
+
+    -l N, --limit N
+        Limit the detailed list to at most N pods.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo -p
+    example.com> ocpinfo -p -d
+    example.com> ocpinfo -p -d -n openshift-kube-apiserver
+    example.com> ocpinfo -p --state NotReady
+    example.com> ocpinfo -p -d -f api -l 10
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_containers_help_msg(no_pipe):
+    msg = '''ocpinfo -c  --  Container information (sosreport)
+
+SYNOPSIS
+    ocpinfo -c [OPTIONS]
+
+DESCRIPTION
+    Show container information from a sosreport directory.
+    Reads from sos_commands/crio/crictl_ps_-a and summarises containers
+    by state.  Use -d to see the full container list.
+
+OPTIONS
+    -c, --containers
+        Enable container information mode.
+
+    -d, --detail
+        Show the full container list instead of the summary.
+
+    -f PATTERN, --filter PATTERN
+        Filter containers whose fields contain PATTERN (case-insensitive).
+
+    -l N, --limit N
+        Limit the detailed list to at most N containers.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo -c
+    example.com> ocpinfo -c -d
+    example.com> ocpinfo -c -d -f nginx -l 20
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_images_help_msg(no_pipe):
+    msg = '''ocpinfo -i  --  Container images (sosreport)
+
+SYNOPSIS
+    ocpinfo -i [OPTIONS]
+
+DESCRIPTION
+    Show container image information from a sosreport directory.
+    Reads from sos_commands/crio/crictl_images and reports total image
+    storage and, with -d, the full image list.
+
+OPTIONS
+    -i, --images
+        Enable container images mode.
+
+    -d, --detail
+        Show the full image list.
+
+    -f PATTERN, --filter PATTERN
+        Filter images whose fields contain PATTERN (case-insensitive).
+
+    -l N, --limit N
+        Limit the detailed list to at most N images.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo -i
+    example.com> ocpinfo -i -d
+    example.com> ocpinfo -i -d -f quay.io -l 30
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_stats_help_msg(no_pipe):
+    msg = '''ocpinfo -s  --  Container resource statistics (sosreport)
+
+SYNOPSIS
+    ocpinfo -s
+
+DESCRIPTION
+    Show container resource usage statistics from a sosreport directory.
+    Reads from sos_commands/crio/crictl_stats and displays the top
+    resource consumers.
+
+OPTIONS
+    -s, --stats
+        Enable resource statistics mode.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo -s
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_version_help_msg(no_pipe):
+    msg = '''ocpinfo --version  --  Cluster version (must-gather)
+
+SYNOPSIS
+    ocpinfo --version
+
+DESCRIPTION
+    Show OpenShift cluster version information from a must-gather archive.
+    Reads cluster-scoped-resources/config.openshift.io/clusterversions.yaml
+    and reports the current version, update channel, cluster ID, and the
+    Available / Progressing / Failing status conditions.
+
+OPTIONS
+    --version
+        Show cluster version information.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo --version
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_operators_help_msg(no_pipe):
+    msg = '''ocpinfo --operators  --  Cluster operators (must-gather)
+
+SYNOPSIS
+    ocpinfo --operators [OPTIONS]
+
+DESCRIPTION
+    Show cluster operator status from a must-gather archive.
+    Reads YAML files from
+    cluster-scoped-resources/config.openshift.io/clusteroperators/
+    and reports Available / Degraded / Progressing status for each
+    operator.
+
+OPTIONS
+    --operators
+        Enable cluster operators mode.
+
+    --state STATE
+        Filter operators by state: Available, Degraded, or Progressing.
+
+    -d, --detail
+        Show per-operator status table in addition to the summary.
+
+    -f PATTERN, --filter PATTERN
+        Filter operators by name (case-insensitive).
+
+    -l N, --limit N
+        Limit the detailed list to at most N operators.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo --operators
+    example.com> ocpinfo --operators -d
+    example.com> ocpinfo --operators --state Degraded
+    example.com> ocpinfo --operators -f authentication -d
+    example.com> ocpinfo --operators -d -l 20
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_etcd_help_msg(no_pipe):
+    msg = '''ocpinfo --etcd  --  ETCD cluster health (must-gather)
+
+SYNOPSIS
+    ocpinfo --etcd
+
+DESCRIPTION
+    Show ETCD cluster health from a must-gather archive.
+    Reads etcd_info/endpoint_health.json, etcd_info/member_list.json,
+    etcd_info/endpoint_status.json, and etcd_info/alarm_list.json to
+    report endpoint health, member list, DB sizes, and any active alarms.
+
+OPTIONS
+    --etcd
+        Enable ETCD health mode.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo --etcd
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_namespaces_help_msg(no_pipe):
+    msg = '''ocpinfo --namespaces  --  Namespace list (inspect)
+
+SYNOPSIS
+    ocpinfo --namespaces
+
+DESCRIPTION
+    List namespaces found in an inspect archive and show a resource
+    count summary (Pods, Services, Deployments) per namespace.
+    Reads the namespaces/ subdirectory of the inspect root.
+
+OPTIONS
+    --namespaces
+        Enable namespace listing mode.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo --namespaces
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_events_help_msg(no_pipe):
+    msg = '''ocpinfo --events  --  Kubernetes events (inspect)
+
+SYNOPSIS
+    ocpinfo --events [OPTIONS]
+
+DESCRIPTION
+    Show Kubernetes events from an inspect archive.
+    Reads core/events.yaml from each namespace directory, counts Warning
+    vs Normal events, and displays the most recent events.
+
+OPTIONS
+    --events
+        Enable events mode.
+
+    --type TYPE
+        Filter events by type: Warning or Normal.
+
+    -n NAMESPACE, --namespace NAMESPACE
+        Restrict events to a single namespace.
+
+    -f PATTERN, --filter PATTERN
+        Filter events whose message, reason, or namespace contains
+        PATTERN (case-insensitive).
+
+    -l N, --limit N
+        Number of events to display (default: 20).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo --events
+    example.com> ocpinfo --events --type Warning
+    example.com> ocpinfo --events -n my-namespace
+    example.com> ocpinfo --events -l 50
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_inspect_pods_help_msg(no_pipe):
+    msg = '''ocpinfo --inspect-pods  --  Pods from inspect data
+
+SYNOPSIS
+    ocpinfo --inspect-pods [OPTIONS]
+
+DESCRIPTION
+    Show pod information from an inspect archive.
+    Reads core/pods.yaml from each namespace directory, summarises pods
+    by phase (Running, Pending, etc.) and restart count.  Use -d to see
+    the full per-pod list.
+
+OPTIONS
+    --inspect-pods
+        Enable inspect pods mode.
+
+    -n NAMESPACE, --namespace NAMESPACE
+        Filter pods to a single namespace.
+
+    --state PHASE
+        Filter pods by phase (Running, Pending, Failed, Succeeded, etc.).
+
+    -f PATTERN, --filter PATTERN
+        Filter pods by name or namespace (case-insensitive).
+
+    -d, --detail
+        Show the per-pod detail table.
+
+    -l N, --limit N
+        Limit the detail table to at most N pods.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo --inspect-pods
+    example.com> ocpinfo --inspect-pods -d
+    example.com> ocpinfo --inspect-pods -n my-namespace
+    example.com> ocpinfo --inspect-pods -f my-app -d
+    example.com> ocpinfo --inspect-pods --state Pending
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_logs_help_msg(no_pipe):
+    msg = '''ocpinfo --logs  --  Pod logs (inspect)
+
+SYNOPSIS
+    ocpinfo --logs [OPTIONS]
+    ocpinfo --logs -f POD_NAME --show [OPTIONS]
+
+DESCRIPTION
+    List or display pod log files from an inspect archive.
+    Without --show, lists all available log files with sizes.
+    With --show, displays the actual log content for a matching pod.
+
+OPTIONS
+    --logs
+        Enable pod logs mode.
+
+    -f PATTERN, --filter PATTERN
+        Filter by pod name (required when using --show).
+
+    -n NAMESPACE, --namespace NAMESPACE
+        Restrict to a single namespace.
+
+    --show
+        Display log content instead of listing available logs.
+
+    --container CONTAINER
+        Select a specific container (use with --show).
+
+    --tail N
+        Show only the last N lines of the log (default: 100).
+
+    --previous
+        Show the previous container log (from a restart) instead of
+        the current log.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo --logs
+    example.com> ocpinfo --logs -f my-pod
+    example.com> ocpinfo --logs -f my-pod-12345 --show
+    example.com> ocpinfo --logs -f my-pod-12345 --show --container app
+    example.com> ocpinfo --logs -f my-pod-67890 --show --tail 200
+    example.com> ocpinfo --logs -f my-pod-12345 --show --previous
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_deployments_help_msg(no_pipe):
+    msg = '''ocpinfo --deployments  --  Deployments and workloads (inspect)
+
+SYNOPSIS
+    ocpinfo --deployments [OPTIONS]
+
+DESCRIPTION
+    Show Deployments, StatefulSets, and DaemonSets from an inspect
+    archive.  Reads apps/deployments.yaml, apps/statefulsets.yaml, and
+    apps/daemonsets.yaml from each namespace directory, and reports
+    ready vs desired replica counts.
+
+OPTIONS
+    --deployments
+        Enable deployments mode.
+
+    -n NAMESPACE, --namespace NAMESPACE
+        Filter workloads to a single namespace.
+
+    -f PATTERN, --filter PATTERN
+        Filter workloads by name or namespace (case-insensitive).
+
+    -l N, --limit N
+        Limit the output list to at most N workloads.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo --deployments
+    example.com> ocpinfo --deployments -n my-namespace
+    example.com> ocpinfo --deployments -f my-app
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_services_help_msg(no_pipe):
+    msg = '''ocpinfo --services  --  Services (inspect)
+
+SYNOPSIS
+    ocpinfo --services [OPTIONS]
+
+DESCRIPTION
+    Show Kubernetes Services from an inspect archive.
+    Reads core/services.yaml from each namespace directory and lists
+    service names, types, and cluster IPs.
+
+OPTIONS
+    --services
+        Enable services mode.
+
+    -n NAMESPACE, --namespace NAMESPACE
+        Filter services to a single namespace.
+
+    -f PATTERN, --filter PATTERN
+        Filter services by name or namespace (case-insensitive).
+
+    -l N, --limit N
+        Limit the output list to at most N services.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo --services
+    example.com> ocpinfo --services -n my-namespace
+    example.com> ocpinfo --services -f api
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_resources_help_msg(no_pipe):
+    msg = '''ocpinfo --resources  --  Resource inventory (inspect)
+
+SYNOPSIS
+    ocpinfo --resources [OPTIONS]
+
+DESCRIPTION
+    Show a complete resource inventory from an inspect archive.
+    Counts Pods, Services, Events, ConfigMaps, Secrets, PVCs,
+    Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs, CronJobs,
+    Routes, and NetworkPolicies across all (or a filtered) namespace.
+
+OPTIONS
+    --resources
+        Enable resource inventory mode.
+
+    -n NAMESPACE, --namespace NAMESPACE
+        Restrict the inventory to a single namespace.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo --resources
+    example.com> ocpinfo --resources -n my-namespace
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_pvc_help_msg(no_pipe):
+    msg = '''ocpinfo --pvc  --  PersistentVolumeClaims (inspect)
+
+SYNOPSIS
+    ocpinfo --pvc [OPTIONS]
+
+DESCRIPTION
+    Show PersistentVolumeClaims from an inspect archive.
+    Reads core/persistentvolumeclaims.yaml from each namespace directory
+    and reports PVC status (Bound, Pending, etc.) and capacity.
+
+OPTIONS
+    --pvc
+        Enable PersistentVolumeClaims mode.
+
+    -n NAMESPACE, --namespace NAMESPACE
+        Filter PVCs to a single namespace.
+
+    -f PATTERN, --filter PATTERN
+        Filter PVCs by name or namespace (case-insensitive).
+
+    -l N, --limit N
+        Limit the output list to at most N PVCs.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ocpinfo --pvc
+    example.com> ocpinfo --pvc -n my-namespace
+    example.com> ocpinfo --pvc -f my-claim
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe, base_path=None):
     """Print help message following isos pattern - context-aware based on environment"""
 
@@ -1948,6 +2514,36 @@ def run_ocpinfo(input_str, env_vars, is_cmd_stopped_func,
         return ""
 
     if o.help or show_help == True:
+        if getattr(o, 'pods', False):
+            return print_pods_help_msg(no_pipe)
+        elif getattr(o, 'containers', False):
+            return print_containers_help_msg(no_pipe)
+        elif getattr(o, 'images', False):
+            return print_images_help_msg(no_pipe)
+        elif getattr(o, 'stats', False):
+            return print_stats_help_msg(no_pipe)
+        elif getattr(o, 'show_version', False):
+            return print_version_help_msg(no_pipe)
+        elif getattr(o, 'operators', False):
+            return print_operators_help_msg(no_pipe)
+        elif getattr(o, 'etcd', False):
+            return print_etcd_help_msg(no_pipe)
+        elif getattr(o, 'namespaces', False):
+            return print_namespaces_help_msg(no_pipe)
+        elif getattr(o, 'events', False):
+            return print_events_help_msg(no_pipe)
+        elif getattr(o, 'inspect_pods', False):
+            return print_inspect_pods_help_msg(no_pipe)
+        elif getattr(o, 'logs', False):
+            return print_logs_help_msg(no_pipe)
+        elif getattr(o, 'deployments', False):
+            return print_deployments_help_msg(no_pipe)
+        elif getattr(o, 'services', False):
+            return print_services_help_msg(no_pipe)
+        elif getattr(o, 'resources', False):
+            return print_resources_help_msg(no_pipe)
+        elif getattr(o, 'pvc', False):
+            return print_pvc_help_msg(no_pipe)
         return print_help_msg(op, no_pipe, base_path)
 
     # Create color manager
