@@ -638,6 +638,158 @@ def show_system_info(sos_home, colors, output):
         output.add_line("  %-20s %s" % ('Thread Count:', proc_info.get('thread_count', 'N/A')))
 
 
+def print_cpu_help_msg(no_pipe):
+    msg = '''hwinfo -c  --  Show detailed CPU information
+
+SYNOPSIS
+    hwinfo -c
+
+DESCRIPTION
+    Displays detailed CPU information parsed from lscpu output, including:
+    - Architecture, CPU op-modes, byte order, model name, vendor
+    - Topology: total CPUs, sockets, cores per socket, threads per core
+    - NUMA configuration: number of nodes and CPU assignments
+    - Cache sizes: L1d, L1i, L2, L3
+    - Virtualization: hypervisor vendor, virtualization type
+    - Frequency: current, max, min MHz and BogoMIPS
+
+    Reads: sos_commands/processor/lscpu
+
+OPTIONS
+    -c, --cpu
+        Show detailed CPU information.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> hwinfo -c
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_memory_help_msg(no_pipe):
+    msg = '''hwinfo -m  --  Show detailed memory information
+
+SYNOPSIS
+    hwinfo -m
+
+DESCRIPTION
+    Displays memory statistics and installed DIMM information, including:
+    - Total, free, available, cached, buffers, and swap from /proc/meminfo
+    - Installed DIMMs: locator, size, type, speed, and manufacturer
+      (parsed from dmidecode output)
+
+    Reads: proc/meminfo, sos_commands/hardware/dmidecode
+
+OPTIONS
+    -m, --memory
+        Show detailed memory information.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> hwinfo -m
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_disk_help_msg(no_pipe):
+    msg = '''hwinfo -d  --  Show disk and block devices
+
+SYNOPSIS
+    hwinfo -d
+
+DESCRIPTION
+    Displays block device tree from lsblk output, showing all
+    block devices and their relationships (partitions, LVM, etc.).
+
+    Reads: sos_commands/block/lsblk
+
+OPTIONS
+    -d, --disk
+        Show disk and block devices.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> hwinfo -d
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_pci_help_msg(no_pipe):
+    msg = '''hwinfo -p  --  Show PCI devices
+
+SYNOPSIS
+    hwinfo -p
+
+DESCRIPTION
+    Displays PCI devices categorized into:
+    - Network Controllers (Ethernet, Network)
+    - Storage Controllers (SATA, SCSI, IDE, RAID, NVMe)
+    - Other PCI Devices (first 10 shown)
+
+    Reads: sos_commands/pci/lspci_-nnvv
+
+OPTIONS
+    -p, --pci
+        Show PCI devices.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> hwinfo -p
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_system_help_msg(no_pipe):
+    msg = '''hwinfo -s  --  Show system information
+
+SYNOPSIS
+    hwinfo -s
+
+DESCRIPTION
+    Displays system hardware information from dmidecode output, including:
+    - System: manufacturer, product name, serial number, UUID
+    - BIOS: vendor, version, release date
+    - Chassis: manufacturer and type
+    - Processor (DMI): version, max/current speed, core and thread count
+
+    Reads: sos_commands/hardware/dmidecode
+
+OPTIONS
+    -s, --system
+        Show system information (BIOS, motherboard, etc.).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> hwinfo -s
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     """Generate help message."""
     cmd_examples = '''
@@ -718,6 +870,16 @@ def run_hwinfo(input_str, env_vars, is_cmd_stopped_func,
         return ""
 
     if o.help or show_help:
+        if o.show_cpu:
+            return print_cpu_help_msg(no_pipe)
+        elif o.show_memory:
+            return print_memory_help_msg(no_pipe)
+        elif o.show_disk:
+            return print_disk_help_msg(no_pipe)
+        elif o.show_pci:
+            return print_pci_help_msg(no_pipe)
+        elif o.show_system:
+            return print_system_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
 
     # Initialize helpers

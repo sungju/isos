@@ -300,12 +300,71 @@ def reload_rules():
     return result_str
 
 
+def print_list_help_msg(no_pipe):
+    msg = '''autocheck -l  --  List available detection rules
+
+SYNOPSIS
+    autocheck -l
+
+DESCRIPTION
+    Displays all currently loaded detection rules with their names
+    and descriptions. Major rules (those that run by default) are
+    highlighted. Rules are loaded from the ISOS_RULES_PATH directories.
+
+OPTIONS
+    -l, --list
+        Show the currently available rules.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> autocheck -l
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_reload_help_msg(no_pipe):
+    msg = '''autocheck -r  --  Reload detection rules
+
+SYNOPSIS
+    autocheck -r
+
+DESCRIPTION
+    Reloads all currently loaded rule modules without restarting isos.
+    Useful during development when rule files have been modified.
+    Reports success or failure for each module reload.
+
+OPTIONS
+    -r, --reload
+        Re-load rules.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> autocheck -r
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
+Examples:
+    autocheck          Run all major detection rules
+    autocheck -a       Run all rules including non-major
+    autocheck -l       List available rules
+    autocheck -r       Reload rules (useful during development)
     '''
 
     if no_pipe == False:
-        output = StringIO.StringIO()
+        output = StringIO()
         op.print_help(file=output)
         contents = output.getvalue()
         output.close()
@@ -366,6 +425,10 @@ def run_autocheck(input_str, l_env_vars, is_cmd_stopped_func,\
     env_vars = l_env_vars
 
     if o.help or show_help == True:
+        if o.list:
+            return print_list_help_msg(no_pipe)
+        elif o.reload:
+            return print_reload_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
     
     result_str = ""

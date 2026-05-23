@@ -137,6 +137,65 @@ def _print_all_plain(topics, sos1_path, sos2_path):
         print()
 
 
+def print_topic_help_msg(no_pipe):
+    msg = '''soscompare -t  --  Show a specific comparison topic
+
+SYNOPSIS
+    soscompare -t <topic>[,<topic>,...] <path-to-second-sosreport>
+
+DESCRIPTION
+    Collects and prints one or more comparison topics directly to
+    stdout without launching the interactive fzf UI. Multiple topics
+    can be specified as a comma-separated list.
+
+    Use "soscompare -l" to see all available topic keys.
+
+OPTIONS
+    -t, --topic <TOPIC>
+        Show specific topic(s) (comma-separated, skip fzf, print to stdout).
+
+    --no-color
+        Disable color output.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> soscompare -t memory /path/to/other-sos
+    example.com> soscompare -t memory,cpu /path/to/other-sos
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_list_help_msg(no_pipe):
+    msg = '''soscompare -l  --  List available comparison topics
+
+SYNOPSIS
+    soscompare -l
+
+DESCRIPTION
+    Lists all available topic keys and their display names that can
+    be passed to "soscompare -t <topic>".
+
+OPTIONS
+    -l, --list
+        List available comparison topics.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> soscompare -l
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -169,6 +228,10 @@ def run_compare(input_str, env_vars, is_cmd_stopped_func,
     opts, remaining = op.parse_args(args)
 
     if show_help or opts.help:
+        if opts.topic:
+            return print_topic_help_msg(no_pipe)
+        elif opts.list_topics:
+            return print_list_help_msg(no_pipe)
         op.print_help()
         print("\nAvailable topics:")
         for t in TOPICS:

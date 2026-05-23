@@ -330,6 +330,145 @@ def show_cron_config(sos_home, colors, output):
             output.add_line("")
 
 
+def print_log_help_msg(no_pipe):
+    msg = '''cron -l  --  Show cron log
+
+SYNOPSIS
+    cron -l
+
+DESCRIPTION
+    Displays the full cron log from /var/log/cron in the sosreport.
+    Each log line is shown with syntax highlighting.
+
+OPTIONS
+    -l, --log
+        Show cron log (/var/log/cron).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> cron -l
+    example.com> cron -l | grep CROND
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_errors_help_msg(no_pipe):
+    msg = '''cron -e  --  Show only errors from cron log
+
+SYNOPSIS
+    cron -e
+
+DESCRIPTION
+    Displays only error lines from /var/log/cron. Lines are filtered
+    for keywords: error, fail, cannot, unable, denied, fatal.
+
+OPTIONS
+    -e, --errors
+        Show only errors from cron log.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> cron -e
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_stats_help_msg(no_pipe):
+    msg = '''cron -s  --  Show cron execution statistics
+
+SYNOPSIS
+    cron -s
+
+DESCRIPTION
+    Parses /var/log/cron and reports execution statistics including:
+    - Total log lines
+    - Jobs by user (CROND executions)
+    - Most frequent cron jobs (top 10)
+    - Anacron job counts
+
+OPTIONS
+    -s, --stats
+        Show execution statistics from cron log.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> cron -s
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_timers_help_msg(no_pipe):
+    msg = '''cron -t  --  Show systemd timers
+
+SYNOPSIS
+    cron -t
+
+DESCRIPTION
+    Displays systemd timer units from the sosreport
+    (sos_commands/systemd/systemctl_list-timers_--all).
+    Systemd timers are the modern alternative to cron jobs.
+
+OPTIONS
+    -t, --timers
+        Show systemd timers (modern alternative to cron).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> cron -t
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_config_help_msg(no_pipe):
+    msg = '''cron -c  --  Show cron configuration files
+
+SYNOPSIS
+    cron -c
+
+DESCRIPTION
+    Displays cron configuration files from the sosreport, including:
+    - /etc/anacrontab (anacron configuration)
+    - /etc/sysconfig/crond (crond daemon settings)
+    - /etc/cron.allow (access control: allowed users)
+    - /etc/cron.deny (access control: denied users)
+    - Crond systemd service unit file
+
+OPTIONS
+    -c, --config
+        Show configuration files (anacrontab, sysconfig, access control).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> cron -c
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     """Generate help message."""
     cmd_examples = '''
@@ -350,7 +489,7 @@ Examples:
         print(cmd_examples)
         return ""
     else:
-        output = StringIO.StringIO()
+        output = StringIO()
         op.print_help(file=output)
         contents = output.getvalue()
         output.close()
@@ -403,6 +542,16 @@ def run_croninfo(input_str, env_vars, is_cmd_stopped_func,
         return ""
 
     if o.help or show_help:
+        if o.show_log:
+            return print_log_help_msg(no_pipe)
+        elif o.show_errors:
+            return print_errors_help_msg(no_pipe)
+        elif o.show_stats:
+            return print_stats_help_msg(no_pipe)
+        elif o.show_timers:
+            return print_timers_help_msg(no_pipe)
+        elif o.show_config:
+            return print_config_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
 
     # Initialize helpers

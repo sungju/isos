@@ -42,6 +42,138 @@ def read_log_basic(log_path, no_pipe):
     return result_str
 
 
+def print_boot_help_msg(no_pipe):
+    msg = '''log -b  --  Show journalctl boot log
+
+SYNOPSIS
+    log -b
+
+DESCRIPTION
+    Displays the journalctl --no-pager --boot log collected in
+    the sosreport (sos_commands/logs/journalctl_--no-pager_--boot).
+
+OPTIONS
+    -b, --boot
+        Show journalctl --no-pager --boot log.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> log -b
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_cron_help_msg(no_pipe):
+    msg = '''log -c  --  Show cron log (deprecated)
+
+SYNOPSIS
+    log -c
+
+DESCRIPTION
+    Displays the cron log from /var/log/cron.
+    Note: this option is deprecated. Use "cron -l" instead for
+    more complete cron log support.
+
+OPTIONS
+    -c, --cron
+        Show cron log (/var/log/cron).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> log -c
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_disk_help_msg(no_pipe):
+    msg = '''log -d  --  Show journalctl disk usage
+
+SYNOPSIS
+    log -d
+
+DESCRIPTION
+    Displays the journalctl --disk-usage output collected in
+    the sosreport (sos_commands/logs/journalctl_--disk-usage).
+    Shows how much disk space the journal occupies.
+
+OPTIONS
+    -d, --disk
+        Show journalctl --disk-usage.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> log -d
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_nopager_help_msg(no_pipe):
+    msg = '''log -n  --  Show full journalctl log
+
+SYNOPSIS
+    log -n
+
+DESCRIPTION
+    Displays the full journalctl --no-pager log collected in
+    the sosreport (sos_commands/logs/journalctl_--no-pager).
+
+OPTIONS
+    -n, --nopager
+        Show journalctl --no-pager log.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> log -n
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_secure_help_msg(no_pipe):
+    msg = '''log -s  --  Show secure log
+
+SYNOPSIS
+    log -s
+
+DESCRIPTION
+    Displays the security log from /var/log/secure in the
+    sosreport. Contains authentication, sudo, and SSH activity.
+
+OPTIONS
+    -s, --secure
+        Show secure log (/var/log/secure).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> log -s
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 is_cmd_stopped = None
 def run_loginfo(input_str, env_vars, is_cmd_stopped_func,\
         show_help=False, no_pipe=True):
@@ -76,8 +208,18 @@ def run_loginfo(input_str, env_vars, is_cmd_stopped_func,\
         return ""
 
     if o.help or show_help == True:
+        if o.journalctl_boot:
+            return print_boot_help_msg(no_pipe)
+        elif o.cron_log:
+            return print_cron_help_msg(no_pipe)
+        elif o.journalctl_disk:
+            return print_disk_help_msg(no_pipe)
+        elif o.journalctl_nopager:
+            return print_nopager_help_msg(no_pipe)
+        elif o.secure_log:
+            return print_secure_help_msg(no_pipe)
         if no_pipe == False:
-            output = StringIO.StringIO()
+            output = StringIO()
             op.print_help(file=output)
             contents = output.getvalue()
             output.close()

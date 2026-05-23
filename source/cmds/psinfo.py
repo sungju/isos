@@ -318,6 +318,37 @@ def show_process_details(sos_home, no_pipe, options):
     return result_str
 
 
+def print_pid_help_msg(no_pipe):
+    msg = '''psinfo -p  --  Show detailed information for a process
+
+SYNOPSIS
+    psinfo -p <PID>
+
+DESCRIPTION
+    Displays detailed information for a specific process ID, including:
+    - CPU usage: %CPU, user, sys, guest, wait (from pidstat -tl)
+    - Memory usage: %MEM, VSZ, RSS (from ps auxwwwm)
+    - Process tree: command, threads, wait channels, state (from ps -elfL)
+    - Call trace: kernel stack from /proc/<PID>/stack
+    - Resource limits from /proc/<PID>/limits
+
+OPTIONS
+    -p, --pid <PID>
+        Show details of the specified process.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> psinfo -p 1234
+    example.com> psinfo -p 1
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
 Examples:
@@ -326,11 +357,11 @@ Examples:
 
     # To sort by resource type. It shows the highest at the bottom
     # unless specifying line numbers with -l
-    > psinfo -s rss 
+    > psinfo -s rss
     '''
 
     if no_pipe == False:
-        output = StringIO.StringIO()
+        output = StringIO()
         op.print_help(file=output)
         contents = output.getvalue()
         output.close()
@@ -375,6 +406,8 @@ def run_psinfo(input_str, env_vars, is_cmd_stopped_func,\
 
 
     if o.help or show_help == True:
+        if o.process_details:
+            return print_pid_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
 
     sos_home = env_vars["sos_home"]

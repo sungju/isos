@@ -149,6 +149,90 @@ def get_audit_status_files(sos_home):
     return get_files_in_path(sos_home + "/sos_commands/auditd", "")
 
 
+def print_config_help_msg(no_pipe):
+    msg = '''audit -c  --  Show auditd configuration
+
+SYNOPSIS
+    audit -c
+
+DESCRIPTION
+    Displays auditd configuration files from the sosreport, including:
+    - /etc/audit/auditd.conf (main daemon configuration)
+    - /etc/audit/plugins.d/*.conf (plugin configurations)
+
+    Each file is shown with a header separator and syntax highlighting.
+
+OPTIONS
+    -c, --config
+        Show auditd configuration files.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> audit -c
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_rules_help_msg(no_pipe):
+    msg = '''audit -r  --  Show audit rules
+
+SYNOPSIS
+    audit -r
+
+DESCRIPTION
+    Displays audit rule files from the sosreport, including:
+    - /etc/audit/*.rules
+    - /etc/audit/rules.d/*.rules
+
+    Each file is shown with a header separator and syntax highlighting.
+
+OPTIONS
+    -r, --rules
+        Show audit rules.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> audit -r
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_status_help_msg(no_pipe):
+    msg = '''audit -s  --  Show current audit status
+
+SYNOPSIS
+    audit -s
+
+DESCRIPTION
+    Displays audit status output files collected under
+    sos_commands/auditd/ in the sosreport (e.g. auditctl -s output).
+
+OPTIONS
+    -s, --status
+        Show current audit status.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> audit -s
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
 - Shows /var/log/audit/audit.log with system's time.
@@ -170,7 +254,7 @@ Examples:
     '''
 
     if no_pipe == False:
-        output = StringIO.StringIO()
+        output = StringIO()
         op.print_help(file=output)
         contents = output.getvalue()
         output.close()
@@ -213,6 +297,12 @@ def run_auditinfo(input_str, env_vars, is_cmd_stopped_func,\
         return ""
 
     if o.help or show_help == True:
+        if o.audit_config:
+            return print_config_help_msg(no_pipe)
+        elif o.audit_rules:
+            return print_rules_help_msg(no_pipe)
+        elif o.audit_status:
+            return print_status_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
 
     sos_home = env_vars["sos_home"]

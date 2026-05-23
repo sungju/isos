@@ -130,13 +130,46 @@ def show_system(options, no_pipe):
     return result_str
 
 
+def print_sys_help_msg(no_pipe):
+    msg = '''ci -s  --  Show system information
+
+SYNOPSIS
+    ci -s
+
+DESCRIPTION
+    Displays system hardware information from the sosreport in addition
+    to the default case summary, including:
+    - BIOS information from dmidecode (vendor, version, release date)
+    - Date and time at collection, timezone, and how many days ago
+      the sosreport was collected
+
+OPTIONS
+    -s, --sys
+        Show system information (BIOS, date/time, collection age).
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ci -s
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
     It shows case related information
+
+Examples:
+    ci           Show case number, kernel, hostname, and cmdline
+    ci -s        Also show BIOS info and collection date/time
     '''
 
     if no_pipe == False:
-        output = StringIO.StringIO()
+        output = StringIO()
         op.print_help(file=output)
         contents = output.getvalue()
         output.close()
@@ -172,6 +205,8 @@ def run_caseinfo(input_str, env_vars, is_cmd_stopped_func,\
         return ""
 
     if o.help or show_help == True:
+        if o.sys:
+            return print_sys_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
     
     result_str = ""

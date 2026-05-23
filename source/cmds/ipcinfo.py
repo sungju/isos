@@ -151,6 +151,86 @@ def show_shmem(op, no_pipe):
     return result_str
 
 
+def print_shm_help_msg(no_pipe):
+    msg = '''ipcinfo -m  --  Show Shared Memory Segments
+
+SYNOPSIS
+    ipcinfo -m
+
+DESCRIPTION
+    Displays only the Shared Memory Segments section from
+    sos_commands/sysvipc/ipcs. Segment sizes are shown in
+    human-readable format (B/KiB/MiB/GiB), sorted by size,
+    with a total allocation summary at the end.
+
+OPTIONS
+    -m, --shm
+        Show only Shared Memory Segments.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ipcinfo -m
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_sem_help_msg(no_pipe):
+    msg = '''ipcinfo -s  --  Show Semaphore Arrays
+
+SYNOPSIS
+    ipcinfo -s
+
+DESCRIPTION
+    Displays only the Semaphore Arrays section from
+    sos_commands/sysvipc/ipcs.
+
+OPTIONS
+    -s, --sem
+        Show only Semaphore Arrays.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ipcinfo -s
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_msg_help_msg(no_pipe):
+    msg = '''ipcinfo -q  --  Show Message Queues
+
+SYNOPSIS
+    ipcinfo -q
+
+DESCRIPTION
+    Displays only the Message Queues section from
+    sos_commands/sysvipc/ipcs.
+
+OPTIONS
+    -q, --msg
+        Show only Message Queues.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> ipcinfo -q
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
     It shows SYSV IPC usage
@@ -164,7 +244,7 @@ def print_help_msg(op, no_pipe):
     '''
 
     if no_pipe == False:
-        output = StringIO.StringIO()
+        output = StringIO()
         op.print_help(file=output)
         contents = output.getvalue()
         output.close()
@@ -203,6 +283,12 @@ def run_ipcinfo(input_str, env_vars, is_cmd_stopped_func,\
         return ""
 
     if o.help or show_help == True:
+        if o.show_shm:
+            return print_shm_help_msg(no_pipe)
+        elif o.show_sem:
+            return print_sem_help_msg(no_pipe)
+        elif o.show_msg:
+            return print_msg_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
     
     result_str = ""

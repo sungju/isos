@@ -119,6 +119,113 @@ def add_consumed_time(line):
     delay_time_dict[line] = int(delay_value * 1000)
 
 
+def print_graph_help_msg(no_pipe):
+    msg = '''trace -g  --  Convert trace.dat to funcgraph text
+
+SYNOPSIS
+    trace -g <trace.dat> [-o <outfile>] [-l <lines>] [-r]
+
+DESCRIPTION
+    Converts trace.dat binary files to funcgraph text using:
+        trace-cmd report -O fgraph:tailprint <file>
+
+    Output can be saved to a file with -o. Multiple input files
+    are supported; use %f (original filename) and %d (sequence
+    number) as placeholders in the output filename.
+
+OPTIONS
+    -g, --graph
+        Convert trace.dat to funcgraph text.
+
+    -o, --outfile <file>
+        Save output to the specified file. Supports %f and %d
+        placeholders when processing multiple files.
+
+    -l, --lines <n>
+        Limit output to the first n lines (-1 means all).
+
+    -r, --reverse
+        Show results in reverse order.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> trace -g trace.dat -o trace.txt
+    example.com> trace -g trace.dat old_trace.dat -o %f.txt
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_profile_help_msg(no_pipe):
+    msg = '''trace -p  --  Show profile from trace data
+
+SYNOPSIS
+    trace -p <trace.dat> [-o <outfile>]
+
+DESCRIPTION
+    Runs trace-cmd report --profile on the trace.dat file and
+    displays a per-function call profile sorted in columnar format.
+    Output can be saved to a file with -o.
+
+OPTIONS
+    -p, --profile
+        Show the profile from trace data.
+
+    -o, --outfile <file>
+        Save profile output to the specified file.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> trace -p trace.dat
+    example.com> trace -p trace.dat -o profile.txt
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
+def print_time_help_msg(no_pipe):
+    msg = '''trace -t  --  Show most time-consuming functions
+
+SYNOPSIS
+    trace -t <funcgraph.txt> [-l <n>] [-r]
+
+DESCRIPTION
+    Parses a funcgraph text file (produced by trace -g) and reports
+    functions sorted by time spent (funcgraph_exit entries), showing
+    the most expensive calls. By default the top 20 are displayed.
+
+OPTIONS
+    -t, --time
+        Show the most time-spent functions.
+
+    -l, --lines <n>
+        Number of entries to display (default: 20, -1 means all).
+
+    -r, --reverse
+        Show least-expensive functions first instead of most-expensive.
+
+    -h, --help
+        Show this help message.
+
+EXAMPLES
+    example.com> trace -t trace.dat.txt
+    example.com> trace -t trace.dat.txt -l 50
+    example.com> trace -t trace.dat.txt -r
+'''
+    if no_pipe:
+        print(msg)
+        return ""
+    return msg
+
+
 def print_help_msg(op, no_pipe):
     cmd_examples = '''
 Examples:
@@ -126,7 +233,7 @@ Examples:
     # To save the output to the file
     > trace -g trace.dat -o trace.txt
 
-    # You can convert multiple trace data and use 
+    # You can convert multiple trace data and use
     # '%f'(original filename) and '%d'(sequence number)
     # in output file name.
     # Below generates 'trace.dat.txt' and 'old_trace.dat.txt'
@@ -140,7 +247,7 @@ Examples:
     '''
 
     if no_pipe == False:
-        output = StringIO.StringIO()
+        output = StringIO()
         op.print_help(file=output)
         contents = output.getvalue()
         output.close()
@@ -195,6 +302,12 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
         return ""
 
     if o.help or show_help == True:
+        if o.graph:
+            return print_graph_help_msg(no_pipe)
+        elif o.profile:
+            return print_profile_help_msg(no_pipe)
+        elif o.time:
+            return print_time_help_msg(no_pipe)
         return print_help_msg(op, no_pipe)
     
     result_str = ""
