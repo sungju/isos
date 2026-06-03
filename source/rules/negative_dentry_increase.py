@@ -102,7 +102,7 @@ NEGATIVE_DENTRY_PERCENT_THRESHOLD = 50
 # of total system memory to be considered an issue. High dentry percentage
 # alone is not enough — it must also represent significant memory pressure.
 # If memory data is unavailable, fall back to the dentry % check only.
-NEGATIVE_DENTRY_MEMORY_PERCENT_THRESHOLD = 20
+NEGATIVE_DENTRY_MEMORY_PERCENT_THRESHOLD = 33
 
 
 def run_rule(basic_data):
