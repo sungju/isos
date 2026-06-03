@@ -94,14 +94,8 @@ def add_rule(sysinfo):
     return False
 
 
-# Threshold: if negative dentries exceed this percentage of total dentries
-# it's considered abnormal
-NEGATIVE_DENTRY_PERCENT_THRESHOLD = 50
-
-# Threshold: negative dentry memory must also consume at least this percentage
-# of total system memory to be considered an issue. High dentry percentage
-# alone is not enough — it must also represent significant memory pressure.
-# If memory data is unavailable, fall back to the dentry % check only.
+# Threshold: negative dentry memory must consume at least this percentage
+# of total system memory to be considered an issue.
 NEGATIVE_DENTRY_MEMORY_PERCENT_THRESHOLD = 33
 
 
@@ -125,11 +119,8 @@ def run_rule(basic_data):
             if nr_dentry == 0:
                 return None
 
-            # Calculate percentage of negative dentries
+            # Calculate percentage of negative dentries (for display only)
             negative_percent = (nr_negative / nr_dentry) * 100
-
-            if negative_percent < NEGATIVE_DENTRY_PERCENT_THRESHOLD:
-                return None
 
             # Estimate memory consumed by negative dentries via /proc/slabinfo
             sys_mem_pct = None
@@ -153,10 +144,8 @@ def run_rule(basic_data):
             else:
                 memory_info = ""
 
-            # Apply the system memory threshold:
-            # Rule triggers ONLY if negative dentry memory >= 20% of system memory.
-            # If sys_mem_pct is unavailable (no memory data), skip this check and
-            # rely solely on the dentry percentage threshold above.
+            # Rule triggers ONLY if negative dentry memory >= 1/3 of system memory.
+            # If sys_mem_pct is unavailable (no slabinfo data), do not trigger.
             if sys_mem_pct is not None and sys_mem_pct < NEGATIVE_DENTRY_MEMORY_PERCENT_THRESHOLD:
                 return None
 
