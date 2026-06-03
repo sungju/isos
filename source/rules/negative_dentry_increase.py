@@ -145,8 +145,8 @@ def run_rule(basic_data):
                 memory_info = ""
 
             # Rule triggers ONLY if negative dentry memory >= 1/3 of system memory.
-            # If sys_mem_pct is unavailable (no slabinfo data), do not trigger.
-            if sys_mem_pct is not None and sys_mem_pct < NEGATIVE_DENTRY_MEMORY_PERCENT_THRESHOLD:
+            # If sys_mem_pct is unavailable (no slabinfo/meminfo data), do not trigger.
+            if sys_mem_pct is None or sys_mem_pct < NEGATIVE_DENTRY_MEMORY_PERCENT_THRESHOLD:
                 return None
 
             # Add bar graph visualizations
