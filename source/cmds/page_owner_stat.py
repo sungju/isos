@@ -113,16 +113,39 @@ def get_module_usage_bar(module_usage_list, total_size, width=80):
 alloc_by_dict = {}
 alloc_type_dict = {}
 alloc_module_dict = {}
-page_size=4096
+alloc_slab_module_dict = {}   # slab-only: pages by module
+alloc_slab_trace_dict  = {}   # slab-only: pages by call trace
+page_size = 4096
+
+# Call-trace keywords that identify a slab allocation path
+SLAB_KEYWORDS = (
+    'kmem_cache_alloc', '__kmalloc', 'kmalloc', 'kzalloc', 'kmemdup',
+    'slab_alloc', '__slab_alloc', 'new_slab', 'alloc_slab_page',
+    'cache_alloc_refill', '__do_kmalloc', 'kmem_cache_alloc_node',
+    'kmalloc_node', 'kzalloc_node',
+)
+
+
+def _is_slab_alloc(call_trace):
+    """Return True if the call trace passed through a slab allocation path."""
+    for kw in SLAB_KEYWORDS:
+        if kw in call_trace:
+            return True
+    return False
+
 
 def handle_a_file(filename, options):
     global alloc_by_dict
     global alloc_type_dict
     global alloc_module_dict
+    global alloc_slab_module_dict
+    global alloc_slab_trace_dict
 
     alloc_by_dict = {}
     alloc_type_dict = {}
     alloc_module_dict = {}
+    alloc_slab_module_dict = {}
+    alloc_slab_trace_dict  = {}
 
     if not os.path.isfile(filename):
         return screen.get_pipe_aware_line("File '%s' does not exist" % (filename))
@@ -244,6 +267,15 @@ def handle_a_file(filename, options):
                     pages = pages + alloc_module_dict[mod_name]
 
                 alloc_module_dict[mod_name] = pages
+
+            # Slab-only tracking: populate when the call trace goes through slab
+            if by_whom != "" and _is_slab_alloc(by_whom):
+                pages = alloc_pages
+                slab_key = mod_name if mod_name != "" else "kernel"
+                alloc_slab_module_dict[slab_key] = (
+                    alloc_slab_module_dict.get(slab_key, 0) + pages)
+                alloc_slab_trace_dict[by_whom] = (
+                    alloc_slab_trace_dict.get(by_whom, 0) + pages)
 
             # read next line
             while True:
@@ -419,6 +451,60 @@ def handle_a_file(filename, options):
 
             print_count = print_count + 1
 
+    # -----------------------------------------------------------------------
+    # Slab-only section (shown when -s is given, or always when data exists)
+    # -----------------------------------------------------------------------
+    show_slab = getattr(options, 'slab', False)
+    if show_slab and len(alloc_slab_module_dict) > 0:
+        result_str = result_str + screen.get_pipe_aware_line("\n")
+        result_str = result_str + screen.get_pipe_aware_line(
+            "Slab allocations by module / kernel")
+        result_str = result_str + screen.get_pipe_aware_line(
+            "===================================")
+
+        sorted_slab = sorted(alloc_slab_module_dict.items(),
+                             key=operator.itemgetter(1), reverse=True)
+        slab_total = sum(p for _, p in sorted_slab)
+
+        for slab_key, pages in sorted_slab:
+            pct = pages * 100.0 / slab_total if slab_total else 0
+            result_str = result_str + screen.get_pipe_aware_line(
+                "%10s : %s  (%.1f%%)" % (
+                    get_size_str(pages * page_size), slab_key, pct))
+
+        result_str = result_str + screen.get_pipe_aware_line(
+            "\nTotal slab allocation : %s (%s kB)" % (
+                get_size_str(slab_total * page_size),
+                '{:,.0f}'.format(slab_total * page_size / 1024)))
+
+        # Bar graph for top slab modules
+        top_slab = sorted_slab[:min(10, len(sorted_slab))]
+        bar, legend = get_module_usage_bar(top_slab, slab_total, width=78)
+        if bar:
+            result_str = result_str + screen.get_pipe_aware_line(
+                "\nSlab Module Usage Distribution:")
+            result_str = result_str + screen.get_pipe_aware_line(bar)
+            result_str = result_str + screen.get_pipe_aware_line(legend)
+
+        # Top slab call traces
+        result_str = result_str + screen.get_pipe_aware_line("\n")
+        result_str = result_str + screen.get_pipe_aware_line(
+            "Top slab call traces")
+        result_str = result_str + screen.get_pipe_aware_line(
+            "====================")
+        sorted_traces = sorted(alloc_slab_trace_dict.items(),
+                               key=operator.itemgetter(1), reverse=True)
+        trace_limit = n_items if not options.all else len(sorted_traces)
+        for trace, pages in sorted_traces[:trace_limit + 1]:
+            result_str = result_str + screen.get_pipe_aware_line(
+                "\n%s : %s" % (get_size_str(pages * page_size), trace))
+
+    elif show_slab:
+        result_str = result_str + screen.get_pipe_aware_line(
+            "\nNo slab allocations detected in this page_owner file.")
+        result_str = result_str + screen.get_pipe_aware_line(
+            "(Checked for: %s)" % ", ".join(SLAB_KEYWORDS[:5]) + ", ...")
+
     result_str = result_str + \
         screen.get_pipe_aware_line("\nNotes: Calculation was done with pagesize=%d" % (page_size))
 
@@ -439,6 +525,12 @@ Examples:
 
     # Specify the page size when the system falsely detect the page size.
     > powner sorted_page_owner.txt -p 65536
+
+    # Show only slab allocations grouped by module / kernel code.
+    > powner sorted_page_owner.txt -s
+
+    # Slab view with all entries expanded.
+    > powner sorted_page_owner.txt -s -a
     '''
 
     if no_pipe == False:
@@ -484,6 +576,10 @@ def page_owner_stat(input_str, env_vars, is_cmd_stopped_func,\
     op.add_option("-r", "--reverse", dest="reverse", default=0,
             action="store_true",
             help="Show in reverse")
+
+    op.add_option("-s", "--slab", dest="slab", default=False,
+            action="store_true",
+            help="Show slab-only allocations grouped by module/kernel code")
 
 
     o = args = None
