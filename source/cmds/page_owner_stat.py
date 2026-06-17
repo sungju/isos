@@ -294,7 +294,9 @@ def handle_a_file(filename, options):
         n_items = 10
     n_items = n_items - 1
 
-    if len(alloc_by_dict) > 0:
+    show_slab = getattr(options, 'slab', False)
+
+    if not show_slab and len(alloc_by_dict) > 0:
         result_str = result_str + screen.get_pipe_aware_line("By call trace")
         result_str = result_str + screen.get_pipe_aware_line("=============")
         sorted_usage = sorted(alloc_by_dict.items(),
@@ -344,7 +346,7 @@ def handle_a_file(filename, options):
                            '{:,.0f}'.format(sum_size * page_size / 1024)))
 
 
-    if len(alloc_module_dict) > 0:
+    if not show_slab and len(alloc_module_dict) > 0:
         result_str = result_str + screen.get_pipe_aware_line("\n")
         result_str = result_str + \
                 screen.get_pipe_aware_line("By allocated modules")
@@ -408,7 +410,7 @@ def handle_a_file(filename, options):
                 result_str = result_str + screen.get_pipe_aware_line(legend)
 
 
-    if len(alloc_type_dict) > 0:
+    if not show_slab and len(alloc_type_dict) > 0:
         result_str = result_str + screen.get_pipe_aware_line("\n")
         result_str = result_str + screen.get_pipe_aware_line("By allocation type")
         result_str = result_str + screen.get_pipe_aware_line("==================")
@@ -452,9 +454,8 @@ def handle_a_file(filename, options):
             print_count = print_count + 1
 
     # -----------------------------------------------------------------------
-    # Slab-only section (shown when -s is given, or always when data exists)
+    # Slab-only section (shown when -s is given)
     # -----------------------------------------------------------------------
-    show_slab = getattr(options, 'slab', False)
     if show_slab and len(alloc_slab_module_dict) > 0:
         result_str = result_str + screen.get_pipe_aware_line("\n")
         result_str = result_str + screen.get_pipe_aware_line(
@@ -463,22 +464,39 @@ def handle_a_file(filename, options):
             "===================================")
 
         sorted_slab = sorted(alloc_slab_module_dict.items(),
-                             key=operator.itemgetter(1), reverse=True)
+                             key=operator.itemgetter(1), reverse=options.reverse)
         slab_total = sum(p for _, p in sorted_slab)
 
-        for slab_key, pages in sorted_slab:
+        mod_total_count = len(sorted_slab) - 1
+        if options.all:
+            mod_start, mod_end = 0, mod_total_count
+        elif options.reverse:
+            mod_start, mod_end = 0, min(mod_total_count, n_items)
+        else:
+            mod_start = max(0, mod_total_count - n_items)
+            mod_end = mod_total_count
+
+        mod_skip_printed = False
+        for midx, (slab_key, pages) in enumerate(sorted_slab):
             pct = pages * 100.0 / slab_total if slab_total else 0
-            result_str = result_str + screen.get_pipe_aware_line(
-                "%10s : %s  (%.1f%%)" % (
-                    get_size_str(pages * page_size), slab_key, pct))
+            if mod_start <= midx <= mod_end:
+                result_str = result_str + screen.get_pipe_aware_line(
+                    "%10s : %s  (%.1f%%)" % (
+                        get_size_str(pages * page_size), slab_key, pct))
+            elif not mod_skip_printed and len(sorted_slab) > n_items:
+                result_str = result_str + screen.get_pipe_aware_line(
+                    "\n%15s %d %s" % (
+                        "... < skipped ", len(sorted_slab) - n_items, " items > ..."))
+                mod_skip_printed = True
 
         result_str = result_str + screen.get_pipe_aware_line(
             "\nTotal slab allocation : %s (%s kB)" % (
                 get_size_str(slab_total * page_size),
                 '{:,.0f}'.format(slab_total * page_size / 1024)))
 
-        # Bar graph for top slab modules
-        top_slab = sorted_slab[:min(10, len(sorted_slab))]
+        # Bar graph always shows top 10 by size regardless of display order
+        top_slab = sorted(alloc_slab_module_dict.items(),
+                          key=operator.itemgetter(1), reverse=True)[:10]
         bar, legend = get_module_usage_bar(top_slab, slab_total, width=78)
         if bar:
             result_str = result_str + screen.get_pipe_aware_line(
@@ -486,18 +504,43 @@ def handle_a_file(filename, options):
             result_str = result_str + screen.get_pipe_aware_line(bar)
             result_str = result_str + screen.get_pipe_aware_line(legend)
 
-        # Top slab call traces
+        # Top slab call traces — same sort/limit logic as "By call trace"
         result_str = result_str + screen.get_pipe_aware_line("\n")
         result_str = result_str + screen.get_pipe_aware_line(
-            "Top slab call traces")
+            "Slab call traces")
         result_str = result_str + screen.get_pipe_aware_line(
-            "====================")
+            "================")
         sorted_traces = sorted(alloc_slab_trace_dict.items(),
-                               key=operator.itemgetter(1), reverse=True)
-        trace_limit = n_items if not options.all else len(sorted_traces)
-        for trace, pages in sorted_traces[:trace_limit + 1]:
-            result_str = result_str + screen.get_pipe_aware_line(
-                "\n%s : %s" % (get_size_str(pages * page_size), trace))
+                               key=operator.itemgetter(1), reverse=options.reverse)
+        total_count = len(sorted_traces) - 1
+        if options.all:
+            print_start = 0
+            print_end = total_count
+        else:
+            if options.reverse:
+                print_start = 0
+                print_end = min(total_count, n_items)
+            else:
+                print_start = total_count - n_items
+                if print_start < 0:
+                    print_start = 0
+                print_end = total_count
+
+        skip_printed = False
+        print_count = 0
+        for trace, pages in sorted_traces:
+            if print_start <= print_count <= print_end:
+                result_str = result_str + screen.get_pipe_aware_line(
+                    "\n%s : %s" % (get_size_str(pages * page_size), trace))
+            else:
+                if len(sorted_traces) > n_items and not skip_printed:
+                    result_str = result_str + screen.get_pipe_aware_line(
+                        "\n%15s %d %s" % (
+                            "... < skipped ",
+                            len(sorted_traces) - n_items,
+                            " items > ..."))
+                    skip_printed = True
+            print_count += 1
 
     elif show_slab:
         result_str = result_str + screen.get_pipe_aware_line(
