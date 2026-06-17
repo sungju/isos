@@ -1662,6 +1662,7 @@ def show_ps_memusage(op, no_pipe):
 
     result_str = ''
     mem_usage_dict = {}
+    pid_count_dict = {}   # tracks how many PIDs are grouped per name
     total_rss = 0
 
     # Check if ps file exists
@@ -1702,6 +1703,8 @@ def show_ps_memusage(op, no_pipe):
 
             if rss != 0:
                 mem_usage_dict[pname] = rss
+            if not op.all:
+                pid_count_dict[pname] = pid_count_dict.get(pname, 0) + 1
 
     except Exception as e:
         print("Error reading ps file: %s" % str(e))
@@ -1784,6 +1787,11 @@ def show_ps_memusage(op, no_pipe):
                 rows_added_since_check = 0
 
         pname = sorted_usage[i][0]
+        # Append process count when grouping by name (not -a mode)
+        if not op.all:
+            cnt = pid_count_dict.get(pname, 1)
+            if cnt > 1:
+                pname = "%s (%d×)" % (pname, cnt)
         # Truncate process name to fit column width
         pname = truncate_middle(pname, pname_width)
         rss_kb = sorted_usage[i][1]
