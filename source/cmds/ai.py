@@ -40,8 +40,23 @@ def truncate_content(data, limit=MAX_CONTENT_SIZE):
             (len(truncated), len(data)) + truncated
 
 
+RESPONSE_START_MARKER = "---AI_RESPONSE_START---"
+RESPONSE_END_MARKER = "---AI_RESPONSE_END---"
+
+def extract_response(result_str):
+    start_idx = result_str.find(RESPONSE_START_MARKER)
+    end_idx = result_str.find(RESPONSE_END_MARKER)
+    if start_idx >= 0 and end_idx > start_idx:
+        return result_str[start_idx + len(RESPONSE_START_MARKER):end_idx].strip()
+    return result_str
+
+
 def ai_send_local(prompt_data, engine, model=""):
     prompt_data = truncate_content(prompt_data)
+    prompt_data = prompt_data + \
+            "\n\nIMPORTANT: Start your response with exactly '" + \
+            RESPONSE_START_MARKER + "' on its own line and end with " + \
+            "exactly '" + RESPONSE_END_MARKER + "' on its own line."
 
     temp_path = ""
     try:
@@ -58,9 +73,9 @@ def ai_send_local(prompt_data, engine, model=""):
         model_opt = " -m " + model
 
     if engine == "claude":
-        cmd = "cat %s | claude -p %s" % (temp_path, model_opt)
+        cmd = "cat %s | claude -p %s 2>/dev/null" % (temp_path, model_opt)
     else:
-        cmd = "cat %s | gemini --skip-trust -p 'Analyze the following' %s" % (temp_path, model_opt)
+        cmd = "cat %s | gemini --skip-trust -p 'Analyze the following' %s 2>/dev/null" % (temp_path, model_opt)
 
     result_str = run_shell_command(cmd)
 
@@ -69,7 +84,7 @@ def ai_send_local(prompt_data, engine, model=""):
     except:
         pass
 
-    return result_str
+    return extract_response(result_str)
 
 
 def render_result(result_str, no_pipe):
