@@ -29,10 +29,10 @@ def detect_engine():
 
 MAX_CONTENT_SIZE = 100000
 
-def truncate_content(data):
-    if len(data) <= MAX_CONTENT_SIZE:
+def truncate_content(data, limit=MAX_CONTENT_SIZE):
+    if len(data) <= limit:
         return data
-    truncated = data[-MAX_CONTENT_SIZE:]
+    truncated = data[-limit:]
     newline_pos = truncated.find('\n')
     if newline_pos >= 0:
         truncated = truncated[newline_pos + 1:]
@@ -161,11 +161,13 @@ def run_ai(input_str, env_vars, is_cmd_stopped_func,
 
     result_str = ""
     if len(o.cmd_list) > 0:
+        per_cmd_limit = MAX_CONTENT_SIZE // len(o.cmd_list)
         for c in o.cmd_list:
             output = run_shell_command(c)
             if output.strip() == "":
                 print("Command '%s' produced no output" % c)
                 return ""
+            output = truncate_content(output, per_cmd_limit)
             result_str = result_str + "\n\n~~~\n$ " + c + "\n" + output + "\n~~~"
     elif o.input_file != "":
         file_path = o.input_file
