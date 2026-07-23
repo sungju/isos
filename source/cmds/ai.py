@@ -102,11 +102,11 @@ def run_ai(input_str, env_vars, is_cmd_stopped_func,
                   help='show this help message and exit')
 
     op.add_option("-c", "--cmd",
-                  action="store",
+                  action="append",
                   type="string",
-                  default="",
-                  dest="cmd_str",
-                  help="Run a command and include its output as context")
+                  default=[],
+                  dest="cmd_list",
+                  help="Run a command and include its output as context (repeatable)")
 
     op.add_option("-e", "--engine",
                   action="store",
@@ -160,12 +160,13 @@ def run_ai(input_str, env_vars, is_cmd_stopped_func,
     sos_home = env_vars.get("SOS_HOME", ".")
 
     result_str = ""
-    if o.cmd_str != "":
-        result_str = run_shell_command(o.cmd_str)
-        if result_str.strip() == "":
-            print("Command '%s' produced no output" % o.cmd_str)
-            return ""
-        result_str = "\n\n~~~\n$ " + o.cmd_str + "\n" + result_str + "\n~~~"
+    if len(o.cmd_list) > 0:
+        for c in o.cmd_list:
+            output = run_shell_command(c)
+            if output.strip() == "":
+                print("Command '%s' produced no output" % c)
+                return ""
+            result_str = result_str + "\n\n~~~\n$ " + c + "\n" + output + "\n~~~"
     elif o.input_file != "":
         file_path = o.input_file
         if not os.path.isabs(file_path):
@@ -185,6 +186,7 @@ def run_ai(input_str, env_vars, is_cmd_stopped_func,
         print("ERROR> ai needs a question or data to analyse.\n"
               "  e.g) ai what is the system status?\n"
               "       ai -c \"cat proc/meminfo\" explain memory usage\n"
+              "       ai -c \"cat proc/meminfo\" -c \"cat proc/vmstat\" compare\n"
               "       ai -i var/log/messages check for errors")
         return ""
 
