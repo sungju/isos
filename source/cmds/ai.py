@@ -27,7 +27,22 @@ def detect_engine():
     return ""
 
 
+MAX_CONTENT_SIZE = 100000
+
+def truncate_content(data):
+    if len(data) <= MAX_CONTENT_SIZE:
+        return data
+    truncated = data[-MAX_CONTENT_SIZE:]
+    newline_pos = truncated.find('\n')
+    if newline_pos >= 0:
+        truncated = truncated[newline_pos + 1:]
+    return "[Truncated: showing last %d chars of %d total]\n\n" % \
+            (len(truncated), len(data)) + truncated
+
+
 def ai_send_local(prompt_data, engine, model=""):
+    prompt_data = truncate_content(prompt_data)
+
     temp_path = ""
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix='.txt',
