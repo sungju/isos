@@ -207,6 +207,7 @@ def run_ai(input_str, env_vars, is_cmd_stopped_func,
               "       ai -i var/log/messages check for errors")
         return ""
 
+    print("[AI engine: %s (local)]" % engine)
     response = ai_send_local(prompt, engine, o.ai_model)
     if response:
         return render_result(response, no_pipe)
