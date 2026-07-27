@@ -2,6 +2,7 @@ import sys
 import time
 from optparse import OptionParser
 from io import StringIO
+import os
 
 import ansicolor
 import screen
@@ -334,6 +335,250 @@ def show_process_details(sos_home, no_pipe, options):
     return result_str
 
 
+def parse_ps_states(sos_home):
+    """Parse ps output and categorize processes by state."""
+    ps_path = sos_home + "/ps"
+    states = {'R': 0, 'S': 0, 'D': 0, 'Z': 0, 'T': 0, 'I': 0, 'other': 0}
+    dstate_procs = []
+    zombie_procs = []
+    all_procs = []
+    total = 0
+
+    if not os.path.isfile(ps_path):
+        return states, dstate_procs, zombie_procs, all_procs, total
+
+    try:
+        with open(ps_path) as f:
+            lines = f.readlines()
+            for line in lines[1:]:
+                words = line.split()
+                if len(words) < 11 or words[1] == "-":
+                    continue
+                total += 1
+                stat = words[7]
+                if not stat:
+                    continue
+
+                first_char = stat[0]
+                if first_char in states:
+                    states[first_char] += 1
+                else:
+                    states['other'] += 1
+
+                try:
+                    proc_info = {
+                        'user': words[0],
+                        'pid': words[1],
+                        'cpu': float(words[2]),
+                        'mem': float(words[3]),
+                        'vsz': int(words[4]),
+                        'rss': int(words[5]),
+                        'stat': stat,
+                        'cmd': " ".join(words[10:]),
+                    }
+                    all_procs.append(proc_info)
+
+                    if first_char == 'D':
+                        dstate_procs.append(proc_info)
+                    elif first_char == 'Z':
+                        zombie_procs.append(proc_info)
+                except (ValueError, IndexError):
+                    pass
+    except:
+        pass
+
+    return states, dstate_procs, zombie_procs, all_procs, total
+
+
+def show_process_summary(sos_home, no_pipe):
+    result_str = ""
+    states, dstate_procs, zombie_procs, _, total = parse_ps_states(sos_home)
+
+    if total == 0:
+        return result_str
+
+    if no_pipe:
+        title_c = screen.COLOR_TITLE
+        info_c = screen.COLOR_INFO
+        warn_c = screen.COLOR_WARNING
+        crit_c = screen.COLOR_CRITICAL
+        reset_c = screen.COLOR_RESET
+    else:
+        title_c = info_c = warn_c = crit_c = reset_c = ""
+
+    parts = ["%sTotal:%s %d" % (title_c, reset_c, total)]
+
+    if states['R'] > 0:
+        parts.append("%s%d running%s" % (info_c, states['R'], reset_c))
+    if states['S'] > 0:
+        parts.append("%d sleeping" % states['S'])
+    if states['I'] > 0:
+        parts.append("%d idle" % states['I'])
+    if states['T'] > 0:
+        parts.append("%s%d stopped%s" % (warn_c, states['T'], reset_c))
+    if states['D'] > 0:
+        parts.append("%s%d D-state (uninterruptible)%s" % (
+            crit_c, states['D'], reset_c))
+    if states['Z'] > 0:
+        parts.append("%s%d zombie%s" % (crit_c, states['Z'], reset_c))
+
+    result_str += screen.get_pipe_aware_line(", ".join(parts))
+    result_str += screen.get_pipe_aware_line("")
+
+    return result_str
+
+
+def show_dstate_processes(sos_home, no_pipe):
+    result_str = ""
+    _, dstate_procs, _, _, _ = parse_ps_states(sos_home)
+
+    if no_pipe:
+        hdr_c = screen.COLOR_HEADER
+        crit_c = screen.COLOR_CRITICAL
+        reset_c = screen.COLOR_RESET
+    else:
+        hdr_c = crit_c = reset_c = ""
+
+    result_str += screen.get_pipe_aware_line(
+        "%s%s%s" % (hdr_c, "=" * 70, reset_c))
+    result_str += screen.get_pipe_aware_line(
+        "%sD-STATE (UNINTERRUPTIBLE SLEEP) PROCESSES%s" % (hdr_c, reset_c))
+    result_str += screen.get_pipe_aware_line(
+        "%s%s%s" % (hdr_c, "=" * 70, reset_c))
+
+    if not dstate_procs:
+        result_str += screen.get_pipe_aware_line("No D-state processes found")
+        return result_str
+
+    result_str += screen.get_pipe_aware_line(
+        "%s%d D-state process(es) found:%s" % (
+            crit_c, len(dstate_procs), reset_c))
+    result_str += screen.get_pipe_aware_line("")
+
+    hdr = "%-8s %8s %6s %6s  %s" % ("USER", "PID", "%CPU", "%MEM", "COMMAND")
+    result_str += screen.get_pipe_aware_line("%s%s%s" % (hdr_c, hdr, reset_c))
+    result_str += screen.get_pipe_aware_line("-" * 70)
+
+    for proc in dstate_procs:
+        if is_cmd_stopped and is_cmd_stopped():
+            break
+        line = "%-8s %8s %6.1f %6.1f  %s" % (
+            proc['user'][:8], proc['pid'],
+            proc['cpu'], proc['mem'], proc['cmd'][:50])
+        result_str += screen.get_pipe_aware_line(
+            "%s%s%s" % (crit_c, line, reset_c))
+
+        proc_stack = sos_home + "/proc/%s/stack" % proc['pid']
+        if os.path.isfile(proc_stack):
+            try:
+                with open(proc_stack) as f:
+                    for sline in f:
+                        sline = sline.strip()
+                        if sline and not sline.startswith("0x"):
+                            result_str += screen.get_pipe_aware_line(
+                                "    %s" % sline)
+            except:
+                pass
+            result_str += screen.get_pipe_aware_line("")
+
+    return result_str
+
+
+def show_zombie_processes(sos_home, no_pipe):
+    result_str = ""
+    _, _, zombie_procs, _, _ = parse_ps_states(sos_home)
+
+    if no_pipe:
+        hdr_c = screen.COLOR_HEADER
+        crit_c = screen.COLOR_CRITICAL
+        reset_c = screen.COLOR_RESET
+    else:
+        hdr_c = crit_c = reset_c = ""
+
+    result_str += screen.get_pipe_aware_line(
+        "%s%s%s" % (hdr_c, "=" * 70, reset_c))
+    result_str += screen.get_pipe_aware_line(
+        "%sZOMBIE PROCESSES%s" % (hdr_c, reset_c))
+    result_str += screen.get_pipe_aware_line(
+        "%s%s%s" % (hdr_c, "=" * 70, reset_c))
+
+    if not zombie_procs:
+        result_str += screen.get_pipe_aware_line("No zombie processes found")
+        return result_str
+
+    result_str += screen.get_pipe_aware_line(
+        "%s%d zombie process(es) found:%s" % (
+            crit_c, len(zombie_procs), reset_c))
+    result_str += screen.get_pipe_aware_line("")
+
+    hdr = "%-8s %8s %6s %6s  %s" % ("USER", "PID", "%CPU", "%MEM", "COMMAND")
+    result_str += screen.get_pipe_aware_line("%s%s%s" % (hdr_c, hdr, reset_c))
+    result_str += screen.get_pipe_aware_line("-" * 70)
+
+    for proc in zombie_procs:
+        if is_cmd_stopped and is_cmd_stopped():
+            break
+        line = "%-8s %8s %6.1f %6.1f  %s" % (
+            proc['user'][:8], proc['pid'],
+            proc['cpu'], proc['mem'], proc['cmd'])
+        result_str += screen.get_pipe_aware_line(
+            "%s%s%s" % (crit_c, line, reset_c))
+
+    return result_str
+
+
+def show_top_consumers(sos_home, no_pipe, count=5):
+    result_str = ""
+    _, _, _, all_procs, _ = parse_ps_states(sos_home)
+
+    if not all_procs:
+        return result_str
+
+    if no_pipe:
+        hdr_c = screen.COLOR_HEADER
+        title_c = screen.COLOR_TITLE
+        warn_c = screen.COLOR_WARNING
+        reset_c = screen.COLOR_RESET
+    else:
+        hdr_c = title_c = warn_c = reset_c = ""
+
+    result_str += screen.get_pipe_aware_line(
+        "%s%s%s" % (hdr_c, "=" * 70, reset_c))
+    result_str += screen.get_pipe_aware_line(
+        "%sTOP RESOURCE CONSUMERS%s" % (hdr_c, reset_c))
+    result_str += screen.get_pipe_aware_line(
+        "%s%s%s" % (hdr_c, "=" * 70, reset_c))
+
+    top_cpu = sorted(all_procs, key=lambda x: x['cpu'], reverse=True)[:count]
+    top_mem = sorted(all_procs, key=lambda x: x['rss'], reverse=True)[:count]
+
+    result_str += screen.get_pipe_aware_line(
+        "\n%sTop %d by CPU:%s" % (title_c, count, reset_c))
+    hdr = "  %-8s %8s %6s  %s" % ("USER", "PID", "%CPU", "COMMAND")
+    result_str += screen.get_pipe_aware_line("%s%s%s" % (hdr_c, hdr, reset_c))
+    for proc in top_cpu:
+        color = warn_c if proc['cpu'] > 20.0 else ""
+        result_str += screen.get_pipe_aware_line(
+            "%s  %-8s %8s %6.1f  %s%s" % (
+                color, proc['user'][:8], proc['pid'],
+                proc['cpu'], proc['cmd'][:50], reset_c))
+
+    result_str += screen.get_pipe_aware_line(
+        "\n%sTop %d by Memory (RSS):%s" % (title_c, count, reset_c))
+    hdr = "  %-8s %8s %10s  %s" % ("USER", "PID", "RSS", "COMMAND")
+    result_str += screen.get_pipe_aware_line("%s%s%s" % (hdr_c, hdr, reset_c))
+    for proc in top_mem:
+        rss_str = get_size_str(proc['rss'] * 1024, no_pipe)
+        color = warn_c if proc['mem'] > 20.0 else ""
+        result_str += screen.get_pipe_aware_line(
+            "%s  %-8s %8s %10s  %s%s" % (
+                color, proc['user'][:8], proc['pid'],
+                rss_str, proc['cmd'][:50], reset_c))
+
+    result_str += screen.get_pipe_aware_line("")
+    return result_str
+
+
 def print_pid_help_msg(no_pipe):
     msg = '''psinfo -p  --  Show detailed information for a process
 
@@ -378,6 +623,12 @@ Examples:
     # To filter process list by task name (case-insensitive)
     > psinfo -k java
     > psinfo -k httpd -s rss
+
+    # Process state analysis
+    > psinfo -S            Show process state summary
+    > psinfo -d            Show D-state processes with stack traces
+    > psinfo -z            Show zombie processes
+    > psinfo -t            Show top CPU and memory consumers
     '''
 
     if no_pipe == False:
@@ -420,6 +671,14 @@ def run_psinfo(input_str, env_vars, is_cmd_stopped_func,\
                     "\tvsz : Virtual memory usage\n" + \
                     "\trss : RSS usage\n")
 
+    op.add_option('-d', '--dstate', dest='show_dstate', action='store_true',
+                  help='Show D-state (uninterruptible sleep) processes')
+    op.add_option('-z', '--zombie', dest='show_zombie', action='store_true',
+                  help='Show zombie processes')
+    op.add_option('-t', '--top', dest='show_top', action='store_true',
+                  help='Show top CPU and memory consumers')
+    op.add_option('-S', '--summary', dest='show_summary', action='store_true',
+                  help='Show process state summary')
 
     o = args = None
     try:
@@ -436,9 +695,18 @@ def run_psinfo(input_str, env_vars, is_cmd_stopped_func,\
     sos_home = env_vars["sos_home"]
     screen.init_data(no_pipe, 1, is_cmd_stopped)
 
-    if o.process_details:
+    if o.show_dstate:
+        return show_dstate_processes(sos_home, no_pipe)
+    elif o.show_zombie:
+        return show_zombie_processes(sos_home, no_pipe)
+    elif o.show_top:
+        return show_top_consumers(sos_home, no_pipe)
+    elif o.show_summary:
+        return show_process_summary(sos_home, no_pipe)
+    elif o.process_details:
         result_str = show_process_details(sos_home, no_pipe, o)
     else:
-        result_str = read_ps_basic(sos_home + "/ps", no_pipe, o)
+        result_str = show_process_summary(sos_home, no_pipe)
+        result_str += read_ps_basic(sos_home + "/ps", no_pipe, o)
 
     return result_str

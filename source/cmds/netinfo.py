@@ -1948,6 +1948,306 @@ EXAMPLES
     return msg
 
 
+def show_bonding(sos_home, no_pipe):
+    """Show bonding/teaming interface analysis"""
+    result_str = ""
+
+    if no_pipe:
+        hdr_c = screen.COLOR_HEADER
+        title_c = screen.COLOR_TITLE
+        info_c = screen.COLOR_INFO
+        warn_c = screen.COLOR_WARNING
+        crit_c = screen.COLOR_CRITICAL
+        reset_c = screen.COLOR_RESET
+    else:
+        hdr_c = title_c = info_c = warn_c = crit_c = reset_c = ""
+
+    result_str += screen.get_pipe_aware_line("%s%s%s" % (hdr_c, "=" * 70, reset_c))
+    result_str += screen.get_pipe_aware_line(
+        "%sBONDING / TEAMING CONFIGURATION%s" % (hdr_c, reset_c))
+    result_str += screen.get_pipe_aware_line("%s%s%s" % (hdr_c, "=" * 70, reset_c))
+
+    bond_dir = sos_home + "/proc/net/bonding"
+    bond_found = False
+
+    if os.path.isdir(bond_dir):
+        bond_files = sorted(glob.glob(bond_dir + "/*"))
+        for bond_file in bond_files:
+            if is_cmd_stopped and is_cmd_stopped():
+                break
+
+            bond_name = os.path.basename(bond_file)
+            bond_found = True
+
+            result_str += screen.get_pipe_aware_line(
+                "\n%s--- %s ---%s" % (title_c, bond_name, reset_c))
+
+            try:
+                with open(bond_file) as f:
+                    mode = ""
+                    mii_status = ""
+                    mii_interval = ""
+                    current_slave = None
+                    slaves = []
+
+                    for line in f:
+                        line = line.rstrip()
+                        if not line:
+                            if current_slave:
+                                slaves.append(current_slave)
+                                current_slave = None
+                            continue
+
+                        if line.startswith("Bonding Mode:"):
+                            mode = line.split(":", 1)[1].strip()
+                        elif line.startswith("MII Status:") and current_slave is None:
+                            mii_status = line.split(":", 1)[1].strip()
+                        elif line.startswith("MII Polling Interval"):
+                            mii_interval = line.split(":", 1)[1].strip()
+                        elif line.startswith("Currently Active Slave:"):
+                            pass
+                        elif line.startswith("Slave Interface:"):
+                            if current_slave:
+                                slaves.append(current_slave)
+                            current_slave = {
+                                'name': line.split(":", 1)[1].strip(),
+                                'mii': '',
+                                'speed': '',
+                                'duplex': '',
+                                'failures': 0,
+                            }
+                        elif current_slave:
+                            if line.startswith("MII Status:"):
+                                current_slave['mii'] = line.split(":", 1)[1].strip()
+                            elif line.startswith("Speed:"):
+                                current_slave['speed'] = line.split(":", 1)[1].strip()
+                            elif line.startswith("Duplex:"):
+                                current_slave['duplex'] = line.split(":", 1)[1].strip()
+                            elif line.startswith("Link Failure Count:"):
+                                try:
+                                    current_slave['failures'] = int(
+                                        line.split(":", 1)[1].strip())
+                                except:
+                                    pass
+
+                    if current_slave:
+                        slaves.append(current_slave)
+
+                    if mii_status.lower() == "up":
+                        status_color = info_c
+                    else:
+                        status_color = crit_c
+
+                    result_str += screen.get_pipe_aware_line(
+                        "  %sMode:%s        %s" % (title_c, reset_c, mode))
+                    result_str += screen.get_pipe_aware_line(
+                        "  %sMII Status:%s  %s%s%s" % (
+                            title_c, reset_c, status_color, mii_status, reset_c))
+                    if mii_interval:
+                        result_str += screen.get_pipe_aware_line(
+                            "  %sMII Interval:%s %s ms" % (
+                                title_c, reset_c, mii_interval))
+                    result_str += screen.get_pipe_aware_line(
+                        "  %sSlaves:%s      %d" % (
+                            title_c, reset_c, len(slaves)))
+
+                    if slaves:
+                        result_str += screen.get_pipe_aware_line("")
+                        slave_hdr = "    %-16s %-10s %-12s %-10s %s" % (
+                            "Interface", "MII", "Speed", "Duplex", "Failures")
+                        result_str += screen.get_pipe_aware_line(
+                            "%s%s%s" % (hdr_c, slave_hdr, reset_c))
+                        result_str += screen.get_pipe_aware_line(
+                            "    " + "-" * 60)
+
+                        for slave in slaves:
+                            if slave['mii'].lower() == "up":
+                                s_color = info_c
+                            else:
+                                s_color = crit_c
+
+                            fail_color = ""
+                            if slave['failures'] > 0:
+                                fail_color = warn_c
+
+                            line = "    %-16s %s%-10s%s %-12s %-10s %s%s%s" % (
+                                slave['name'],
+                                s_color, slave['mii'], reset_c,
+                                slave['speed'], slave['duplex'],
+                                fail_color, slave['failures'], reset_c)
+                            result_str += screen.get_pipe_aware_line(line)
+
+            except Exception:
+                result_str += screen.get_pipe_aware_line(
+                    "  Error reading bond configuration")
+
+    team_found = False
+    team_dir = sos_home + "/sos_commands/teamd"
+    if os.path.isdir(team_dir):
+        team_files = glob.glob(team_dir + "/teamdctl_*_state_dump")
+        if not team_files:
+            team_files = glob.glob(team_dir + "/teamdctl_*_state")
+        for team_file in team_files:
+            if is_cmd_stopped and is_cmd_stopped():
+                break
+
+            team_name = os.path.basename(team_file)
+            team_name = team_name.replace("teamdctl_", "").replace("_state_dump", "").replace("_state", "")
+            team_found = True
+
+            result_str += screen.get_pipe_aware_line(
+                "\n%s--- Team: %s ---%s" % (title_c, team_name, reset_c))
+            try:
+                with open(team_file) as f:
+                    for line in f:
+                        result_str += screen.get_pipe_aware_line("  " + line.rstrip())
+            except:
+                result_str += screen.get_pipe_aware_line(
+                    "  Error reading team configuration")
+
+    if not bond_found and not team_found:
+        result_str += screen.get_pipe_aware_line(
+            "\nNo bonding or teaming configuration found")
+
+    return result_str
+
+
+def show_bonding_brief(sos_home, no_pipe):
+    """One-line bonding summary for default netinfo view"""
+    result_str = ""
+    bond_dir = sos_home + "/proc/net/bonding"
+
+    if not os.path.isdir(bond_dir):
+        return result_str
+
+    bond_files = sorted(glob.glob(bond_dir + "/*"))
+    if not bond_files:
+        return result_str
+
+    if no_pipe:
+        title_c = screen.COLOR_TITLE
+        info_c = screen.COLOR_INFO
+        crit_c = screen.COLOR_CRITICAL
+        reset_c = screen.COLOR_RESET
+    else:
+        title_c = info_c = crit_c = reset_c = ""
+
+    for bond_file in bond_files:
+        bond_name = os.path.basename(bond_file)
+        mode = ""
+        mii_status = ""
+        slave_count = 0
+        slaves_up = 0
+
+        try:
+            with open(bond_file) as f:
+                in_slave = False
+                for line in f:
+                    if line.startswith("Bonding Mode:"):
+                        mode = line.split(":", 1)[1].strip()
+                    elif line.startswith("MII Status:") and not in_slave:
+                        mii_status = line.split(":", 1)[1].strip()
+                    elif line.startswith("Slave Interface:"):
+                        in_slave = True
+                        slave_count += 1
+                    elif line.startswith("MII Status:") and in_slave:
+                        if "up" in line.split(":", 1)[1].strip().lower():
+                            slaves_up += 1
+                        in_slave = False
+        except:
+            continue
+
+        if mii_status.lower() == "up":
+            status_color = info_c
+        else:
+            status_color = crit_c
+
+        result_str += screen.get_pipe_aware_line(
+            "  %s%s%s: %s%s%s (%s, %d/%d slaves up)" % (
+                title_c, bond_name, reset_c,
+                status_color, mii_status, reset_c,
+                mode, slaves_up, slave_count))
+
+    return result_str
+
+
+def show_ethtool_errors(sos_home, no_pipe):
+    """Show non-zero error/drop counters from ethtool -S output"""
+    result_str = ""
+
+    if no_pipe:
+        hdr_c = screen.COLOR_HEADER
+        title_c = screen.COLOR_TITLE
+        warn_c = screen.COLOR_WARNING
+        reset_c = screen.COLOR_RESET
+    else:
+        hdr_c = title_c = warn_c = reset_c = ""
+
+    result_str += screen.get_pipe_aware_line("%s%s%s" % (hdr_c, "=" * 70, reset_c))
+    result_str += screen.get_pipe_aware_line(
+        "%sETHTOOL ERROR COUNTERS (non-zero only)%s" % (hdr_c, reset_c))
+    result_str += screen.get_pipe_aware_line("%s%s%s" % (hdr_c, "=" * 70, reset_c))
+
+    error_keywords = [
+        'error', 'drop', 'discard', 'miss', 'fail', 'abort',
+        'collision', 'crc', 'timeout', 'overflow', 'underrun',
+        'fifo', 'reset', 'restart',
+    ]
+
+    ethtool_files = glob.glob(
+        sos_home + "/sos_commands/networking/ethtool_-S_*")
+
+    if not ethtool_files:
+        result_str += screen.get_pipe_aware_line(
+            "\nNo ethtool -S data found")
+        return result_str
+
+    found_any = False
+    for efile in sorted(ethtool_files):
+        if is_cmd_stopped and is_cmd_stopped():
+            break
+
+        device = os.path.basename(efile).replace("ethtool_-S_", "")
+        errors_for_dev = []
+
+        try:
+            with open(efile) as f:
+                for line in f:
+                    line = line.strip()
+                    if ":" not in line:
+                        continue
+                    key, _, val = line.partition(":")
+                    key = key.strip().lower()
+                    val = val.strip()
+
+                    try:
+                        num_val = int(val)
+                    except ValueError:
+                        continue
+
+                    if num_val == 0:
+                        continue
+
+                    if any(kw in key for kw in error_keywords):
+                        errors_for_dev.append((line.strip(), num_val))
+        except:
+            continue
+
+        if errors_for_dev:
+            found_any = True
+            result_str += screen.get_pipe_aware_line(
+                "\n%s%s:%s" % (title_c, device, reset_c))
+            for line_text, _ in errors_for_dev:
+                result_str += screen.get_pipe_aware_line(
+                    "  %s%s%s" % (warn_c, line_text, reset_c))
+
+    if not found_any:
+        result_str += screen.get_pipe_aware_line(
+            "\nNo error counters found across all interfaces")
+
+    return result_str
+
+
 def print_neigh_help_msg(no_pipe):
     msg = '''netinfo --neigh  --  Neighbor table view
 
@@ -1990,6 +2290,8 @@ Examples:
     > netinfo -l           # Show simple interface list
     > netinfo --arp        # Show ARP table
     > netinfo --neigh      # Show neighbor table (NDP/ARP)
+    > netinfo -b           # Show bonding/teaming configuration
+    > netinfo --etherr     # Show ethtool error counters
     > netinfo -h           # Show this help message
 '''
 
@@ -2044,6 +2346,12 @@ def run_netinfo(input_str, env_vars, is_cmd_stopped_func,
     op.add_option('-d', '--descriptive', dest='descriptive', action='store_true',
                   default=False,
                   help='Show descriptive explanations (use with -r for routing)')
+    op.add_option('-b', '--bonding', dest='show_bonding', action='store_true',
+                  default=False,
+                  help='Show bonding/teaming configuration')
+    op.add_option('--etherr', dest='show_etherr', action='store_true',
+                  default=False,
+                  help='Show ethtool error counters (non-zero only)')
 
     # Parse options
     try:
@@ -2068,6 +2376,8 @@ def run_netinfo(input_str, env_vars, is_cmd_stopped_func,
             return print_arp_help_msg(no_pipe)
         elif o.show_neigh:
             return print_neigh_help_msg(no_pipe)
+        elif o.show_bonding:
+            return print_help_msg(op, no_pipe)
         return print_help_msg(op, no_pipe)
 
     # Initialize screen module
@@ -2093,6 +2403,21 @@ def run_netinfo(input_str, env_vars, is_cmd_stopped_func,
         return show_arp(sos_home, no_pipe)
     elif o.show_neigh:
         return show_neighbor(sos_home, no_pipe)
+    elif o.show_bonding:
+        return show_bonding(sos_home, no_pipe)
+    elif o.show_etherr:
+        return show_ethtool_errors(sos_home, no_pipe)
     else:
-        # Display summary (default mode)
-        return show_summary(sos_home, no_pipe)
+        # Display summary (default mode) with bonding brief
+        result_str = show_summary(sos_home, no_pipe)
+        bond_brief = show_bonding_brief(sos_home, no_pipe)
+        if bond_brief:
+            if no_pipe:
+                hdr_c = screen.COLOR_HEADER
+                reset_c = screen.COLOR_RESET
+            else:
+                hdr_c = reset_c = ""
+            result_str += screen.get_pipe_aware_line(
+                "\n%sBonding:%s" % (hdr_c, reset_c))
+            result_str += bond_brief
+        return result_str
