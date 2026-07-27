@@ -297,8 +297,10 @@ def handle_a_file(filename, options):
     show_slab = getattr(options, 'slab', False)
 
     if not show_slab and len(alloc_by_dict) > 0:
-        result_str = result_str + screen.get_pipe_aware_line("By call trace")
-        result_str = result_str + screen.get_pipe_aware_line("=============")
+        result_str = result_str + screen.get_pipe_aware_line(
+            "%sBy call trace%s" % (screen.COLOR_HEADER, screen.COLOR_RESET))
+        result_str = result_str + screen.get_pipe_aware_line(
+            "%s=============%s" % (screen.COLOR_HEADER, screen.COLOR_RESET))
         sorted_usage = sorted(alloc_by_dict.items(),
                 key=operator.itemgetter(1), reverse=options.reverse)
                         
@@ -348,10 +350,10 @@ def handle_a_file(filename, options):
 
     if not show_slab and len(alloc_module_dict) > 0:
         result_str = result_str + screen.get_pipe_aware_line("\n")
-        result_str = result_str + \
-                screen.get_pipe_aware_line("By allocated modules")
-        result_str = result_str + \
-                screen.get_pipe_aware_line("====================")
+        result_str = result_str + screen.get_pipe_aware_line(
+            "%sBy allocated modules%s" % (screen.COLOR_HEADER, screen.COLOR_RESET))
+        result_str = result_str + screen.get_pipe_aware_line(
+            "%s====================%s" % (screen.COLOR_HEADER, screen.COLOR_RESET))
         sorted_usage = sorted(alloc_module_dict.items(),
                 key=operator.itemgetter(1), reverse=options.reverse)
 
@@ -412,8 +414,10 @@ def handle_a_file(filename, options):
 
     if not show_slab and len(alloc_type_dict) > 0:
         result_str = result_str + screen.get_pipe_aware_line("\n")
-        result_str = result_str + screen.get_pipe_aware_line("By allocation type")
-        result_str = result_str + screen.get_pipe_aware_line("==================")
+        result_str = result_str + screen.get_pipe_aware_line(
+            "%sBy allocation type%s" % (screen.COLOR_HEADER, screen.COLOR_RESET))
+        result_str = result_str + screen.get_pipe_aware_line(
+            "%s==================%s" % (screen.COLOR_HEADER, screen.COLOR_RESET))
         sorted_usage = sorted(alloc_type_dict.items(),
                 key=operator.itemgetter(1), reverse=options.reverse)
 
@@ -642,7 +646,8 @@ def page_owner_stat(input_str, env_vars, is_cmd_stopped_func,\
             result_str = result_str + handle_a_file(file_path, o)
         except Exception as e:
             print(e)
-            result_str = result_str + screen.get_pipe_aware_line("page_owner file '%s' cannot read" % (file_path))
+            result_str = result_str + screen.get_pipe_aware_line(
+                "%spage_owner file '%s' cannot read%s" % (screen.COLOR_WARNING, file_path, screen.COLOR_RESET))
 
 
     return result_str

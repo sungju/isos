@@ -2381,7 +2381,7 @@ def run_netinfo(input_str, env_vars, is_cmd_stopped_func,
         return print_help_msg(op, no_pipe)
 
     # Initialize screen module
-    screen.init_data(no_pipe, 1, is_cmd_stopped_func)
+    screen.init_data(no_pipe, 1, is_cmd_stopped_func, enable_column_color=True)
 
     # Get sosreport home directory
     sos_home = env_vars["sos_home"]

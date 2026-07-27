@@ -92,12 +92,14 @@ def show_shmem(op, no_pipe):
                     if ipc_mode == IPC_SHM and show_shm:
                         sorted_usage = sorted(shmem_usage_dict.items(),
                                 key=operator.itemgetter(1), reverse=False)
-                        result_str = result_str + screen.get_pipe_aware_line(ipc_title)
+                        result_str = result_str + screen.get_pipe_aware_line(
+                            "%s%s%s" % (screen.COLOR_HEADER, ipc_title, screen.COLOR_RESET))
                         for i in range(0, len(sorted_usage)):
                             result_str = result_str + screen.get_pipe_aware_line(sorted_usage[i][0])
 
                         result_str = result_str + \
-                                screen.get_pipe_aware_line("\n\tTotal shared memory allocation = %s" % get_size_str(shmem_total_usage))
+                                screen.get_pipe_aware_line("\n\t%sTotal shared memory allocation = %s%s" % (
+                                    screen.COLOR_IMPORTANT, get_size_str(shmem_total_usage), screen.COLOR_RESET))
                         result_str = result_str + screen.get_pipe_aware_line("")
                     elif ipc_mode == IPC_SEM and show_sem and title_displayed:
                         # End semaphore section with blank line
@@ -127,16 +129,16 @@ def show_shmem(op, no_pipe):
                     except:
                         pass
                 elif ipc_mode == IPC_SEM and show_sem:
-                    # Display title before first data line
                     if not title_displayed:
-                        result_str = result_str + screen.get_pipe_aware_line(ipc_title)
+                        result_str = result_str + screen.get_pipe_aware_line(
+                            "%s%s%s" % (screen.COLOR_HEADER, ipc_title, screen.COLOR_RESET))
                         title_displayed = True
                     # Show semaphore data as-is
                     result_str = result_str + screen.get_pipe_aware_line(result_line)
                 elif ipc_mode == IPC_MSG and show_msg:
-                    # Display title before first data line
                     if not title_displayed:
-                        result_str = result_str + screen.get_pipe_aware_line(ipc_title)
+                        result_str = result_str + screen.get_pipe_aware_line(
+                            "%s%s%s" % (screen.COLOR_HEADER, ipc_title, screen.COLOR_RESET))
                         title_displayed = True
                     # Show message queue data as-is
                     result_str = result_str + screen.get_pipe_aware_line(result_line)

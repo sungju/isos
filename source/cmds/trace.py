@@ -47,8 +47,8 @@ def show_delay_list_in_file(file_path):
             result_str = show_delay_times()
     except Exception as e:
         print(e)
-        result_str = result_str + screen.get_pipe_aware_line("Error in handling file %s" %\
-                file_path)
+        result_str = result_str + screen.get_pipe_aware_line(
+            "%sError in handling file %s%s" % (screen.COLOR_WARNING, file_path, screen.COLOR_RESET))
 
     return result_str
 
@@ -381,7 +381,8 @@ def run_traceinfo(input_str, env_vars, is_cmd_stopped_func,\
 
         except Exception as e:
             print(e)
-            result_str = result_str + screen.get_pipe_aware_line("trace-cmd report for '%s' failed" % (file_path))
+            result_str = result_str + screen.get_pipe_aware_line(
+                "%strace-cmd report for '%s' failed%s" % (screen.COLOR_WARNING, file_path, screen.COLOR_RESET))
 
     else:
         pass

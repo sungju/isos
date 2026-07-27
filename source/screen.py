@@ -87,7 +87,8 @@ COLOR_INFO = ""         # Metadata and secondary information
 COLOR_HIGHLIGHT = ""    # Highlighted/emphasized text
 
 
-def init_data(l_no_pipe, l_header_start_idx, l_is_cmd_stopped):
+def init_data(l_no_pipe, l_header_start_idx, l_is_cmd_stopped,
+              enable_column_color=False):
     """
     Initialize screen module with display parameters.
 
@@ -95,6 +96,8 @@ def init_data(l_no_pipe, l_header_start_idx, l_is_cmd_stopped):
         l_no_pipe: True if output goes to terminal, False if piped
         l_header_start_idx: Column index where coloring should start
         l_is_cmd_stopped: Function that returns True if Ctrl-C was pressed
+        enable_column_color: If True, populate column_color dict for
+            modules that use get_colored_line() directly. Default False.
 
     Note:
         This function must be called before using get_colored_line()
@@ -117,30 +120,55 @@ def init_data(l_no_pipe, l_header_start_idx, l_is_cmd_stopped):
     else:
         _console = None
 
-    set_color_table()
+    _set_semantic_colors()
+    if enable_column_color:
+        _set_column_colors()
 
 
-def set_color_table():
+def _set_semantic_colors():
     """
-    Set up color mapping based on pipe status.
+    Set up context-based color constants based on pipe status.
 
-    When output goes to terminal (no_pipe=True), initializes ANSI color
-    codes for both legacy column colors and new context-based colors.
-    When output is piped (no_pipe=False), sets all colors to empty strings.
+    Always called by init_data(). These are the preferred colors
+    for new command modules.
+    """
+    global COLOR_RESET
+    global COLOR_TITLE, COLOR_HEADER, COLOR_CONTENT, COLOR_IMPORTANT
+    global COLOR_WARNING, COLOR_CRITICAL, COLOR_SUCCESS, COLOR_INFO, COLOR_HIGHLIGHT
+    global no_pipe
 
-    Sets global variables:
-    - Legacy: COLOR_1 through COLOR_14, COLOR_RESET, column_color
-    - Context-based: COLOR_TITLE, COLOR_HEADER, COLOR_CONTENT, etc.
+    if no_pipe:
+        COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
+        COLOR_TITLE = ansicolor.get_color(ansicolor.LIGHTCYAN)
+        COLOR_HEADER = ansicolor.get_color(ansicolor.CYAN)
+        COLOR_CONTENT = ""
+        COLOR_IMPORTANT = ansicolor.get_color(ansicolor.LIGHTYELLOW)
+        COLOR_WARNING = ansicolor.get_color(ansicolor.YELLOW)
+        COLOR_CRITICAL = ansicolor.get_color(ansicolor.LIGHTRED)
+        COLOR_SUCCESS = ansicolor.get_color(ansicolor.LIGHTGREEN)
+        COLOR_INFO = ansicolor.get_color(ansicolor.MAGENTA)
+        COLOR_HIGHLIGHT = ansicolor.get_color(ansicolor.LIGHTMAGENTA)
+    else:
+        COLOR_RESET = ""
+        COLOR_TITLE = COLOR_HEADER = COLOR_CONTENT = ""
+        COLOR_IMPORTANT = COLOR_WARNING = COLOR_CRITICAL = ""
+        COLOR_SUCCESS = COLOR_INFO = COLOR_HIGHLIGHT = ""
+
+
+def _set_column_colors():
+    """
+    Set up legacy column-based color mapping.
+
+    Only called when enable_column_color=True in init_data().
+    Used by modules that call get_colored_line() directly for
+    column-position-based coloring of tabular data.
     """
     global COLOR_1, COLOR_2, COLOR_3, COLOR_4, COLOR_5, COLOR_6
     global COLOR_7, COLOR_8, COLOR_9, COLOR_10, COLOR_11, COLOR_12
     global COLOR_13, COLOR_14, COLOR_RESET
-    global COLOR_TITLE, COLOR_HEADER, COLOR_CONTENT, COLOR_IMPORTANT
-    global COLOR_WARNING, COLOR_CRITICAL, COLOR_SUCCESS, COLOR_INFO, COLOR_HIGHLIGHT
     global column_color, no_pipe
 
     if no_pipe:
-        # Legacy colors (deprecated)
         COLOR_1  = ansicolor.get_color(ansicolor.RED)
         COLOR_2  = ansicolor.get_color(ansicolor.GREEN)
         COLOR_3  = ansicolor.get_color(ansicolor.YELLOW)
@@ -157,17 +185,6 @@ def set_color_table():
         COLOR_14 = ansicolor.get_color(ansicolor.LIGHTCYAN)
         COLOR_RESET = ansicolor.get_color(ansicolor.RESET)
 
-        # Context-based colors (preferred)
-        COLOR_TITLE = ansicolor.get_color(ansicolor.LIGHTCYAN)      # Section titles
-        COLOR_HEADER = ansicolor.get_color(ansicolor.CYAN)          # Table headers
-        COLOR_CONTENT = ""                                           # Normal text (no color)
-        COLOR_IMPORTANT = ansicolor.get_color(ansicolor.LIGHTYELLOW) # Important values
-        COLOR_WARNING = ansicolor.get_color(ansicolor.YELLOW)        # Warnings
-        COLOR_CRITICAL = ansicolor.get_color(ansicolor.LIGHTRED)     # Critical/errors
-        COLOR_SUCCESS = ansicolor.get_color(ansicolor.LIGHTGREEN)    # Success indicators
-        COLOR_INFO = ansicolor.get_color(ansicolor.MAGENTA)          # Metadata/secondary info
-        COLOR_HIGHLIGHT = ansicolor.get_color(ansicolor.LIGHTMAGENTA) # Emphasis
-
         column_color = {
             1: COLOR_1,   2: COLOR_2,   3: COLOR_3,   4: COLOR_4,
             5: COLOR_5,   6: COLOR_6,   7: COLOR_7,   8: COLOR_8,
@@ -175,17 +192,20 @@ def set_color_table():
             13: COLOR_13, 14: COLOR_14
         }
     else:
-        # Piped output - no colors
         COLOR_1 = COLOR_2 = COLOR_3 = COLOR_4 = ""
         COLOR_5 = COLOR_6 = COLOR_7 = COLOR_8 = ""
         COLOR_9 = COLOR_10 = COLOR_11 = COLOR_12 = ""
-        COLOR_13 = COLOR_14 = COLOR_RESET = ""
-
-        COLOR_TITLE = COLOR_HEADER = COLOR_CONTENT = ""
-        COLOR_IMPORTANT = COLOR_WARNING = COLOR_CRITICAL = ""
-        COLOR_SUCCESS = COLOR_INFO = COLOR_HIGHLIGHT = ""
+        COLOR_13 = COLOR_14 = ""
 
         column_color = {}
+
+
+def set_color_table():
+    """
+    Set up all color mappings. Kept for backward compatibility.
+    """
+    _set_semantic_colors()
+    _set_column_colors()
 
 
 def get_colored_line(line):
@@ -287,24 +307,30 @@ def get_colored_line(line):
 
 def get_pipe_aware_line(line):
     """
-    Output line with color, aware of pipe status.
+    Output line aware of pipe status.
 
-    When output goes to terminal, prints colored line directly.
-    When output is piped, returns colored line as string.
+    Passes the line through as-is, preserving any semantic colors
+    already embedded by the caller. Does NOT apply column-based
+    coloring — use get_colored_line() explicitly if needed.
+
+    When output goes to terminal, prints line directly.
+    When output is piped, returns line as string.
 
     Args:
-        line: String to output
+        line: String to output (may contain ANSI color codes)
 
     Returns:
         Empty string if printed to terminal (no_pipe=True)
         or line with newline if piped (no_pipe=False)
     """
-    global header_start_idx, is_cmd_stopped, no_pipe
+    global no_pipe
 
     if line is None:
         return ""
 
-    line = get_colored_line(line)
+    if isinstance(line, str):
+        line = line.rstrip()
+
     if no_pipe:
         print(line)
         return ""

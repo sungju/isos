@@ -187,7 +187,7 @@ def run_modules(input_str, env_vars, is_cmd_stopped_func,\
     if o.help or show_help == True:
         return print_help_msg(op, no_pipe)
 
-    screen.init_data(no_pipe, 1, is_cmd_stopped)
+    screen.init_data(no_pipe, 1, is_cmd_stopped, enable_column_color=True)
     result_str = ""
     sos_home = env_vars['sos_home']
 

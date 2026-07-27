@@ -161,7 +161,7 @@ def show_systemd_hierarchy(sos_home, colors, output):
     output.add_colored_line("=== Systemd Cgroup Hierarchy ===", colors.cyan, colors.reset)
     output.add_line("")
 
-    screen.init_data(output.no_pipe, 1, is_cmd_stopped)
+    screen.init_data(output.no_pipe, 1, is_cmd_stopped, enable_column_color=True)
 
     try:
         with open(cgls_path, 'r') as f:

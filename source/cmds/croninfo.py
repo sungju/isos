@@ -146,7 +146,7 @@ def show_cron_log(sos_home, colors, output, errors_only=False):
         output.add_line("Cron log not found")
         return
 
-    screen.init_data(output.no_pipe, 1, is_cmd_stopped)
+    screen.init_data(output.no_pipe, 1, is_cmd_stopped, enable_column_color=True)
 
     try:
         with open(log_path, 'r') as f:
@@ -270,7 +270,7 @@ def show_systemd_timers(sos_home, colors, output):
                            colors.cyan, colors.reset)
     output.add_line("")
 
-    screen.init_data(output.no_pipe, 1, is_cmd_stopped)
+    screen.init_data(output.no_pipe, 1, is_cmd_stopped, enable_column_color=True)
 
     try:
         with open(timer_path, 'r') as f:
@@ -302,7 +302,7 @@ def show_cron_config(sos_home, colors, output):
         ("usr/lib/systemd/system/crond.service", "Crond Systemd Service"),
     ]
 
-    screen.init_data(output.no_pipe, 1, is_cmd_stopped)
+    screen.init_data(output.no_pipe, 1, is_cmd_stopped, enable_column_color=True)
 
     for rel_path, title in config_files:
         file_path = get_sos_file_path(sos_home, rel_path)
@@ -573,7 +573,7 @@ def run_croninfo(input_str, env_vars, is_cmd_stopped_func,
             show_cron_config(sos_home, colors, output)
         else:
             # Default: show cron files
-            screen.init_data(no_pipe, 1, is_cmd_stopped)
+            screen.init_data(no_pipe, 1, is_cmd_stopped, enable_column_color=True)
             cronfile_list = get_cron_files(sos_home, include_all=o.show_all)
 
             for cfile in cronfile_list:

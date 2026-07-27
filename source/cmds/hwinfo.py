@@ -520,7 +520,7 @@ def show_disk_info(sos_home, colors, output):
         return
 
     output.add_colored_line("Block Device Tree:", colors.yellow, colors.reset)
-    screen.init_data(output.no_pipe, 1, is_cmd_stopped)
+    screen.init_data(output.no_pipe, 1, is_cmd_stopped, enable_column_color=True)
 
     for line in devices:
         colored_line = screen.get_colored_line(line)

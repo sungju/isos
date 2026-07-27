@@ -79,7 +79,7 @@ def get_colored_line_per_column(line):
 
 def read_audit_file(audit_path, no_pipe, is_log=True, show_path=False, sos_home=""):
     set_color_table(no_pipe)
-    screen.init_data(no_pipe, 1, is_cmd_stopped)
+    screen.init_data(no_pipe, 1, is_cmd_stopped, enable_column_color=True)
     result_str = ""
     if show_path:
         file_name = audit_path.replace(sos_home, "")

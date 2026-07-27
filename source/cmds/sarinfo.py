@@ -552,7 +552,7 @@ def run_sarinfo(input_str, env_vars, is_cmd_stopped_func,\
                     header_start_idx = idx
 
 
-                screen.init_data(no_pipe, header_start_idx, is_cmd_stopped)
+                screen.init_data(no_pipe, header_start_idx, is_cmd_stopped, enable_column_color=True)
 
 
                 if o.cpu_usage:

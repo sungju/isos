@@ -21,7 +21,7 @@ def get_command_info():
 
 def read_log_basic(log_path, no_pipe):
 
-    screen.init_data(no_pipe, 1, is_cmd_stopped)
+    screen.init_data(no_pipe, 1, is_cmd_stopped, enable_column_color=True)
 
     result_str = ""
     try:

@@ -22,7 +22,7 @@ def get_command_info():
 
 
 def show_file_content(file_path, no_pipe, options, show_name=False):
-    screen.init_data(no_pipe, 1, is_cmd_stopped)
+    screen.init_data(no_pipe, 1, is_cmd_stopped, enable_column_color=True)
 
     result_str = ""
     try:

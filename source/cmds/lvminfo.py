@@ -237,7 +237,7 @@ def show_vgs(sos_home, colors, output, verbose=False):
     output.add_colored_line("=== Volume Group Details ===", colors.cyan, colors.reset)
     output.add_line("")
 
-    screen.init_data(output.no_pipe, 1, is_cmd_stopped)
+    screen.init_data(output.no_pipe, 1, is_cmd_stopped, enable_column_color=True)
 
     try:
         with open(vgdisplay_file, 'r') as f:
@@ -396,7 +396,7 @@ def show_dmsetup_info(sos_home, colors, output):
     output.add_colored_line("=== Device Mapper Status ===", colors.cyan, colors.reset)
     output.add_line("")
 
-    screen.init_data(output.no_pipe, 1, is_cmd_stopped)
+    screen.init_data(output.no_pipe, 1, is_cmd_stopped, enable_column_color=True)
 
     try:
         with open(dmsetup_file, 'r') as f:
@@ -428,7 +428,7 @@ def show_lvm_config(sos_home, colors, output):
     output.add_colored_line("=== LVM Configuration (/etc/lvm/lvm.conf) ===", colors.cyan, colors.reset)
     output.add_line("")
 
-    screen.init_data(output.no_pipe, 1, is_cmd_stopped)
+    screen.init_data(output.no_pipe, 1, is_cmd_stopped, enable_column_color=True)
 
     try:
         with open(config_file, 'r') as f:

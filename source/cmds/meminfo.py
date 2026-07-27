@@ -2328,14 +2328,18 @@ def show_overall_memory(options, no_pipe):
             for file, count in files_with_oom:
                 # Display separator for this file
                 result_str += screen.get_pipe_aware_line("\n")
-                result_str += screen.get_pipe_aware_line("=" * 80)
+                result_str += screen.get_pipe_aware_line(
+                    "%s%s%s" % (screen.COLOR_CRITICAL, "=" * 80, screen.COLOR_RESET))
                 if count > 1:
-                    result_str += screen.get_pipe_aware_line("OOM EVENTS DETECTED in %s - %d events found,\n showing first one" %
-                                                              (os.path.basename(file), count))
+                    result_str += screen.get_pipe_aware_line(
+                        "%sOOM EVENTS DETECTED in %s - %d events found,\n showing first one%s" %
+                        (screen.COLOR_CRITICAL, os.path.basename(file), count, screen.COLOR_RESET))
                 else:
-                    result_str += screen.get_pipe_aware_line("OOM EVENTS DETECTED in %s - Displaying OOM Analysis" %
-                                                              os.path.basename(file))
-                result_str += screen.get_pipe_aware_line("=" * 80)
+                    result_str += screen.get_pipe_aware_line(
+                        "%sOOM EVENTS DETECTED in %s - Displaying OOM Analysis%s" %
+                        (screen.COLOR_CRITICAL, os.path.basename(file), screen.COLOR_RESET))
+                result_str += screen.get_pipe_aware_line(
+                    "%s%s%s" % (screen.COLOR_CRITICAL, "=" * 80, screen.COLOR_RESET))
 
                 # Create options for this file with count=1
                 file_options = copy.copy(options)
